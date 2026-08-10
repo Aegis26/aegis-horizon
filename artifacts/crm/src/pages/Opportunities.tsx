@@ -25,13 +25,13 @@ export default function Opportunities() {
         <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-6">
           <Lock className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h2 className="text-2xl font-bold tracking-tight mb-2">Sales Module Locked</h2>
+        <h2 className="text-2xl font-bold tracking-tight mb-2 font-display">Sales Module Locked</h2>
         <p className="text-muted-foreground mb-8">
           The Opportunities and Pipeline feature set is not enabled for your organization. 
           Upgrade your plan or customize your features to access this module.
         </p>
         <Link href="/billing">
-          <Button size="lg">Manage Features</Button>
+          <Button size="lg" className="font-display">Manage Features</Button>
         </Link>
       </div>
     );
@@ -45,10 +45,10 @@ export default function Opportunities() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Opportunities</h1>
+          <h1 className="text-3xl font-bold tracking-tight font-display">Opportunities</h1>
           <p className="text-muted-foreground mt-2">Track and manage your deal pipeline.</p>
         </div>
-        <Button className="gap-2"><Plus className="h-4 w-4"/> New Deal</Button>
+        <Button className="gap-2 font-display"><Plus className="h-4 w-4"/> Create opportunity</Button>
       </div>
 
       <Card>
@@ -69,7 +69,7 @@ export default function Opportunities() {
                   <TableCell colSpan={5} className="h-48 text-center">
                     <div className="flex flex-col items-center justify-center text-muted-foreground">
                       <Target className="h-8 w-8 mb-4 opacity-20" />
-                      <p>Pipeline is empty.</p>
+                      <p>No opportunities yet. Create your first.</p>
                     </div>
                   </TableCell>
                 </TableRow>

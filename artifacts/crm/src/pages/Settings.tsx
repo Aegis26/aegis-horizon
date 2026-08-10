@@ -118,13 +118,13 @@ export default function Settings() {
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Organization Settings</h1>
+        <h1 className="text-3xl font-bold tracking-tight font-display">Organization Settings</h1>
         <p className="text-muted-foreground mt-2">Manage your workspace preferences and team access.</p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 font-display">
             <Building2 className="h-5 w-5" />
             General Information
           </CardTitle>
@@ -140,6 +140,7 @@ export default function Settings() {
                 onChange={e => setOrgName(e.target.value)} 
               />
               <Button 
+                className="font-display"
                 onClick={handleSaveOrg} 
                 disabled={orgName === org?.name || updateOrg.isPending}
               >
@@ -148,9 +149,9 @@ export default function Settings() {
             </div>
           </div>
           
-          <div className="pt-4 border-t">
+          <div className="pt-4 border-t border-border/50">
             <Label className="text-muted-foreground">Organization ID</Label>
-            <div className="font-mono text-xs mt-1 bg-muted p-2 rounded max-w-md">{org?.id}</div>
+            <div className="font-mono text-xs mt-1 bg-muted p-2 rounded max-w-md border border-border/50">{org?.id}</div>
           </div>
         </CardContent>
       </Card>
@@ -158,7 +159,7 @@ export default function Settings() {
       <Card>
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 font-display">
               <Users className="h-5 w-5" />
               Team Members
             </CardTitle>
@@ -166,7 +167,7 @@ export default function Settings() {
           </div>
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
             <DialogTrigger asChild>
-              <Button>Invite Member</Button>
+              <Button className="font-display">Invite Member</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>

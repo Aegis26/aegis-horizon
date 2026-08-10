@@ -27,6 +27,7 @@ const NAV_ITEMS = [
 
 export function Shell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const { data: me } = useGetMe({ query: { queryKey: getGetMeQueryKey() }});
   const { selectedOrgId, setSelectedOrgId } = useOrgStore();
 
@@ -56,10 +57,10 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
       {/* Sidebar Desktop */}
       <aside className="hidden md:flex w-64 flex-col border-r bg-sidebar">
-        <div className="p-4 h-16 flex items-center border-b">
-          <div className="flex items-center gap-2 font-bold text-lg text-primary">
-            <Building2 className="h-5 w-5" />
-            <span>Meridian CRM</span>
+        <div className="p-4 h-16 flex items-center border-b border-border/50">
+          <div className="flex items-center gap-2 font-bold text-lg text-primary font-display">
+            <img src={`${basePath}/logo.svg`} alt="Aegis Horizon" className="h-6 w-6" />
+            <span>Aegis Horizon</span>
           </div>
         </div>
         
@@ -116,7 +117,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Mobile Header */}
         <header className="md:hidden h-14 border-b flex items-center px-4 bg-background">
-          <div className="font-bold flex-1">Meridian</div>
+          <div className="font-bold flex-1 font-display">Aegis Horizon</div>
           <Button variant="ghost" size="icon">
             <Menu className="h-5 w-5" />
           </Button>

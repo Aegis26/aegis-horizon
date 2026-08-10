@@ -1,4 +1,6 @@
-# Meridian CRM
+# Aegis Horizon (CRM)
+
+Brand: "Aegis Horizon", tagline "See Beyond the Horizon". Dark-mode ONLY (deep navy #0A0E27 / electric blue #00B4D8; Archivo + Public Sans + Roboto Mono). Full guidelines: `attached_assets/Pasted--Aegis-Horizon-Brand-Guidelines-Product-Multi-tenant-CR_1786392914916.txt`; logo assets in `artifacts/crm/public/` (svg mark + png). No emojis in UI; sentence case; no light mode.
 
 Multi-tenant, feature-customizable CRM SaaS. Built from a phased spec (`attached_assets/Pasted-World-Class-CRM-Phased-Agent-Prompts...txt`). **Phase 1 (Foundation & Authentication) is complete.**
 

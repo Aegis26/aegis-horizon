@@ -26,18 +26,18 @@ export default function Dashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
-        <p className="text-muted-foreground mt-2">Welcome to your command center.</p>
+        <h1 className="text-3xl font-bold tracking-tight font-display">Overview</h1>
+        <p className="text-muted-foreground mt-2">Your command center.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Plan</CardTitle>
+            <CardTitle className="text-sm font-medium font-display">Active Plan</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold capitalize">{dashboard.plan}</div>
+            <div className="text-2xl font-bold capitalize font-display">{dashboard.plan}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {dashboard.enabledFeatureCount} features enabled
             </p>
@@ -46,7 +46,7 @@ export default function Dashboard() {
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Team Members</CardTitle>
+            <CardTitle className="text-sm font-medium font-display">Team Members</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -56,7 +56,7 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Accounts</CardTitle>
+            <CardTitle className="text-sm font-medium font-display">Total Accounts</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -66,7 +66,7 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Open Opportunities</CardTitle>
+            <CardTitle className="text-sm font-medium font-display">Open Opportunities</CardTitle>
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -77,7 +77,7 @@ export default function Dashboard() {
 
       <Card className="col-span-full">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 font-display">
             <Activity className="h-5 w-5" />
             Recent Activity
           </CardTitle>

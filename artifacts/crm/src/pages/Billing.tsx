@@ -110,9 +110,9 @@ export default function Billing() {
   return (
     <div className="space-y-8 pb-12">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Feature Compositor</h1>
+        <h1 className="text-3xl font-bold tracking-tight font-display">Feature Compositor</h1>
         <p className="text-muted-foreground mt-2 max-w-2xl">
-          Meridian is modular. Choose an out-of-the-box plan or build your exact CRM by enabling only the features you need.
+          Aegis Horizon is modular. Choose an out-of-the-box plan or build your exact CRM by enabling only the features you need.
         </p>
       </div>
 

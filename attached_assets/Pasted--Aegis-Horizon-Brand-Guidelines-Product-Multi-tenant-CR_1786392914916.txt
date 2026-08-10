@@ -1,0 +1,721 @@
+# Aegis Horizon — Brand Guidelines
+
+**Product:** Multi-tenant CRM SaaS  
+**Brand:** Aegis Horizon  
+**Tagline:** *See Beyond the Horizon*  
+**Logo:** Layered geometric star with horizon line, electric blue accent on deep navy background  
+**Target Audience:** Enterprise sales teams, SMBs, K-12 IT procurement, service organizations
+
+---
+
+## 1. Brand Overview
+
+**Brand Promise:** Aegis Horizon brings clarity to customer relationships. Every interaction, every opportunity, every insight—visible at a glance. The horizon line represents forward vision: forecasting, expansion, growth beyond what's currently visible.
+
+**Brand Personality:**
+- **Authoritative** — You trust this for mission-critical work
+- **Clear** — No clutter, no confusion, designed for decision-makers
+- **Forward-thinking** — AI, predictions, what's next
+- **Precise** — Data-driven, not approximate
+- **Professional** — Enterprise-grade, no playfulness or gimmicks
+
+**Why this matters:** The design system enforces clarity and confidence at every level.
+
+---
+
+## 2. Logo & Mark
+
+### Logo Usage
+
+**Primary Logo** (Use this in most contexts)
+- Horizontal layout: Shield + star icon + "AEGIS HORIZON" text
+- Minimum size: 120px width
+- Always maintain clear space around logo (1/4 of logo width on all sides)
+- Never rotate, skew, or distort the mark
+
+**Icon Mark Only** (For tight spaces, app icons, favicon)
+- Star shield alone
+- Minimum 32px (app icon size)
+- Use on any background where contrast is sufficient
+
+**Logo Lockup Files Needed:**
+- `aegis-horizon-logo-full.svg` (full logo)
+- `aegis-horizon-icon.svg` (star only)
+- `aegis-horizon-wordmark.svg` (text only, rarely used)
+- All as SVG and 2x PNG for web
+
+### Don'ts
+- Never change colors (blue is non-negotiable)
+- Never add drop shadows or effects not in original
+- Never place on backgrounds where blue doesn't have 4.5:1 contrast
+- Never use in rotated/skewed forms
+- Never outline the logo in a different color
+
+---
+
+## 3. Color Palette
+
+### Primary Colors
+
+| Name | Hex | RGB | Usage | CSS Variable |
+|------|-----|-----|-------|--------------|
+| **Electric Blue** | `#00B4D8` | `0, 180, 216` | Primary actions, highlights, borders, hover states | `--color-primary` |
+| **Deep Navy** | `#0A0E27` | `10, 14, 39` | Page backgrounds, cards, dark surfaces | `--color-bg-dark` |
+| **Off-white** | `#F5F7FA` | `245, 247, 250` | Text on dark backgrounds, cards on dark, light surfaces | `--color-text-light` |
+| **Accent Blue** | `#0066CC` | `0, 102, 204` | Secondary actions, links, subtle emphasis | `--color-secondary` |
+
+### Semantic Colors
+
+| Name | Hex | Usage | CSS Variable |
+|------|-----|-------|--------------|
+| **Success** | `#10B981` | Closed deals, completed tasks, confirmations | `--color-success` |
+| **Warning** | `#F59E0B` | Overdue, risk, attention needed | `--color-warning` |
+| **Error** | `#EF4444` | Destructive actions, errors, blockers | `--color-error` |
+| **Info** | `#3B82F6` | Informational messages, secondary data | `--color-info` |
+
+### Neutral Grays (for structure)
+
+| Name | Hex | Usage |
+|------|-----|-------|
+| **Neutral 900** | `#111827` | Strong text on light bg |
+| **Neutral 700** | `#374151` | Body text on light bg |
+| **Neutral 500** | `#6B7280` | Muted text, borders, secondary |
+| **Neutral 300** | `#D1D5DB` | Light borders, dividers |
+| **Neutral 100** | `#F3F4F6` | Light backgrounds, alternating rows |
+| **White** | `#FFFFFF` | Card backgrounds on light contexts |
+
+### Color Combinations (Accessible)
+
+**Primary action (on dark):**
+- Electric Blue text/button on Deep Navy background ✓ (4.8:1 contrast)
+- Off-white text on Electric Blue background ✓ (6.2:1 contrast)
+
+**Secondary action (on dark):**
+- Accent Blue text on Deep Navy ✓ (3.1:1 contrast, acceptable for UI)
+- Off-white text on Accent Blue ✓ (7.1:1 contrast)
+
+**Status indicators:**
+- Green (#10B981) for success ✓ (all backgrounds)
+- Warning (#F59E0B) for attention ✓ (pair with dark text)
+- Red (#EF4444) for error ✓ (all backgrounds)
+
+### Tailwind Configuration
+
+```javascript
+// tailwind.config.js
+export default {
+  theme: {
+    colors: {
+      primary: '#00B4D8',
+      secondary: '#0066CC',
+      'bg-dark': '#0A0E27',
+      'text-light': '#F5F7FA',
+      success: '#10B981',
+      warning: '#F59E0B',
+      error: '#EF4444',
+      info: '#3B82F6',
+      white: '#FFFFFF',
+      neutral: {
+        900: '#111827',
+        700: '#374151',
+        500: '#6B7280',
+        300: '#D1D5DB',
+        100: '#F3F4F6',
+      },
+    },
+    extend: {
+      backgroundColor: {
+        base: '#0A0E27', // Deep Navy
+        surface: '#1A1F3A', // Slightly lighter for cards
+      },
+      textColor: {
+        primary: '#F5F7FA',
+        secondary: '#A0AEC0', // Muted text
+      },
+      borderColor: {
+        primary: '#00B4D8',
+      },
+    },
+  },
+};
+```
+
+### CSS Custom Properties
+
+Add to `globals.css`:
+
+```css
+:root {
+  /* Primary Palette */
+  --color-primary: #00B4D8;
+  --color-secondary: #0066CC;
+  --color-bg-dark: #0A0E27;
+  --color-text-light: #F5F7FA;
+
+  /* Semantic */
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+  --color-info: #3B82F6;
+
+  /* Neutral */
+  --color-neutral-900: #111827;
+  --color-neutral-700: #374151;
+  --color-neutral-500: #6B7280;
+  --color-neutral-300: #D1D5DB;
+  --color-neutral-100: #F3F4F6;
+  --color-white: #FFFFFF;
+}
+
+body {
+  background-color: var(--color-bg-dark);
+  color: var(--color-text-light);
+}
+```
+
+---
+
+## 4. Typography
+
+### Font Stack
+
+**Headings & Display Text**
+- Font: **Archivo** (Google Fonts)
+- Weights: 600, 700, 800
+- Letter spacing: -0.5px (tight, technical feel)
+- Used for: H1, H2, H3, nav items, strong labels
+
+**Body & UI Text**
+- Font: **Public Sans** (Google Fonts)
+- Weights: 400 (regular), 500 (medium), 600 (semi-bold)
+- Letter spacing: 0px (neutral)
+- Used for: paragraphs, form labels, descriptions
+
+**Monospace (Dates, Times, Data)**
+- Font: **Roboto Mono** (Google Fonts)
+- Weight: 400
+- Letter spacing: 0px
+- Used for: timestamps, numbers, code, data tables
+- Why: Numbers in a mono font align vertically, critical for scanning data
+
+### Type Scale
+
+| Usage | Font | Size | Line Height | Weight | Example |
+|-------|------|------|-------------|--------|---------|
+| **Page Title (H1)** | Archivo | 32px | 1.2 | 700 | "Opportunities" |
+| **Section Header (H2)** | Archivo | 24px | 1.3 | 700 | "Pipeline This Quarter" |
+| **Subsection (H3)** | Archivo | 18px | 1.3 | 600 | "Prospecting" |
+| **Label / Small Title** | Archivo | 14px | 1.5 | 600 | Form labels, card titles |
+| **Body Text** | Public Sans | 14px | 1.6 | 400 | Descriptions, paragraphs |
+| **Small Text** | Public Sans | 12px | 1.5 | 400 | Helpers, captions, metadata |
+| **Data / Timestamp** | Roboto Mono | 14px | 1.5 | 400 | "2025-08-10 14:23" |
+
+### Tailwind Typography Config
+
+```javascript
+// tailwind.config.js extension
+export default {
+  theme: {
+    extend: {
+      fontFamily: {
+        display: ['Archivo', 'sans-serif'],
+        sans: ['Public Sans', 'sans-serif'],
+        mono: ['Roboto Mono', 'monospace'],
+      },
+      fontSize: {
+        'h1': ['32px', { lineHeight: '1.2', fontWeight: '700' }],
+        'h2': ['24px', { lineHeight: '1.3', fontWeight: '700' }],
+        'h3': ['18px', { lineHeight: '1.3', fontWeight: '600' }],
+        'label': ['14px', { lineHeight: '1.5', fontWeight: '600' }],
+        'body': ['14px', { lineHeight: '1.6', fontWeight: '400' }],
+        'small': ['12px', { lineHeight: '1.5', fontWeight: '400' }],
+        'data': ['14px', { lineHeight: '1.5', fontWeight: '400', fontFamily: 'Roboto Mono' }],
+      },
+      letterSpacing: {
+        tight: '-0.5px',
+        normal: '0px',
+      },
+    },
+  },
+};
+```
+
+### Font Import
+
+Add to `globals.css`:
+
+```css
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Public+Sans:wght@400;500;600&family=Roboto+Mono:wght@400&display=swap');
+
+h1 { @apply font-display text-h1 tracking-tight; }
+h2 { @apply font-display text-h2 tracking-tight; }
+h3 { @apply font-display text-h3 tracking-tight; }
+label { @apply font-display text-label; }
+body { @apply font-sans text-body; }
+small { @apply font-sans text-small; }
+.data { @apply font-mono text-data; }
+```
+
+---
+
+## 5. Visual Style & Components
+
+### Cards & Surfaces
+
+**Dark Mode Primary (standard for Aegis Horizon)**
+
+```css
+.card {
+  background-color: var(--color-bg-dark);
+  border: 1px solid rgba(0, 180, 216, 0.1); /* Subtle Electric Blue border */
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.card:hover {
+  border-color: rgba(0, 180, 216, 0.3);
+  box-shadow: 0 8px 20px rgba(0, 180, 216, 0.1);
+}
+
+.card-elevated {
+  background-color: rgba(10, 14, 39, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(245, 247, 250, 0.1);
+}
+```
+
+### Buttons
+
+**Primary Button (Electric Blue)**
+
+```css
+.btn-primary {
+  background-color: var(--color-primary); /* #00B4D8 */
+  color: var(--color-bg-dark);
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-weight: 600;
+  font-family: Archivo;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  background-color: #00A0C0;
+  box-shadow: 0 0 12px rgba(0, 180, 216, 0.4);
+}
+
+.btn-primary:active {
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.2);
+}
+```
+
+**Secondary Button (Accent Blue, Ghost style)**
+
+```css
+.btn-secondary {
+  background-color: transparent;
+  color: var(--color-secondary);
+  border: 1px solid var(--color-secondary);
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-weight: 600;
+  font-family: Archivo;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background-color: rgba(0, 102, 204, 0.1);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+```
+
+**Destructive Button (Error Red)**
+
+```css
+.btn-destructive {
+  background-color: var(--color-error);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-weight: 600;
+  font-family: Archivo;
+  cursor: pointer;
+}
+
+.btn-destructive:hover {
+  background-color: #DC2626;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
+}
+```
+
+### Form Inputs
+
+```css
+input,
+textarea,
+select {
+  background-color: rgba(10, 14, 39, 0.5);
+  border: 1px solid rgba(0, 180, 216, 0.2);
+  border-radius: 6px;
+  color: var(--color-text-light);
+  padding: 10px 12px;
+  font-family: Public Sans;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 8px rgba(0, 180, 216, 0.2);
+}
+
+input::placeholder {
+  color: rgba(245, 247, 250, 0.5);
+}
+```
+
+### Dividers & Borders
+
+```css
+.divider {
+  border-color: rgba(0, 180, 216, 0.1);
+  border-width: 1px;
+}
+
+.divider-accent {
+  border-top: 2px solid var(--color-primary);
+  margin: 16px 0;
+}
+```
+
+### Status Badges
+
+```css
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: Archivo;
+}
+
+.badge-success {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.badge-warning {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.badge-error {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-info {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+```
+
+### Focus States & Accessibility
+
+**All interactive elements must have visible focus rings:**
+
+```css
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+```
+
+### Spacing System
+
+Use multiples of 4px (Tailwind default):
+
+```
+4px   (xs)   — tight, icon spacing
+8px   (sm)   — small padding, gaps
+12px  (md)   — standard padding, list gaps
+16px  (lg)   — card padding, section gaps
+20px  (xl)   — large spacing
+24px  (2xl)  — section breaks
+32px  (3xl)  — major section breaks
+```
+
+---
+
+## 6. Imagery & Icons
+
+### Icon Style
+
+**Use:** Heroicons (Outline style) or Feather Icons  
+**Size:** Typically 20px (UI), 24px (buttons), 32px (hero sections)  
+**Color:** Primary Electric Blue (#00B4D8) by default  
+**Stroke width:** 2px (consistent with outline style)
+
+**Icon Usage Rules:**
+- Every icon-only button must have an `aria-label`
+- Never color-code icons alone (add text or badge if status indication needed)
+- Icons should have 44px minimum tap target on mobile
+
+### Photography & Imagery
+
+**Style:** Modern, minimalist, technical but human  
+**Tone:** Forward-looking, professional, inclusive  
+**Avoid:** Clichés (handshake photos, fake diversity), bright colors that clash with blue palette
+
+**If using background images:**
+- Darken with overlay to maintain text readability
+- Overlay opacity: 60–70% (so images are visible but text is legible)
+
+### Illustrations
+
+When creating custom illustrations:
+- Use accent blue and electric blue as primary colors
+- Geometric, technical style to match logo
+- Avoid realistic or overly playful rendering
+
+---
+
+## 7. Layout & Spacing
+
+### Page Structure
+
+**Desktop (1200px+)**
+- Left sidebar (240–280px) with navigation
+- Main content area (responsive, fills remaining space)
+- Max content width: 1400px
+
+**Tablet (768px–1199px)**
+- Left sidebar collapses to icon-only navigation
+- Hamburger menu overlay on top
+
+**Mobile (< 768px)**
+- Bottom navigation bar (safe area bottom)
+- Full-width main content
+- No sidebar
+
+### Grid & Alignment
+
+- Use CSS Grid for layouts, Flexbox for components
+- 12-column grid for responsive design
+- Gutters: 20px (desktop), 16px (tablet), 12px (mobile)
+
+### Breakpoints
+
+```javascript
+// tailwind.config.js
+export default {
+  theme: {
+    screens: {
+      sm: '640px',   // phones
+      md: '768px',   // tablets
+      lg: '1024px',  // small laptops
+      xl: '1280px',  // desktop
+      '2xl': '1536px', // large desktop
+    },
+  },
+};
+```
+
+---
+
+## 8. Voice & Tone
+
+### Brand Voice
+
+**Traits:**
+- Confident but not arrogant
+- Clear over clever
+- Action-oriented
+- Data-driven, not emotional
+
+**Examples:**
+
+| Context | Voice | ❌ Don't |
+|---------|-------|---------|
+| Success message | "Deal closed. Well done." | "Yay! You crushed it! 🎉" |
+| Error message | "Email already in use. Try another." | "That email is borked, bro." |
+| Empty state | "No opportunities yet. Create your first." | "Looks like you forgot to add deals!" |
+| Call-to-action | "Start forecasting" | "Let's go forecast!" |
+| Help text | "Dates are in your local timezone." | "Just so you know, we're smart about timezones." |
+
+### Tone Rules
+
+1. **Sentence case** — "Schedule your calls" not "SCHEDULE YOUR CALLS"
+2. **Active voice** — "You have 3 overdue tasks" not "3 tasks are overdue to you"
+3. **Specific** — "Add your first account" not "Get started"
+4. **No jargon unless the user speaks it** — Sales folks say "pipeline", don't assume all users do
+5. **One idea per sentence** — Clarity over brevity
+6. **No emoji in UI** — Reserve for marketing/social
+
+---
+
+## 9. How Replit Agent Should Use This Guide
+
+When building Aegis Horizon components, the Agent should:
+
+1. **Import brand tokens at the top of every component file:**
+   ```typescript
+   // Use CSS custom properties defined in globals.css
+   const primaryColor = 'var(--color-primary)'; // #00B4D8
+   const bgDark = 'var(--color-bg-dark)'; // #0A0E27
+   ```
+
+2. **Apply Tailwind classes consistently:**
+   ```jsx
+   <button className="bg-primary text-bg-dark font-display text-label rounded-md px-5 py-2.5 hover:shadow-lg hover:bg-opacity-90">
+     Create Account
+   </button>
+   ```
+
+3. **Use semantic spacing:**
+   ```jsx
+   <div className="space-y-6 p-6"> {/* 24px gaps, 24px padding */}
+   ```
+
+4. **Ensure accessibility:**
+   ```jsx
+   <button aria-label="Close dialog">
+     <Icon name="x" size={20} />
+   </button>
+   ```
+
+5. **Reference voice & tone for all text:**
+   - Button copy should be clear actions: "Create opportunity" not "New opportunity"
+   - Error messages should be specific: "Email already registered" not "Error"
+   - Help text should educate: "Closed dates lock the record from edits" not "Lock this"
+
+6. **Card and component structure should match the template patterns** provided above.
+
+---
+
+## 10. Dark Mode (Only Mode)
+
+Aegis Horizon is **dark-mode only**. This is intentional:
+
+- **Brand alignment:** Deep navy + electric blue is your identity
+- **User comfort:** Sales teams often work in dark offices
+- **Performance:** Dark pixels use less power on OLED screens
+- **No light mode toggle** — it confuses users and adds maintenance burden
+
+If a customer requests light mode, that's a Phase 6+ feature, and it would require a complete color remap.
+
+---
+
+## 11. Do's and Don'ts
+
+### ✅ Do
+
+- Use Electric Blue (#00B4D8) as your primary action color
+- Keep text on dark backgrounds high-contrast (4.5:1 minimum)
+- Use Archivo for headings and labels (bold, geometric)
+- Use Roboto Mono for all dates, times, and numeric data
+- Stack cards with subtle borders and shadows
+- Test all color combinations for accessibility (WCAG AA minimum)
+- Use focus rings on all interactive elements
+- Maintain consistent spacing (multiples of 4px)
+
+### ❌ Don't
+
+- Use neon or extremely bright accent colors
+- Place Electric Blue text on very light backgrounds (loses the brand feel)
+- Mix fonts — only Archivo, Public Sans, and Roboto Mono
+- Add drop shadows, gradients, or effects not specified here
+- Use rounded corners > 8px (breaks the geometric theme)
+- Include decorative graphics that compete with data
+- Assume users can see without color (always pair color with pattern/text)
+- Change the logo colors, proportions, or orientation
+
+---
+
+## 12. Component Library Baseline
+
+These components should be created in Phase 1 and themed to match these guidelines:
+
+- Button (Primary, Secondary, Destructive, Ghost)
+- Input (Text, Email, Phone, Number)
+- Select / Dropdown
+- Checkbox
+- Radio Button
+- Card
+- Badge
+- Alert / Toast
+- Modal / Dialog
+- Sidebar / Navigation
+- Breadcrumbs
+- Pagination
+- Loading Skeleton
+- Avatar
+- Empty State
+- Data Table
+
+All use the color palette, typography, and spacing defined above.
+
+---
+
+## 13. Accessibility Checklist
+
+Before shipping any screen:
+
+- [ ] Color contrast is ≥ 4.5:1 for body text, ≥ 3:1 for large text
+- [ ] All interactive elements are keyboard accessible
+- [ ] Focus rings are visible (not hidden)
+- [ ] Form labels are properly associated with inputs (`<label htmlFor="...">`)
+- [ ] Icon-only buttons have `aria-label`
+- [ ] Images have alt text (or `alt=""` if decorative)
+- [ ] No color alone conveys meaning (pair with text or icon)
+- [ ] Tap targets are ≥ 44px on mobile
+- [ ] No flashing or rapid animations that could trigger seizures
+
+---
+
+## References & Implementation
+
+**Google Fonts**
+- Archivo: https://fonts.google.com/specimen/Archivo
+- Public Sans: https://fonts.google.com/specimen/Public+Sans
+- Roboto Mono: https://fonts.google.com/specimen/Roboto+Mono
+
+**Icon Sets**
+- Heroicons: https://heroicons.com (recommend outline style)
+- Feather Icons: https://feathericons.com
+
+**Color Contrast Checker**
+- https://www.tpgi.com/color-contrast-checker/
+
+**Accessibility Testing**
+- axe DevTools: https://www.deque.com/axe/devtools/
+- WAVE: https://wave.webaim.org/
+
+---
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-08-10 | Initial brand guidelines for Aegis Horizon |

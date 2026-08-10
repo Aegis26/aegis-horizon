@@ -57,7 +57,7 @@ router.post(
       purchasedFeatures = planDef.includedFeatures;
       lineItems = [
         {
-          name: `Meridian CRM ${planDef.name}`,
+          name: `Aegis Horizon ${planDef.name}`,
           description: planDef.description,
           monthlyCents: planDef.monthlyPriceCents,
         },

@@ -21,13 +21,13 @@ export default function Automation() {
         <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-6">
           <Lock className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h2 className="text-2xl font-bold tracking-tight mb-2">Automation Locked</h2>
+        <h2 className="text-2xl font-bold tracking-tight mb-2 font-display">Automation Locked</h2>
         <p className="text-muted-foreground mb-8">
           The Automation feature set is not enabled for your organization. 
           Upgrade your plan or customize your features to build workflows.
         </p>
         <Link href="/billing">
-          <Button size="lg">Manage Features</Button>
+          <Button size="lg" className="font-display">Manage Features</Button>
         </Link>
       </div>
     );
@@ -41,22 +41,22 @@ export default function Automation() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Automation</h1>
+          <h1 className="text-3xl font-bold tracking-tight font-display">Automation</h1>
           <p className="text-muted-foreground mt-2">Visual workflows and triggers.</p>
         </div>
-        <Button className="gap-2"><Plus className="h-4 w-4"/> Create Workflow</Button>
+        <Button className="gap-2 font-display"><Plus className="h-4 w-4"/> Create workflow</Button>
       </div>
 
       {workflows?.length === 0 ? (
-        <div className="border-2 border-dashed rounded-xl p-12 flex flex-col items-center justify-center text-center">
-          <div className="h-20 w-20 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mb-6">
+        <div className="border border-border/50 bg-card/50 rounded-xl p-12 flex flex-col items-center justify-center text-center">
+          <div className="h-20 w-20 bg-primary/10 text-primary rounded-xl border border-primary/20 flex items-center justify-center mb-6">
             <WorkflowIcon className="h-10 w-10" />
           </div>
-          <h3 className="text-xl font-bold mb-2">No workflows yet</h3>
+          <h3 className="text-xl font-bold mb-2 font-display">No workflows yet</h3>
           <p className="text-muted-foreground max-w-sm mb-6">
             Automate repetitive tasks like sending emails when an opportunity closes or updating account health scores.
           </p>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2 bg-transparent text-foreground border-primary/20 hover:bg-primary/10 hover:border-primary/50">
             <Plus className="h-4 w-4" /> Start from Template
           </Button>
         </div>

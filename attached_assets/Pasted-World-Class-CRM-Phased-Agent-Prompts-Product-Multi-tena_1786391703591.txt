@@ -1,0 +1,340 @@
+World-Class CRM — Phased Agent Prompts
+Product: Multi-tenant, feature-customizable CRM SaaS (37 features across 6 phases) Platform: Replit (React 18 + Vite + TypeScript, Express + TypeScript, PostgreSQL + Drizzle) Pricing Model: Pre-made tiers (Essential/Professional/Enterprise) + à la carte features with real-time pricing UI
+Phase 1 — Foundation & Authentication (Weeks 1–3)
+Goal: Deploy a multi-tenant platform with role-based access control, feature entitlements, and Stripe billing integration. No business features yet.
+Deliverables: Auth system (Clerk), org/user/permissions schema, feature flag middleware, Stripe checkout flow, React shell with sidebar navigation, settings pages.
+Acceptance Criteria:
+New user signs up, creates org, selects a plan (Essential/Professional/Enterprise visible).
+Can invite team members and assign roles (Owner, Admin, Manager, User, Viewer).
+Feature gates enforce permissions server-side (hitting /api/opportunities without 'sales' feature returns 403).
+Stripe checkout generates without errors; webhook updates org stripeCustomerId and subscription.
+React app boots, Clerk auth works, logged-in user lands on org dashboard.
+All migrations run cleanly, database ready for Phases 2–6.
+Stack
+Layer	Choice	Why
+Frontend	React 18 + Vite + TypeScript	Replit default
+Styling	Tailwind + shadcn/ui	Fast, customizable to brand
+Data fetch	TanStack Query	Cache + invalidation
+Backend	Express + TypeScript	Your existing stack
+Database	PostgreSQL (Drizzle ORM)	Replit native, relationships
+Auth	Clerk	Multi-tenant, OAuth optional
+Payments	Stripe Billing	Seat-based + feature pricing
+Email	Resend	Transactional (invites, password resets)
+Database Schema — Drizzle
+typescript
+import { pgTable, text, uuid, timestamp, integer, boolean, jsonb, numeric, date, time, pgEnum } from 'drizzle-orm/pg-core';
+import { relations } from 'drizzle-orm';
+
+// Enums
+export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'manager', 'user', 'viewer']);
+export const planTypeEnum = pgEnum('plan_type', ['essential', 'professional', 'enterprise', 'custom']);
+export const recordStatusEnum = pgEnum('record_status', ['active', 'inactive', 'archived']);
+
+// Organizations
+export const organizations = pgTable('organizations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull().unique(),
+  plan: planTypeEnum('plan').default('essential'),
+  enabledFeatures: text('enabled_features').array().default([]), // ['crm', 'sales', 'ai_copilot', ...]
+  featuresConfig: jsonb('features_config').default({}),
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Users (linked to Clerk)
+export const users = pgTable('users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clerkId: text('clerk_id').notNull().unique(),
+  email: text('email').notNull().unique(),
+  fullName: text('full_name'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Org membership
+export const orgUsers = pgTable('org_users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: userRoleEnum('role').notNull(),
+  permissions: jsonb('permissions').default({}),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Accounts (Customer 360, placeholder now, filled in Phase 2)
+export const accounts = pgTable('accounts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  industry: text('industry'),
+  annualRevenue: numeric('annual_revenue'),
+  employeeCount: integer('employee_count'),
+  website: text('website'),
+  phone: text('phone'),
+  address: text('address'),
+  city: text('city'),
+  state: text('state'),
+  country: text('country'),
+  zip: text('zip'),
+  parentAccountId: uuid('parent_account_id').references(() => accounts.id),
+  ownerUserId: uuid('owner_user_id').references(() => users.id, { onDelete: 'set null' }),
+  healthScore: text('health_score').default('green'),
+  ltv: numeric('ltv'),
+  riskLevel: text('risk_level').default('low'),
+  churnPredictionScore: numeric('churn_prediction_score', { precision: 3, scale: 2 }),
+  nextRenewalDate: date('next_renewal_date'),
+  files: jsonb('files').default([]),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Contacts (placeholder)
+export const contacts = pgTable('contacts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  firstName: text('first_name').notNull(),
+  lastName: text('last_name').notNull(),
+  email: text('email'),
+  phone: text('phone'),
+  title: text('title'),
+  department: text('department'),
+  roleInDeal: text('role_in_deal'),
+  seniority: text('seniority'),
+  engagementLevel: integer('engagement_level'),
+  relationshipStrength: integer('relationship_strength'),
+  reportsToContactId: uuid('reports_to_contact_id').references(() => contacts.id),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Opportunities (placeholder)
+export const opportunities = pgTable('opportunities', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  pipelineId: uuid('pipeline_id'),
+  stage: text('stage').notNull(),
+  probability: integer('probability').default(0),
+  value: numeric('value'),
+  expectedCloseDate: date('expected_close_date'),
+  actualCloseDate: date('actual_close_date'),
+  ownerUserId: uuid('owner_user_id').references(() => users.id, { onDelete: 'set null' }),
+  products: jsonb('products').default([]),
+  competitors: text('competitors').array().default([]),
+  blockers: text('blockers').array().default([]),
+  requiredApprovals: uuid('required_approvals').array().default([]),
+  forecastCategory: text('forecast_category'),
+  lossReason: text('loss_reason'),
+  nextAction: text('next_action'),
+  activityCount: integer('activity_count').default(0),
+  daysInStage: integer('days_in_stage').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Activities / Timeline
+export const activities = pgTable('activities', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+  opportunityId: uuid('opportunity_id').references(() => opportunities.id, { onDelete: 'set null' }),
+  type: text('type').notNull(),
+  subject: text('subject'),
+  body: text('body'),
+  participants: jsonb('participants').default([]),
+  direction: text('direction'),
+  externalMessageId: text('external_message_id'),
+  callRecordingUrl: text('call_recording_url'),
+  callTranscript: text('call_transcript'),
+  sentiment: text('sentiment'),
+  keywords: text('keywords').array().default([]),
+  attachments: jsonb('attachments').default([]),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Tasks
+export const tasks = pgTable('tasks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'set null' }),
+  opportunityId: uuid('opportunity_id').references(() => opportunities.id, { onDelete: 'set null' }),
+  title: text('title').notNull(),
+  description: text('description'),
+  type: text('type'),
+  status: text('status').default('open'),
+  priority: text('priority').default('medium'),
+  assignedToUserId: uuid('assigned_to_user_id').references(() => users.id, { onDelete: 'set null' }),
+  dueDate: date('due_date'),
+  dueTime: time('due_time'),
+  reminderAt: timestamp('reminder_at'),
+  completedAt: timestamp('completed_at'),
+  estimatedDurationMinutes: integer('estimated_duration_minutes'),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Feature Entitlements
+export const featureEntitlements = pgTable('feature_entitlements', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  featureKey: text('feature_key').notNull(),
+  enabled: boolean('enabled').default(true),
+  featureConfig: jsonb('feature_config').default({}),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Usage Logs
+export const usageLogs = pgTable('usage_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  featureKey: text('feature_key').notNull(),
+  action: text('action').notNull(),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Pipelines (customizable per org)
+export const pipelines = pgTable('pipelines', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  type: text('type').notNull(),
+  stages: jsonb('stages').default([]),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Territories
+export const territories = pgTable('territories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  type: text('type'),
+  criteria: jsonb('criteria').default({}),
+  ownerUserId: uuid('owner_user_id').references(() => users.id, { onDelete: 'set null' }),
+  quota: numeric('quota'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Placeholder tables (created now, populated in later phases)
+// These stubs allow migrations to run cleanly without blocking later phases
+export const quotes = pgTable('quotes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const cases = pgTable('cases', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const contracts = pgTable('contracts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const documents = pgTable('documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const workflows = pgTable('workflows', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const aiPredictions = pgTable('ai_predictions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const recommendations = pgTable('recommendations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const integrations = pgTable('integrations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const webhooks = pgTable('webhooks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+Core API Routes
+Auth (public)
+POST /api/auth/signup — Clerk webhook + create user + create default org
+POST /api/auth/login — Session-based (no OAuth needed)
+POST /api/auth/logout
+GET /api/auth/me — Current user + all orgs they belong to
+Orgs
+GET /api/orgs/:orgId — Org details (requires membership)
+PATCH /api/orgs/:orgId — Update plan, name (requires owner/admin)
+POST /api/orgs/:orgId/users — Invite user (requires admin)
+DELETE /api/orgs/:orgId/users/:userId — Remove user (requires admin)
+GET /api/orgs/:orgId/billing/checkout — Stripe session (requires owner/admin)
+Billing
+POST /api/webhooks/stripe — Validate Stripe signature, update org subscription on checkout.session.completed
+Feature Gates (all return 403 if feature not enabled)
+GET /api/accounts — requires 'crm' feature
+GET /api/opportunities — requires 'sales' feature
+GET /api/workflows — requires 'automation' feature
+All other Phase 2+ routes follow the same pattern
+Middleware & Auth
+Create /src/middleware/auth.ts:
+attachUser() — Extract Clerk JWT, fetch user from DB, attach to req.user
+attachOrg() — Extract org_id from query or header, verify membership, attach to req.org
+requireFeature(featureKey) — Check req.org.enabledFeatures includes featureKey, return 403 if not
+All routes use: app.get('/api/...', attachUser, attachOrg, requireFeature('feature_name'), handler)
+Stripe Integration
+Create /src/services/stripe.ts:
+FEATURE_PRICES object mapping feature key to price in cents
+PLAN_FEATURES mapping each tier to included features
+createCheckoutSession(orgId, features[], seatCount, plan) — Generate Stripe session
+Webhook handler validates Stripe signature, updates org.stripeCustomerId and stripeSubscriptionId
+React Billing Selector
+Create <FeatureSelector /> component:
+Tab between Essential / Professional / Enterprise / Custom
+Custom shows grid of all features with checkboxes
+Real-time price calculation as user checks/unchecks
+Price display in both monthly and annual (20% discount for annual)
+"Subscribe Now" button opens Stripe checkout with selected features
+React App Shell
+Create /client/src/App.tsx:
+Left sidebar (desktop) or bottom tab bar (mobile)
+Nav items: Dashboard, Accounts (requires 'crm'), Opportunities (requires 'sales'), etc.
+Settings page with org name, team management, billing
+All routes server-side gated; frontend just hides nav links
+Critical Decisions
+All timestamps are UTC in database, render in user's timezone (or default to America/Chicago for now).
+Feature keys are the single source of truth for permissions. Every route checks requireFeature() at middleware level. Frontend hiding links is not access control.
+Org invite flow: Generate one-time token, email link (via Resend), user clicks and sets password. No OAuth at signup.
+Clerk is auth provider, not permission provider. Clerk handles login; your DB holds org membership and roles.
+Verification Checklist
+ Migrations run: npm run db:migrate
+ Seed admin org: npm run db:seed (creates one test org with all features)
+ POST /api/auth/signup works, creates user + org
+ GET /api/accounts without 'crm' feature enabled returns 403
+ GET /api/accounts with 'crm' enabled returns 200 (empty array)
+ React app builds and boots
+ Clerk login/logout flows work
+ Org switcher visible when user in multiple orgs
+ Stripe checkout session generates and redirects correctly
+ Stripe webhook endpoint receives and validates signature

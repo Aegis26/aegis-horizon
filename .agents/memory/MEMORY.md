@@ -1,0 +1,1 @@
+- [Orval zod version pin](orval-zod-version.md) — orval emits zod-4 syntax (`zod.int()`) unless `override.zod.version: 3` is set; workspace zod is 3.x.

@@ -1,45 +1,19 @@
-# [Project name]
+# Meridian CRM
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Multi-tenant, feature-customizable CRM SaaS. Built from a phased spec (`attached_assets/Pasted-World-Class-CRM-Phased-Agent-Prompts...txt`). **Phase 1 (Foundation & Authentication) is complete.**
 
-## Run & Operate
+## Architecture
+- pnpm monorepo. Web app: `artifacts/crm` (React + Vite + wouter + shadcn, previewPath `/`). API: `artifacts/api-server` (Express 5).
+- API contract: `lib/api-spec/openapi.yaml` → orval codegen (`pnpm --filter @workspace/api-spec run codegen`) → `@workspace/api-client-react` hooks + `@workspace/api-zod` validators. Note: `orval.config.ts` pins `override.zod.version: 3` (workspace zod is 3.x; orval otherwise emits zod-4 syntax).
+- DB: Drizzle + Postgres, schema in `lib/db/src/schema/` (organizations, users, orgUsers, CRM tables, featureEntitlements, usageLogs, plus Phase 2-6 stub tables). Push: `pnpm --filter @workspace/db run push`.
+- Auth: Replit-managed Clerk (`@clerk/express` server, `@clerk/react` client, proxy middleware in `src/middlewares/clerkProxyMiddleware.ts`). Users + a default org (Professional plan) are provisioned just-in-time in `attachUser` on first authenticated request, with demo CRM data seeded.
+- Authorization: `attachUser` → `attachOrg` (membership check on `:orgId`) → `requireRole` / `requireFeature` in `artifacts/api-server/src/middlewares/auth.ts`. Feature-gated endpoints return 403 + `featureKey` when the org lacks the feature.
+- Billing: plan/feature catalog in `artifacts/api-server/src/lib/catalog.ts` (3 tiers + 12 à-la-carte features, 20% annual discount). Stripe via Replit connector (`src/lib/stripeClient.ts`); checkout returns 503 until the Stripe integration is connected. Admins can also apply feature sets directly (dev path) via `PUT /orgs/:orgId/features`.
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
-
-## Stack
-
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
-
-## Where things live
-
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
-
-## Architecture decisions
-
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
-
-## Product
-
-_Describe the high-level user-facing capabilities of this app once they exist._
+## Phase status
+- Phase 1 done: auth, orgs/roles (owner/admin/manager/user/viewer), entitlement gates, billing catalog + checkout endpoint, app shell (dashboard, accounts, opportunities, automation, billing feature selector, settings).
+- Stripe checkout requires connecting the Stripe integration; webhook sync (stripe-replit-sync) not yet wired to update subscriptions → entitlements.
+- Phases 2-6 (full CRM modules, AI, analytics, etc.) not started; stub tables exist.
 
 ## User preferences
-
-_Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Gotchas
-
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+(none recorded yet)

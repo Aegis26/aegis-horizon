@@ -3,20 +3,25 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Multi-tenant CRM SaaS API (Phase 1 foundation)
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: auth
+  - name: orgs
+  - name: members
+  - name: features
+  - name: billing
+  - name: crm
+  - name: dashboard
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +29,512 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Current user and their organizations (auto-provisions user + default org on first call)
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          description: Not authenticated
+  /orgs/{orgId}:
+    get:
+      operationId: getOrg
+      tags: [orgs]
+      summary: Org details (requires membership)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Org
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "403":
+          description: Not a member
+    patch:
+      operationId: updateOrg
+      tags: [orgs]
+      summary: Update org name/plan (owner/admin)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationUpdate"
+      responses:
+        "200":
+          description: Updated org
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+  /orgs/{orgId}/members:
+    get:
+      operationId: listMembers
+      tags: [members]
+      summary: List org members
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Member"
+    post:
+      operationId: inviteMember
+      tags: [members]
+      summary: Invite a user by email with a role (admin+)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberInvite"
+      responses:
+        "201":
+          description: Created membership (or pending invite)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+  /orgs/{orgId}/members/{memberId}:
+    patch:
+      operationId: updateMemberRole
+      tags: [members]
+      summary: Change a member's role (admin+)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/MemberId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberRoleUpdate"
+      responses:
+        "200":
+          description: Updated member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+    delete:
+      operationId: removeMember
+      tags: [members]
+      summary: Remove a member (admin+)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/MemberId"
+      responses:
+        "204":
+          description: Removed
+  /orgs/{orgId}/features:
+    get:
+      operationId: listFeatures
+      tags: [features]
+      summary: Feature entitlements for the org
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Entitlements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeatureEntitlement"
+    put:
+      operationId: updateFeatures
+      tags: [features]
+      summary: Set the org's enabled features (owner/admin)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeatureSelection"
+      responses:
+        "200":
+          description: Updated org
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+  /billing/catalog:
+    get:
+      operationId: getBillingCatalog
+      tags: [billing]
+      summary: Plans, included features, and a-la-carte feature prices
+      responses:
+        "200":
+          description: Catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingCatalog"
+  /orgs/{orgId}/billing/checkout:
+    post:
+      operationId: createCheckoutSession
+      tags: [billing]
+      summary: Create a Stripe checkout session (owner/admin)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutRequest"
+      responses:
+        "200":
+          description: Checkout session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutSession"
+        "503":
+          description: Stripe not connected yet
+  /orgs/{orgId}/dashboard:
+    get:
+      operationId: getOrgDashboard
+      tags: [dashboard]
+      summary: Org dashboard summary
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /orgs/{orgId}/usage:
+    get:
+      operationId: listUsageLogs
+      tags: [dashboard]
+      summary: Recent usage/activity log entries
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Usage logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UsageLog"
+  /orgs/{orgId}/accounts:
+    get:
+      operationId: listAccounts
+      tags: [crm]
+      summary: List accounts (requires 'crm' feature; 403 otherwise)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+        "403":
+          description: Feature not enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureGateError"
+  /orgs/{orgId}/opportunities:
+    get:
+      operationId: listOpportunities
+      tags: [crm]
+      summary: List opportunities (requires 'sales' feature; 403 otherwise)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Opportunities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Opportunity"
+        "403":
+          description: Feature not enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureGateError"
+  /orgs/{orgId}/workflows:
+    get:
+      operationId: listWorkflows
+      tags: [crm]
+      summary: List automation workflows (requires 'automation' feature; 403 otherwise)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Workflows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkflowStub"
+        "403":
+          description: Feature not enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureGateError"
 components:
+  parameters:
+    OrgId:
+      name: orgId
+      in: path
+      required: true
+      schema:
+        type: string
+    MemberId:
+      name: memberId
+      in: path
+      required: true
+      schema:
+        type: string
   schemas:
     HealthStatus:
       type: object
       properties:
         status:
           type: string
-      required:
-        - status
-
+      required: [status]
+    User:
+      type: object
+      required: [id, email]
+      properties:
+        id: { type: string }
+        clerkId: { type: string }
+        email: { type: string }
+        fullName: { type: ["string", "null"] }
+    Me:
+      type: object
+      required: [user, orgs]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        orgs:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgMembership"
+    OrgMembership:
+      type: object
+      required: [org, role]
+      properties:
+        org:
+          $ref: "#/components/schemas/Organization"
+        role:
+          type: string
+          enum: [owner, admin, manager, user, viewer]
+    Organization:
+      type: object
+      required: [id, name, slug, plan, enabledFeatures]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        plan:
+          type: string
+          enum: [essential, professional, enterprise, custom]
+        enabledFeatures:
+          type: array
+          items: { type: string }
+        stripeCustomerId: { type: ["string", "null"] }
+        stripeSubscriptionId: { type: ["string", "null"] }
+        createdAt: { type: ["string", "null"] }
+    OrganizationUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        plan:
+          type: string
+          enum: [essential, professional, enterprise, custom]
+    Member:
+      type: object
+      required: [id, role, user]
+      properties:
+        id: { type: string }
+        role:
+          type: string
+          enum: [owner, admin, manager, user, viewer]
+        user:
+          $ref: "#/components/schemas/User"
+        createdAt: { type: ["string", "null"] }
+    MemberInvite:
+      type: object
+      required: [email, role]
+      properties:
+        email: { type: string }
+        fullName: { type: string }
+        role:
+          type: string
+          enum: [admin, manager, user, viewer]
+    MemberRoleUpdate:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [owner, admin, manager, user, viewer]
+    FeatureEntitlement:
+      type: object
+      required: [featureKey, enabled]
+      properties:
+        featureKey: { type: string }
+        enabled: { type: boolean }
+    FeatureSelection:
+      type: object
+      required: [features]
+      properties:
+        features:
+          type: array
+          items: { type: string }
+    FeatureInfo:
+      type: object
+      required: [key, name, description, monthlyPriceCents, category]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        description: { type: string }
+        monthlyPriceCents: { type: integer }
+        category: { type: string }
+    PlanInfo:
+      type: object
+      required: [key, name, monthlyPriceCents, includedFeatures, description]
+      properties:
+        key:
+          type: string
+          enum: [essential, professional, enterprise]
+        name: { type: string }
+        description: { type: string }
+        monthlyPriceCents: { type: integer }
+        includedFeatures:
+          type: array
+          items: { type: string }
+    BillingCatalog:
+      type: object
+      required: [plans, features, annualDiscountPercent]
+      properties:
+        plans:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlanInfo"
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeatureInfo"
+        annualDiscountPercent: { type: integer }
+    CheckoutRequest:
+      type: object
+      required: [interval]
+      properties:
+        plan:
+          type: string
+          enum: [essential, professional, enterprise, custom]
+        features:
+          type: array
+          items: { type: string }
+        seatCount: { type: integer, minimum: 1 }
+        interval:
+          type: string
+          enum: [month, year]
+    CheckoutSession:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string }
+    DashboardSummary:
+      type: object
+      required: [orgId, plan, memberCount, enabledFeatureCount, enabledFeatures, accountCount, opportunityCount, recentActivity]
+      properties:
+        orgId: { type: string }
+        plan: { type: string }
+        memberCount: { type: integer }
+        enabledFeatureCount: { type: integer }
+        enabledFeatures:
+          type: array
+          items: { type: string }
+        accountCount: { type: integer }
+        opportunityCount: { type: integer }
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/UsageLog"
+    UsageLog:
+      type: object
+      required: [id, featureKey, action, createdAt]
+      properties:
+        id: { type: string }
+        featureKey: { type: string }
+        action: { type: string }
+        userEmail: { type: ["string", "null"] }
+        createdAt: { type: string }
+    Account:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        industry: { type: ["string", "null"] }
+        website: { type: ["string", "null"] }
+        city: { type: ["string", "null"] }
+        state: { type: ["string", "null"] }
+        healthScore: { type: ["string", "null"] }
+        riskLevel: { type: ["string", "null"] }
+        createdAt: { type: ["string", "null"] }
+    Opportunity:
+      type: object
+      required: [id, name, stage]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        name: { type: string }
+        stage: { type: string }
+        probability: { type: ["number", "null"] }
+        value: { type: ["string", "null"] }
+        expectedCloseDate: { type: ["string", "null"] }
+        forecastCategory: { type: ["string", "null"] }
+        createdAt: { type: ["string", "null"] }
+    WorkflowStub:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string }
+        createdAt: { type: ["string", "null"] }
+    FeatureGateError:
+      type: object
+      required: [error, featureKey]
+      properties:
+        error: { type: string }
+        featureKey: { type: string }

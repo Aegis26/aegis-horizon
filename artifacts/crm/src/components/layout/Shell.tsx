@@ -59,7 +59,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <aside className="hidden md:flex w-64 flex-col border-r bg-sidebar">
         <div className="p-4 h-16 flex items-center border-b border-border/50">
           <div className="flex items-center gap-2 font-bold text-lg text-primary font-display">
-            <img src={`${basePath}/logo.svg`} alt="Aegis Horizon" className="h-6 w-6" />
+            <img src={`${basePath}/logo-icon.png`} alt="Aegis Horizon" className="h-8 w-8 object-contain" />
             <span>Aegis Horizon</span>
           </div>
         </div>

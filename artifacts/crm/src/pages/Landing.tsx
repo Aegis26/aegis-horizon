@@ -8,7 +8,7 @@ export default function Landing() {
     <div className="min-h-screen bg-background flex flex-col font-sans text-foreground">
       <header className="h-16 border-b border-border/50 flex items-center px-6 md:px-12 justify-between sticky top-0 bg-background/80 backdrop-blur z-50">
         <div className="flex items-center gap-2 text-primary font-bold text-xl tracking-tight font-display">
-          <img src={`${basePath}/logo.svg`} alt="" className="h-8 w-8" />
+          <img src={`${basePath}/logo-icon.png`} alt="" className="h-9 w-9 object-contain" />
           <span className="uppercase">
             Aegis <span className="text-foreground">Horizon</span>
           </span>

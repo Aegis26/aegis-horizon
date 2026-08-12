@@ -1,0 +1,41 @@
+Phase 2 — Customer Intelligence & Relationship Management (Weeks 4–7)
+Goal: Users can create and manage the complete customer record. Build the foundation that all sales/service features depend on.
+Deliverables: Account CRUD, Contact CRUD, Activity logging (notes, calls, emails, file attachments), Unified timeline, Relationship mapping UI, Advanced search + segmentation.
+Acceptance Criteria:
+Admin creates 50 accounts and 200 contacts without friction (bulk import works).
+Search finds accounts by name, industry, location, or custom field.
+Contact card shows org chart (who reports to whom).
+Timeline shows all interactions in chronological order (notes, calls, emails, file uploads).
+Custom segments save and auto-update ("all accounts in tech with 10+ employees").
+Files (quotes, contracts, notes) upload to R2 and attach to accounts/opportunities.
+Core Routes
+Accounts
+POST /api/accounts — Create
+GET /api/accounts — List with search, filter, segment
+GET /api/accounts/:id — Detail + related contacts, opportunities, timeline
+PATCH /api/accounts/:id — Update
+DELETE /api/accounts/:id — Soft delete (set is_active = false)
+Contacts
+POST /api/accounts/:accountId/contacts — Create
+GET /api/accounts/:accountId/contacts — List
+GET /api/contacts/:id — Detail
+PATCH /api/contacts/:id — Update
+DELETE /api/contacts/:id — Soft delete
+Activities
+POST /api/accounts/:accountId/activities — Log note, call, email
+GET /api/accounts/:accountId/timeline — Unified timeline (all activities for account)
+POST /api/activities/:id/attach-file — Upload file to Cloudflare R2
+Segmentation
+POST /api/segments — Create saved segment with conditions
+GET /api/segments — List saved segments
+POST /api/segments/:id/preview — Preview accounts matching segment
+UI Components
+AccountList — Searchable, sortable table
+AccountDetail — Tabs: Profile, Contacts, Timeline, Files, Opportunities
+ContactCard — Org chart for all contacts at account
+TimelineThread — Chronological activity, with rich formatting for each type
+SegmentBuilder — Drag-and-drop filter UI for saved segments
+Critical Decisions
+Timeline is append-only. Notes and calls are logged as activities, never edited. This matches Maid's message immutability pattern.
+Files upload to Cloudflare R2. Every account and opportunity can have attachments. Store URLs in JSON array in the record.
+Custom fields via metadata JSONB. Accounts and contacts have metadata column. Admins can define custom fields at org level and they persist in that column.

@@ -77,6 +77,11 @@
   "dependencies": {
     "@clerk/react": "^6.13.1",
     "@clerk/themes": "^2.4.57",
-    "zustand": "^5.0.14"
+    "@uppy/aws-s3": "^5.1.0",
+    "@uppy/core": "^5.2.0",
+    "@uppy/dashboard": "^5.1.1",
+    "@uppy/react": "^5.2.0",
+    "zustand": "^5.0.14",
+    "@workspace/object-storage-web": "workspace:*"
   }
 }

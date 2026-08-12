@@ -265,3 +265,363 @@ export interface FeatureGateError {
   featureKey: string;
 }
 
+export interface FileAttachment {
+  objectPath: string;
+  name: string;
+  /** @nullable */
+  size?: number | null;
+  /** @nullable */
+  contentType?: string | null;
+  /** @nullable */
+  uploadedAt?: string | null;
+}
+
+export type AccountDetailMetadata = { [key: string]: unknown };
+
+export interface AccountDetail {
+  id: string;
+  name: string;
+  /** @nullable */
+  industry?: string | null;
+  /** @nullable */
+  website?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  country?: string | null;
+  /** @nullable */
+  zip?: string | null;
+  /** @nullable */
+  annualRevenue?: string | null;
+  /** @nullable */
+  employeeCount?: number | null;
+  /** @nullable */
+  healthScore?: string | null;
+  /** @nullable */
+  riskLevel?: string | null;
+  /** @nullable */
+  ltv?: string | null;
+  /** @nullable */
+  nextRenewalDate?: string | null;
+  isActive: boolean;
+  metadata?: AccountDetailMetadata;
+  files?: FileAttachment[];
+  /** @nullable */
+  createdAt?: string | null;
+  /** @nullable */
+  updatedAt?: string | null;
+}
+
+export type ContactMetadata = { [key: string]: unknown };
+
+export interface Contact {
+  id: string;
+  accountId: string;
+  firstName: string;
+  lastName: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  department?: string | null;
+  /** @nullable */
+  seniority?: string | null;
+  /** @nullable */
+  reportsToContactId?: string | null;
+  isActive: boolean;
+  metadata?: ContactMetadata;
+  /** @nullable */
+  createdAt?: string | null;
+}
+
+export type AccountWithRelations = AccountDetail & {
+  contacts: Contact[];
+  opportunities: Opportunity[];
+};
+
+export type AccountCreateMetadata = { [key: string]: unknown };
+
+export interface AccountCreate {
+  /** @minLength 1 */
+  name: string;
+  /** @nullable */
+  industry?: string | null;
+  /** @nullable */
+  website?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  country?: string | null;
+  /** @nullable */
+  zip?: string | null;
+  /** @nullable */
+  annualRevenue?: string | null;
+  /** @nullable */
+  employeeCount?: number | null;
+  /** @nullable */
+  healthScore?: string | null;
+  /** @nullable */
+  riskLevel?: string | null;
+  /** @nullable */
+  nextRenewalDate?: string | null;
+  metadata?: AccountCreateMetadata;
+}
+
+export type AccountUpdateMetadata = { [key: string]: unknown };
+
+export interface AccountUpdate {
+  /** @minLength 1 */
+  name?: string;
+  /** @nullable */
+  industry?: string | null;
+  /** @nullable */
+  website?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  country?: string | null;
+  /** @nullable */
+  zip?: string | null;
+  /** @nullable */
+  annualRevenue?: string | null;
+  /** @nullable */
+  employeeCount?: number | null;
+  /** @nullable */
+  healthScore?: string | null;
+  /** @nullable */
+  riskLevel?: string | null;
+  /** @nullable */
+  nextRenewalDate?: string | null;
+  metadata?: AccountUpdateMetadata;
+}
+
+export type ContactCreateMetadata = { [key: string]: unknown };
+
+export interface ContactCreate {
+  /** @minLength 1 */
+  firstName: string;
+  /** @minLength 1 */
+  lastName: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  department?: string | null;
+  /** @nullable */
+  seniority?: string | null;
+  /** @nullable */
+  reportsToContactId?: string | null;
+  metadata?: ContactCreateMetadata;
+}
+
+export type ContactUpdateMetadata = { [key: string]: unknown };
+
+export interface ContactUpdate {
+  /** @minLength 1 */
+  firstName?: string;
+  /** @minLength 1 */
+  lastName?: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  department?: string | null;
+  /** @nullable */
+  seniority?: string | null;
+  /** @nullable */
+  reportsToContactId?: string | null;
+  metadata?: ContactUpdateMetadata;
+}
+
+export type BulkImportRequestAccountsItem = AccountCreate & {
+  contacts?: ContactCreate[];
+};
+
+export interface BulkImportRequest {
+  /**
+     * @minItems 1
+     * @maxItems 500
+     */
+  accounts: BulkImportRequestAccountsItem[];
+}
+
+export interface BulkImportResult {
+  accountsCreated: number;
+  contactsCreated: number;
+  errors: string[];
+}
+
+export interface Activity {
+  id: string;
+  accountId: string;
+  /** @nullable */
+  contactId?: string | null;
+  /** @nullable */
+  opportunityId?: string | null;
+  type: string;
+  /** @nullable */
+  subject?: string | null;
+  /** @nullable */
+  body?: string | null;
+  /** @nullable */
+  direction?: string | null;
+  attachments?: FileAttachment[];
+  /** @nullable */
+  createdByUserId?: string | null;
+  /** @nullable */
+  createdByName?: string | null;
+  createdAt: string;
+}
+
+export type ActivityCreateType = typeof ActivityCreateType[keyof typeof ActivityCreateType];
+
+
+export const ActivityCreateType = {
+  note: 'note',
+  call: 'call',
+  email: 'email',
+  file: 'file',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ActivityCreateDirection = typeof ActivityCreateDirection[keyof typeof ActivityCreateDirection] | null;
+
+
+export const ActivityCreateDirection = {
+  inbound: 'inbound',
+  outbound: 'outbound',
+} as const;
+
+export interface ActivityCreate {
+  type: ActivityCreateType;
+  /** @nullable */
+  subject?: string | null;
+  /** @nullable */
+  body?: string | null;
+  /** @nullable */
+  direction?: ActivityCreateDirection;
+  /** @nullable */
+  contactId?: string | null;
+  /** @nullable */
+  opportunityId?: string | null;
+  attachments?: FileAttachment[];
+}
+
+export interface AttachFileRequest {
+  /** @minLength 1 */
+  objectPath: string;
+  /** @minLength 1 */
+  name: string;
+  /** @nullable */
+  size?: number | null;
+  /** @nullable */
+  contentType?: string | null;
+}
+
+export type SegmentConditionOperator = typeof SegmentConditionOperator[keyof typeof SegmentConditionOperator];
+
+
+export const SegmentConditionOperator = {
+  equals: 'equals',
+  not_equals: 'not_equals',
+  contains: 'contains',
+  gt: 'gt',
+  gte: 'gte',
+  lt: 'lt',
+  lte: 'lte',
+  is_empty: 'is_empty',
+  is_not_empty: 'is_not_empty',
+} as const;
+
+export interface SegmentCondition {
+  field: string;
+  operator: SegmentConditionOperator;
+  /** @nullable */
+  value: string | null;
+}
+
+export interface SegmentConditions {
+  conditions: SegmentCondition[];
+}
+
+export interface Segment {
+  id: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  conditions: SegmentCondition[];
+  /** @nullable */
+  matchCount?: number | null;
+  /** @nullable */
+  createdAt?: string | null;
+}
+
+export interface SegmentCreate {
+  /** @minLength 1 */
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  conditions: SegmentCondition[];
+}
+
+export interface UploadUrlRequest {
+  /** @minLength 1 */
+  name: string;
+  /** @minimum 1 */
+  size: number;
+  /** @minLength 1 */
+  contentType: string;
+}
+
+export interface UploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
+  metadata?: UploadUrlRequest;
+}
+
+export interface ErrorEnvelope {
+  error: string;
+}
+
+export type ListAccountsParams = {
+/**
+ * Search by name, industry, location, or custom field values
+ */
+q?: string;
+industry?: string;
+/**
+ * Filter by a saved segment's conditions
+ */
+segmentId?: string;
+includeInactive?: boolean;
+};
+

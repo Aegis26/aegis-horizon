@@ -1,1 +1,2 @@
 - [Orval zod version pin](orval-zod-version.md) — orval emits zod-4 syntax (`zod.int()`) unless `override.zod.version: 3` is set; workspace zod is 3.x.
+- [Private object storage ACL binding](storage-acl-binding.md) — storage template ships private downloads unauthenticated; objects must be org-bound at attach time and checked on download.

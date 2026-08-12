@@ -1,9 +1,10 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   Building2, 
   LayoutDashboard, 
   Users, 
+  Filter,
   Target, 
   Workflow, 
   CreditCard,
@@ -19,6 +20,7 @@ import { Button } from "@/components/ui/button";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/accounts", label: "Accounts", icon: Users, feature: "crm" },
+  { href: "/segments", label: "Segments", icon: Filter, feature: "crm" },
   { href: "/opportunities", label: "Opportunities", icon: Target, feature: "sales" },
   { href: "/automation", label: "Automation", icon: Workflow, feature: "automation" },
   { href: "/billing", label: "Billing & Features", icon: CreditCard },
@@ -32,11 +34,14 @@ export function Shell({ children }: { children: ReactNode }) {
   const { selectedOrgId, setSelectedOrgId } = useOrgStore();
 
   const orgs = me?.orgs || [];
-  
-  // Set default org if none selected
-  if (orgs.length > 0 && !selectedOrgId) {
-    setSelectedOrgId(orgs[0].org.id);
-  }
+
+  // Set default org if none selected (in an effect — updating the store during
+  // render triggers React's "cannot update a component while rendering" warning)
+  useEffect(() => {
+    if (orgs.length > 0 && !selectedOrgId) {
+      setSelectedOrgId(orgs[0].org.id);
+    }
+  }, [orgs, selectedOrgId, setSelectedOrgId]);
 
   const currentOrg = orgs.find(o => o.org.id === selectedOrgId)?.org || orgs[0]?.org;
 

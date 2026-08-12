@@ -12,6 +12,8 @@ import { AuthLayout } from "@/components/auth/AuthLayout";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import Accounts from "@/pages/Accounts";
+import AccountDetail from "@/pages/AccountDetail";
+import Segments from "@/pages/Segments";
 import Opportunities from "@/pages/Opportunities";
 import Automation from "@/pages/Automation";
 import Billing from "@/pages/Billing";
@@ -189,6 +191,8 @@ function ClerkProviderWithRoutes() {
           
           <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
           <Route path="/accounts" component={() => <ProtectedRoute component={Accounts} />} />
+          <Route path="/accounts/:accountId" component={() => <ProtectedRoute component={AccountDetail} />} />
+          <Route path="/segments" component={() => <ProtectedRoute component={Segments} />} />
           <Route path="/opportunities" component={() => <ProtectedRoute component={Opportunities} />} />
           <Route path="/automation" component={() => <ProtectedRoute component={Automation} />} />
           <Route path="/billing" component={() => <ProtectedRoute component={Billing} />} />

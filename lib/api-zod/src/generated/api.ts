@@ -295,10 +295,17 @@ export const ListUsageLogsResponse = zod.array(ListUsageLogsResponseItem)
 
 
 /**
- * @summary List accounts (requires 'crm' feature; 403 otherwise)
+ * @summary List accounts with search/filter (requires 'crm' feature; 403 otherwise)
  */
 export const ListAccountsParams = zod.object({
   "orgId": zod.coerce.string()
+})
+
+export const ListAccountsQueryParams = zod.object({
+  "q": zod.coerce.string().optional().describe('Search by name, industry, location, or custom field values'),
+  "industry": zod.coerce.string().optional(),
+  "segmentId": zod.coerce.string().optional().describe('Filter by a saved segment\'s conditions'),
+  "includeInactive": zod.coerce.boolean().optional()
 })
 
 export const ListAccountsResponseItem = zod.object({
@@ -313,6 +320,720 @@ export const ListAccountsResponseItem = zod.object({
   "createdAt": zod.string().nullish()
 })
 export const ListAccountsResponse = zod.array(ListAccountsResponseItem)
+
+
+/**
+ * @summary Create an account
+ */
+export const CreateAccountParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+
+
+
+export const CreateAccountBody = zod.object({
+  "name": zod.string().min(1),
+  "industry": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "zip": zod.string().nullish(),
+  "annualRevenue": zod.string().nullish(),
+  "employeeCount": zod.number().int().nullish(),
+  "healthScore": zod.string().nullish(),
+  "riskLevel": zod.string().nullish(),
+  "nextRenewalDate": zod.string().nullish(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const CreateAccountResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "industry": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "zip": zod.string().nullish(),
+  "annualRevenue": zod.string().nullish(),
+  "employeeCount": zod.number().int().nullish(),
+  "healthScore": zod.string().nullish(),
+  "riskLevel": zod.string().nullish(),
+  "ltv": zod.string().nullish(),
+  "nextRenewalDate": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "files": zod.array(zod.object({
+  "objectPath": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().int().nullish(),
+  "contentType": zod.string().nullish(),
+  "uploadedAt": zod.string().nullish()
+})).optional(),
+  "createdAt": zod.string().nullish(),
+  "updatedAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Bulk import accounts (and optional nested contacts)
+ */
+export const BulkImportAccountsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+
+
+
+export const bulkImportAccountsBodyAccountsMax = 500;
+
+
+
+export const BulkImportAccountsBody = zod.object({
+  "accounts": zod.array(zod.object({
+  "name": zod.string().min(1),
+  "industry": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "zip": zod.string().nullish(),
+  "annualRevenue": zod.string().nullish(),
+  "employeeCount": zod.number().int().nullish(),
+  "healthScore": zod.string().nullish(),
+  "riskLevel": zod.string().nullish(),
+  "nextRenewalDate": zod.string().nullish(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+}).and(zod.object({
+  "contacts": zod.array(zod.object({
+  "firstName": zod.string().min(1),
+  "lastName": zod.string().min(1),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "department": zod.string().nullish(),
+  "seniority": zod.string().nullish(),
+  "reportsToContactId": zod.string().nullish(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+})).optional()
+}))).min(1).max(bulkImportAccountsBodyAccountsMax)
+})
+
+export const BulkImportAccountsResponse = zod.object({
+  "accountsCreated": zod.number().int(),
+  "contactsCreated": zod.number().int(),
+  "errors": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Account detail with related contacts and opportunities
+ */
+export const GetAccountParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const GetAccountResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "industry": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "zip": zod.string().nullish(),
+  "annualRevenue": zod.string().nullish(),
+  "employeeCount": zod.number().int().nullish(),
+  "healthScore": zod.string().nullish(),
+  "riskLevel": zod.string().nullish(),
+  "ltv": zod.string().nullish(),
+  "nextRenewalDate": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "files": zod.array(zod.object({
+  "objectPath": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().int().nullish(),
+  "contentType": zod.string().nullish(),
+  "uploadedAt": zod.string().nullish()
+})).optional(),
+  "createdAt": zod.string().nullish(),
+  "updatedAt": zod.string().nullish()
+}).and(zod.object({
+  "contacts": zod.array(zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "department": zod.string().nullish(),
+  "seniority": zod.string().nullish(),
+  "reportsToContactId": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "createdAt": zod.string().nullish()
+})),
+  "opportunities": zod.array(zod.object({
+  "id": zod.string(),
+  "accountId": zod.string().optional(),
+  "name": zod.string(),
+  "stage": zod.string(),
+  "probability": zod.number().nullish(),
+  "value": zod.string().nullish(),
+  "expectedCloseDate": zod.string().nullish(),
+  "forecastCategory": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+}))
+}))
+
+
+/**
+ * @summary Update an account
+ */
+export const UpdateAccountParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+
+
+
+export const UpdateAccountBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "industry": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "zip": zod.string().nullish(),
+  "annualRevenue": zod.string().nullish(),
+  "employeeCount": zod.number().int().nullish(),
+  "healthScore": zod.string().nullish(),
+  "riskLevel": zod.string().nullish(),
+  "nextRenewalDate": zod.string().nullish(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const UpdateAccountResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "industry": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "zip": zod.string().nullish(),
+  "annualRevenue": zod.string().nullish(),
+  "employeeCount": zod.number().int().nullish(),
+  "healthScore": zod.string().nullish(),
+  "riskLevel": zod.string().nullish(),
+  "ltv": zod.string().nullish(),
+  "nextRenewalDate": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "files": zod.array(zod.object({
+  "objectPath": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().int().nullish(),
+  "contentType": zod.string().nullish(),
+  "uploadedAt": zod.string().nullish()
+})).optional(),
+  "createdAt": zod.string().nullish(),
+  "updatedAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Soft delete an account (sets is_active false)
+ */
+export const DeleteAccountParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const DeleteAccountResponse = zod.void()
+
+
+/**
+ * @summary List contacts for an account
+ */
+export const ListContactsParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const ListContactsResponseItem = zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "department": zod.string().nullish(),
+  "seniority": zod.string().nullish(),
+  "reportsToContactId": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "createdAt": zod.string().nullish()
+})
+export const ListContactsResponse = zod.array(ListContactsResponseItem)
+
+
+/**
+ * @summary Create a contact under an account
+ */
+export const CreateContactParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+
+
+
+
+export const CreateContactBody = zod.object({
+  "firstName": zod.string().min(1),
+  "lastName": zod.string().min(1),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "department": zod.string().nullish(),
+  "seniority": zod.string().nullish(),
+  "reportsToContactId": zod.string().nullish(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const CreateContactResponse = zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "department": zod.string().nullish(),
+  "seniority": zod.string().nullish(),
+  "reportsToContactId": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Contact detail
+ */
+export const GetContactParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "contactId": zod.coerce.string()
+})
+
+export const GetContactResponse = zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "department": zod.string().nullish(),
+  "seniority": zod.string().nullish(),
+  "reportsToContactId": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update a contact
+ */
+export const UpdateContactParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "contactId": zod.coerce.string()
+})
+
+
+
+
+
+export const UpdateContactBody = zod.object({
+  "firstName": zod.string().min(1).optional(),
+  "lastName": zod.string().min(1).optional(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "department": zod.string().nullish(),
+  "seniority": zod.string().nullish(),
+  "reportsToContactId": zod.string().nullish(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const UpdateContactResponse = zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "department": zod.string().nullish(),
+  "seniority": zod.string().nullish(),
+  "reportsToContactId": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Soft delete a contact
+ */
+export const DeleteContactParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "contactId": zod.coerce.string()
+})
+
+export const DeleteContactResponse = zod.void()
+
+
+/**
+ * @summary Log a note, call, or email against an account (append-only)
+ */
+export const CreateActivityParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const CreateActivityBody = zod.object({
+  "type": zod.enum(['note', 'call', 'email', 'file']),
+  "subject": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "direction": zod.union([zod.literal('inbound'),zod.literal('outbound'),zod.literal(null)]).nullish(),
+  "contactId": zod.string().nullish(),
+  "opportunityId": zod.string().nullish(),
+  "attachments": zod.array(zod.object({
+  "objectPath": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().int().nullish(),
+  "contentType": zod.string().nullish(),
+  "uploadedAt": zod.string().nullish()
+})).optional()
+})
+
+export const CreateActivityResponse = zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "contactId": zod.string().nullish(),
+  "opportunityId": zod.string().nullish(),
+  "type": zod.string(),
+  "subject": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "direction": zod.string().nullish(),
+  "attachments": zod.array(zod.object({
+  "objectPath": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().int().nullish(),
+  "contentType": zod.string().nullish(),
+  "uploadedAt": zod.string().nullish()
+})).optional(),
+  "createdByUserId": zod.string().nullish(),
+  "createdByName": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Unified chronological timeline of all activities for an account
+ */
+export const GetAccountTimelineParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const GetAccountTimelineResponseItem = zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "contactId": zod.string().nullish(),
+  "opportunityId": zod.string().nullish(),
+  "type": zod.string(),
+  "subject": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "direction": zod.string().nullish(),
+  "attachments": zod.array(zod.object({
+  "objectPath": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().int().nullish(),
+  "contentType": zod.string().nullish(),
+  "uploadedAt": zod.string().nullish()
+})).optional(),
+  "createdByUserId": zod.string().nullish(),
+  "createdByName": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const GetAccountTimelineResponse = zod.array(GetAccountTimelineResponseItem)
+
+
+/**
+ * @summary Attach an uploaded file to an activity (and its account's files list)
+ */
+export const AttachFileToActivityParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "activityId": zod.coerce.string()
+})
+
+
+
+
+
+export const AttachFileToActivityBody = zod.object({
+  "objectPath": zod.string().min(1),
+  "name": zod.string().min(1),
+  "size": zod.number().int().nullish(),
+  "contentType": zod.string().nullish()
+})
+
+export const AttachFileToActivityResponse = zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "contactId": zod.string().nullish(),
+  "opportunityId": zod.string().nullish(),
+  "type": zod.string(),
+  "subject": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "direction": zod.string().nullish(),
+  "attachments": zod.array(zod.object({
+  "objectPath": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().int().nullish(),
+  "contentType": zod.string().nullish(),
+  "uploadedAt": zod.string().nullish()
+})).optional(),
+  "createdByUserId": zod.string().nullish(),
+  "createdByName": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary List saved segments
+ */
+export const ListSegmentsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListSegmentsResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.string().nullable()
+})),
+  "matchCount": zod.number().int().nullish(),
+  "createdAt": zod.string().nullish()
+})
+export const ListSegmentsResponse = zod.array(ListSegmentsResponseItem)
+
+
+/**
+ * @summary Create a saved segment with conditions
+ */
+export const CreateSegmentParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+
+
+
+export const CreateSegmentBody = zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().nullish(),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.string().nullable()
+}))
+})
+
+export const CreateSegmentResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.string().nullable()
+})),
+  "matchCount": zod.number().int().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update a saved segment
+ */
+export const UpdateSegmentParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "segmentId": zod.coerce.string()
+})
+
+
+
+
+export const UpdateSegmentBody = zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().nullish(),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.string().nullable()
+}))
+})
+
+export const UpdateSegmentResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.string().nullable()
+})),
+  "matchCount": zod.number().int().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Delete a saved segment
+ */
+export const DeleteSegmentParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "segmentId": zod.coerce.string()
+})
+
+export const DeleteSegmentResponse = zod.void()
+
+
+/**
+ * @summary Preview accounts matching a saved segment
+ */
+export const PreviewSegmentParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "segmentId": zod.coerce.string()
+})
+
+export const PreviewSegmentResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "industry": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "healthScore": zod.string().nullish(),
+  "riskLevel": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+export const PreviewSegmentResponse = zod.array(PreviewSegmentResponseItem)
+
+
+/**
+ * @summary Preview accounts matching ad-hoc conditions (for the segment builder)
+ */
+export const PreviewSegmentConditionsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const PreviewSegmentConditionsBody = zod.object({
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.string().nullable()
+}))
+})
+
+export const PreviewSegmentConditionsResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "industry": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "healthScore": zod.string().nullish(),
+  "riskLevel": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+export const PreviewSegmentConditionsResponse = zod.array(PreviewSegmentConditionsResponseItem)
+
+
+/**
+ * @summary Request a presigned URL for file upload
+ */
+
+
+
+
+
+export const RequestUploadUrlBody = zod.object({
+  "name": zod.string().min(1),
+  "size": zod.number().int().min(1),
+  "contentType": zod.string().min(1)
+})
+
+
+
+
+
+
+export const RequestUploadUrlResponse = zod.object({
+  "uploadURL": zod.string().url(),
+  "objectPath": zod.string(),
+  "metadata": zod.object({
+  "name": zod.string().min(1),
+  "size": zod.number().int().min(1),
+  "contentType": zod.string().min(1)
+}).optional()
+})
+
+
+/**
+ * @summary Serve a public asset from PUBLIC_OBJECT_SEARCH_PATHS
+ */
+export const GetPublicObjectParams = zod.object({
+  "filePath": zod.coerce.string()
+})
+
+export const GetPublicObjectResponse = zod.unknown()
+
+
+/**
+ * @summary Serve an object entity from PRIVATE_OBJECT_DIR
+ */
+export const GetStorageObjectParams = zod.object({
+  "objectPath": zod.coerce.string()
+})
+
+export const GetStorageObjectResponse = zod.unknown()
 
 
 /**

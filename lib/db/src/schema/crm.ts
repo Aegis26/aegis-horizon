@@ -1,4 +1,5 @@
 import {
+  boolean,
   date,
   integer,
   jsonb,
@@ -42,6 +43,7 @@ export const accounts = pgTable("accounts", {
   nextRenewalDate: date("next_renewal_date", { mode: "string" }),
   files: jsonb("files").default([]),
   metadata: jsonb("metadata").default({}),
+  isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
@@ -68,6 +70,8 @@ export const contacts = pgTable("contacts", {
   engagementLevel: integer("engagement_level"),
   relationshipStrength: integer("relationship_strength"),
   reportsToContactId: uuid("reports_to_contact_id"),
+  metadata: jsonb("metadata").default({}),
+  isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
@@ -170,6 +174,26 @@ export const tasks = pgTable("tasks", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const segments = pgTable("segments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  // Array of condition objects: { field, operator, value }
+  conditions: jsonb("conditions").default([]).notNull(),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export type Segment = typeof segments.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Opportunity = typeof opportunities.$inferSelect;

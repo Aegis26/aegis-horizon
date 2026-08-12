@@ -16,6 +16,7 @@ tags:
   - name: billing
   - name: crm
   - name: dashboard
+  - name: storage
 paths:
   /healthz:
     get:
@@ -247,9 +248,27 @@ paths:
     get:
       operationId: listAccounts
       tags: [crm]
-      summary: List accounts (requires 'crm' feature; 403 otherwise)
+      summary: List accounts with search/filter (requires 'crm' feature; 403 otherwise)
       parameters:
         - $ref: "#/components/parameters/OrgId"
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+          description: Search by name, industry, location, or custom field values
+        - name: industry
+          in: query
+          required: false
+          schema: { type: string }
+        - name: segmentId
+          in: query
+          required: false
+          schema: { type: string }
+          description: Filter by a saved segment's conditions
+        - name: includeInactive
+          in: query
+          required: false
+          schema: { type: boolean }
       responses:
         "200":
           description: Accounts
@@ -265,6 +284,421 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FeatureGateError"
+    post:
+      operationId: createAccount
+      tags: [crm]
+      summary: Create an account
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountCreate"
+      responses:
+        "201":
+          description: Created account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountDetail"
+  /orgs/{orgId}/accounts/bulk-import:
+    post:
+      operationId: bulkImportAccounts
+      tags: [crm]
+      summary: Bulk import accounts (and optional nested contacts)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkImportRequest"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkImportResult"
+  /orgs/{orgId}/accounts/{accountId}:
+    get:
+      operationId: getAccount
+      tags: [crm]
+      summary: Account detail with related contacts and opportunities
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: Account detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountWithRelations"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateAccount
+      tags: [crm]
+      summary: Update an account
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/AccountId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountUpdate"
+      responses:
+        "200":
+          description: Updated account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountDetail"
+    delete:
+      operationId: deleteAccount
+      tags: [crm]
+      summary: Soft delete an account (sets is_active false)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "204":
+          description: Deleted
+  /orgs/{orgId}/accounts/{accountId}/contacts:
+    get:
+      operationId: listContacts
+      tags: [crm]
+      summary: List contacts for an account
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: Contacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Contact"
+    post:
+      operationId: createContact
+      tags: [crm]
+      summary: Create a contact under an account
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/AccountId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactCreate"
+      responses:
+        "201":
+          description: Created contact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+  /orgs/{orgId}/contacts/{contactId}:
+    get:
+      operationId: getContact
+      tags: [crm]
+      summary: Contact detail
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/ContactId"
+      responses:
+        "200":
+          description: Contact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateContact
+      tags: [crm]
+      summary: Update a contact
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/ContactId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactUpdate"
+      responses:
+        "200":
+          description: Updated contact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+    delete:
+      operationId: deleteContact
+      tags: [crm]
+      summary: Soft delete a contact
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/ContactId"
+      responses:
+        "204":
+          description: Deleted
+  /orgs/{orgId}/accounts/{accountId}/activities:
+    post:
+      operationId: createActivity
+      tags: [crm]
+      summary: Log a note, call, or email against an account (append-only)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/AccountId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivityCreate"
+      responses:
+        "201":
+          description: Created activity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Activity"
+  /orgs/{orgId}/accounts/{accountId}/timeline:
+    get:
+      operationId: getAccountTimeline
+      tags: [crm]
+      summary: Unified chronological timeline of all activities for an account
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: Timeline entries, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Activity"
+  /orgs/{orgId}/activities/{activityId}/attach-file:
+    post:
+      operationId: attachFileToActivity
+      tags: [crm]
+      summary: Attach an uploaded file to an activity (and its account's files list)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - name: activityId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttachFileRequest"
+      responses:
+        "200":
+          description: Updated activity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Activity"
+  /orgs/{orgId}/segments:
+    get:
+      operationId: listSegments
+      tags: [crm]
+      summary: List saved segments
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Segments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Segment"
+    post:
+      operationId: createSegment
+      tags: [crm]
+      summary: Create a saved segment with conditions
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SegmentCreate"
+      responses:
+        "201":
+          description: Created segment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Segment"
+  /orgs/{orgId}/segments/{segmentId}:
+    patch:
+      operationId: updateSegment
+      tags: [crm]
+      summary: Update a saved segment
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/SegmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SegmentCreate"
+      responses:
+        "200":
+          description: Updated segment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Segment"
+    delete:
+      operationId: deleteSegment
+      tags: [crm]
+      summary: Delete a saved segment
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/SegmentId"
+      responses:
+        "204":
+          description: Deleted
+  /orgs/{orgId}/segments/{segmentId}/preview:
+    post:
+      operationId: previewSegment
+      tags: [crm]
+      summary: Preview accounts matching a saved segment
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/SegmentId"
+      responses:
+        "200":
+          description: Matching accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+  /orgs/{orgId}/segments/preview:
+    post:
+      operationId: previewSegmentConditions
+      tags: [crm]
+      summary: Preview accounts matching ad-hoc conditions (for the segment builder)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SegmentConditions"
+      responses:
+        "200":
+          description: Matching accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+  /storage/uploads/request-url:
+    post:
+      tags: [storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for file upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadUrlRequest"
+      responses:
+        "200":
+          description: Presigned upload URL generated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadUrlResponse"
+        "400":
+          description: Missing or invalid required fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "500":
+          description: Failed to generate upload URL.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /storage/public-objects/{filePath}:
+    get:
+      tags: [storage]
+      operationId: getPublicObject
+      summary: Serve a public asset from PUBLIC_OBJECT_SEARCH_PATHS
+      parameters:
+        - name: filePath
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Object content streamed with correct Content-Type.
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: File not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /storage/objects/{objectPath}:
+    get:
+      tags: [storage]
+      operationId: getStorageObject
+      summary: Serve an object entity from PRIVATE_OBJECT_DIR
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Object content streamed with correct Content-Type.
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Object not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /orgs/{orgId}/opportunities:
     get:
       operationId: listOpportunities
@@ -319,6 +753,24 @@ components:
         type: string
     MemberId:
       name: memberId
+      in: path
+      required: true
+      schema:
+        type: string
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema:
+        type: string
+    ContactId:
+      name: contactId
+      in: path
+      required: true
+      schema:
+        type: string
+    SegmentId:
+      name: segmentId
       in: path
       required: true
       schema:
@@ -538,3 +990,264 @@ components:
       properties:
         error: { type: string }
         featureKey: { type: string }
+    FileAttachment:
+      type: object
+      required: [objectPath, name]
+      properties:
+        objectPath: { type: string }
+        name: { type: string }
+        size: { type: ["integer", "null"] }
+        contentType: { type: ["string", "null"] }
+        uploadedAt: { type: ["string", "null"] }
+    AccountDetail:
+      type: object
+      required: [id, name, isActive]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        industry: { type: ["string", "null"] }
+        website: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        city: { type: ["string", "null"] }
+        state: { type: ["string", "null"] }
+        country: { type: ["string", "null"] }
+        zip: { type: ["string", "null"] }
+        annualRevenue: { type: ["string", "null"] }
+        employeeCount: { type: ["integer", "null"] }
+        healthScore: { type: ["string", "null"] }
+        riskLevel: { type: ["string", "null"] }
+        ltv: { type: ["string", "null"] }
+        nextRenewalDate: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        metadata: { type: object, additionalProperties: true }
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileAttachment"
+        createdAt: { type: ["string", "null"] }
+        updatedAt: { type: ["string", "null"] }
+    AccountWithRelations:
+      allOf:
+        - $ref: "#/components/schemas/AccountDetail"
+        - type: object
+          required: [contacts, opportunities]
+          properties:
+            contacts:
+              type: array
+              items:
+                $ref: "#/components/schemas/Contact"
+            opportunities:
+              type: array
+              items:
+                $ref: "#/components/schemas/Opportunity"
+    AccountCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        industry: { type: ["string", "null"] }
+        website: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        city: { type: ["string", "null"] }
+        state: { type: ["string", "null"] }
+        country: { type: ["string", "null"] }
+        zip: { type: ["string", "null"] }
+        annualRevenue: { type: ["string", "null"] }
+        employeeCount: { type: ["integer", "null"] }
+        healthScore: { type: ["string", "null"] }
+        riskLevel: { type: ["string", "null"] }
+        nextRenewalDate: { type: ["string", "null"] }
+        metadata: { type: object, additionalProperties: true }
+    AccountUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        industry: { type: ["string", "null"] }
+        website: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        city: { type: ["string", "null"] }
+        state: { type: ["string", "null"] }
+        country: { type: ["string", "null"] }
+        zip: { type: ["string", "null"] }
+        annualRevenue: { type: ["string", "null"] }
+        employeeCount: { type: ["integer", "null"] }
+        healthScore: { type: ["string", "null"] }
+        riskLevel: { type: ["string", "null"] }
+        nextRenewalDate: { type: ["string", "null"] }
+        metadata: { type: object, additionalProperties: true }
+    Contact:
+      type: object
+      required: [id, accountId, firstName, lastName, isActive]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        department: { type: ["string", "null"] }
+        seniority: { type: ["string", "null"] }
+        reportsToContactId: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        metadata: { type: object, additionalProperties: true }
+        createdAt: { type: ["string", "null"] }
+    ContactCreate:
+      type: object
+      required: [firstName, lastName]
+      properties:
+        firstName: { type: string, minLength: 1 }
+        lastName: { type: string, minLength: 1 }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        department: { type: ["string", "null"] }
+        seniority: { type: ["string", "null"] }
+        reportsToContactId: { type: ["string", "null"] }
+        metadata: { type: object, additionalProperties: true }
+    ContactUpdate:
+      type: object
+      properties:
+        firstName: { type: string, minLength: 1 }
+        lastName: { type: string, minLength: 1 }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        department: { type: ["string", "null"] }
+        seniority: { type: ["string", "null"] }
+        reportsToContactId: { type: ["string", "null"] }
+        metadata: { type: object, additionalProperties: true }
+    BulkImportRequest:
+      type: object
+      required: [accounts]
+      properties:
+        accounts:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            allOf:
+              - $ref: "#/components/schemas/AccountCreate"
+              - type: object
+                properties:
+                  contacts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ContactCreate"
+    BulkImportResult:
+      type: object
+      required: [accountsCreated, contactsCreated, errors]
+      properties:
+        accountsCreated: { type: integer }
+        contactsCreated: { type: integer }
+        errors:
+          type: array
+          items: { type: string }
+    Activity:
+      type: object
+      required: [id, accountId, type, createdAt]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        contactId: { type: ["string", "null"] }
+        opportunityId: { type: ["string", "null"] }
+        type: { type: string }
+        subject: { type: ["string", "null"] }
+        body: { type: ["string", "null"] }
+        direction: { type: ["string", "null"] }
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileAttachment"
+        createdByUserId: { type: ["string", "null"] }
+        createdByName: { type: ["string", "null"] }
+        createdAt: { type: string }
+    ActivityCreate:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [note, call, email, file]
+        subject: { type: ["string", "null"] }
+        body: { type: ["string", "null"] }
+        direction:
+          type: ["string", "null"]
+          enum: [inbound, outbound, null]
+        contactId: { type: ["string", "null"] }
+        opportunityId: { type: ["string", "null"] }
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileAttachment"
+    AttachFileRequest:
+      type: object
+      required: [objectPath, name]
+      properties:
+        objectPath: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1 }
+        size: { type: ["integer", "null"] }
+        contentType: { type: ["string", "null"] }
+    SegmentCondition:
+      type: object
+      required: [field, operator, value]
+      properties:
+        field: { type: string }
+        operator:
+          type: string
+          enum: [equals, not_equals, contains, gt, gte, lt, lte, is_empty, is_not_empty]
+        value: { type: ["string", "null"] }
+    SegmentConditions:
+      type: object
+      required: [conditions]
+      properties:
+        conditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SegmentCondition"
+    Segment:
+      type: object
+      required: [id, name, conditions]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: ["string", "null"] }
+        conditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SegmentCondition"
+        matchCount: { type: ["integer", "null"] }
+        createdAt: { type: ["string", "null"] }
+    SegmentCreate:
+      type: object
+      required: [name, conditions]
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: ["string", "null"] }
+        conditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SegmentCondition"
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name: { type: string, minLength: 1 }
+        size: { type: integer, minimum: 1 }
+        contentType: { type: string, minLength: 1 }
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL: { type: string, format: uri }
+        objectPath: { type: string }
+        metadata:
+          $ref: "#/components/schemas/UploadUrlRequest"
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }

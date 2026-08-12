@@ -21,14 +21,28 @@ import type {
 
 import type {
   Account,
+  AccountCreate,
+  AccountDetail,
+  AccountUpdate,
+  AccountWithRelations,
+  Activity,
+  ActivityCreate,
+  AttachFileRequest,
   BillingCatalog,
+  BulkImportRequest,
+  BulkImportResult,
   CheckoutRequest,
   CheckoutSession,
+  Contact,
+  ContactCreate,
+  ContactUpdate,
   DashboardSummary,
+  ErrorEnvelope,
   FeatureEntitlement,
   FeatureGateError,
   FeatureSelection,
   HealthStatus,
+  ListAccountsParams,
   Me,
   Member,
   MemberInvite,
@@ -36,6 +50,11 @@ import type {
   Opportunity,
   Organization,
   OrganizationUpdate,
+  Segment,
+  SegmentConditions,
+  SegmentCreate,
+  UploadUrlRequest,
+  UploadUrlResponse,
   UsageLog,
   WorkflowStub
 } from './api.schemas';
@@ -1118,20 +1137,29 @@ export function useListUsageLogs<TData = Awaited<ReturnType<typeof listUsageLogs
 
 
 
-export const getListAccountsUrl = (orgId: string,) => {
+export const getListAccountsUrl = (orgId: string,
+    params?: ListAccountsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/orgs/${orgId}/accounts`
+  return stringifiedParams.length > 0 ? `/api/orgs/${orgId}/accounts?${stringifiedParams}` : `/api/orgs/${orgId}/accounts`
 }
 
 /**
- * @summary List accounts (requires 'crm' feature; 403 otherwise)
+ * @summary List accounts with search/filter (requires 'crm' feature; 403 otherwise)
  */
-export const listAccounts = async (orgId: string, options?: Parameters<typeof customFetch>[1]): Promise<Account[]> => {
+export const listAccounts = async (orgId: string,
+    params?: ListAccountsParams, options?: Parameters<typeof customFetch>[1]): Promise<Account[]> => {
 
-  return customFetch<Account[]>(getListAccountsUrl(orgId),
+  return customFetch<Account[]>(getListAccountsUrl(orgId,params),
   {
     ...options,
     method: 'GET'
@@ -1144,23 +1172,25 @@ export const listAccounts = async (orgId: string, options?: Parameters<typeof cu
 
 
 
-export const getListAccountsQueryKey = (orgId: string,) => {
+export const getListAccountsQueryKey = (orgId: string,
+    params?: ListAccountsParams,) => {
     return [
-    `/api/orgs/${orgId}/accounts`
+    `/api/orgs/${orgId}/accounts`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListAccountsQueryOptions = <TData = Awaited<ReturnType<typeof listAccounts>>, TError = ErrorType<FeatureGateError>>(orgId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListAccountsQueryOptions = <TData = Awaited<ReturnType<typeof listAccounts>>, TError = ErrorType<FeatureGateError>>(orgId: string,
+    params?: ListAccountsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListAccountsQueryKey(orgId);
+  const queryKey =  queryOptions?.queryKey ?? getListAccountsQueryKey(orgId,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAccounts>>> = ({ signal }) => listAccounts(orgId, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAccounts>>> = ({ signal }) => listAccounts(orgId,params, { signal, ...requestOptions });
 
 
 
@@ -1174,15 +1204,1670 @@ export type ListAccountsQueryError = ErrorType<FeatureGateError>
 
 
 /**
- * @summary List accounts (requires 'crm' feature; 403 otherwise)
+ * @summary List accounts with search/filter (requires 'crm' feature; 403 otherwise)
  */
 
 export function useListAccounts<TData = Awaited<ReturnType<typeof listAccounts>>, TError = ErrorType<FeatureGateError>>(
- orgId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ orgId: string,
+    params?: ListAccountsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListAccountsQueryOptions(orgId,options)
+  const queryOptions = getListAccountsQueryOptions(orgId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAccountUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts`
+}
+
+/**
+ * @summary Create an account
+ */
+export const createAccount = async (orgId: string,
+    accountCreate: AccountCreate, options?: Parameters<typeof customFetch>[1]): Promise<AccountDetail> => {
+
+  return customFetch<AccountDetail>(getCreateAccountUrl(orgId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accountCreate)
+  }
+);}
+
+
+
+
+
+export const getCreateAccountMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAccount>>, TError,{orgId: string;data: BodyType<AccountCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAccount>>, TError,{orgId: string;data: BodyType<AccountCreate>}, TContext> => {
+
+const mutationKey = ['createAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAccount>>, {orgId: string;data: BodyType<AccountCreate>}> = (props) => {
+          const {orgId,data} = props ?? {};
+
+          return  createAccount(orgId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAccountMutationResult = NonNullable<Awaited<ReturnType<typeof createAccount>>>
+    export type CreateAccountMutationBody = BodyType<AccountCreate>
+    export type CreateAccountMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create an account
+ */
+export const useCreateAccount = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAccount>>, TError,{orgId: string;data: BodyType<AccountCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAccount>>,
+        TError,
+        {orgId: string;data: BodyType<AccountCreate>},
+        TContext
+      > => {
+      return useMutation(getCreateAccountMutationOptions(options));
+    }
+
+export const getBulkImportAccountsUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/bulk-import`
+}
+
+/**
+ * @summary Bulk import accounts (and optional nested contacts)
+ */
+export const bulkImportAccounts = async (orgId: string,
+    bulkImportRequest: BulkImportRequest, options?: Parameters<typeof customFetch>[1]): Promise<BulkImportResult> => {
+
+  return customFetch<BulkImportResult>(getBulkImportAccountsUrl(orgId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(bulkImportRequest)
+  }
+);}
+
+
+
+
+
+export const getBulkImportAccountsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkImportAccounts>>, TError,{orgId: string;data: BodyType<BulkImportRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkImportAccounts>>, TError,{orgId: string;data: BodyType<BulkImportRequest>}, TContext> => {
+
+const mutationKey = ['bulkImportAccounts'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkImportAccounts>>, {orgId: string;data: BodyType<BulkImportRequest>}> = (props) => {
+          const {orgId,data} = props ?? {};
+
+          return  bulkImportAccounts(orgId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkImportAccountsMutationResult = NonNullable<Awaited<ReturnType<typeof bulkImportAccounts>>>
+    export type BulkImportAccountsMutationBody = BodyType<BulkImportRequest>
+    export type BulkImportAccountsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Bulk import accounts (and optional nested contacts)
+ */
+export const useBulkImportAccounts = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkImportAccounts>>, TError,{orgId: string;data: BodyType<BulkImportRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkImportAccounts>>,
+        TError,
+        {orgId: string;data: BodyType<BulkImportRequest>},
+        TContext
+      > => {
+      return useMutation(getBulkImportAccountsMutationOptions(options));
+    }
+
+export const getGetAccountUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}`
+}
+
+/**
+ * @summary Account detail with related contacts and opportunities
+ */
+export const getAccount = async (orgId: string,
+    accountId: string, options?: Parameters<typeof customFetch>[1]): Promise<AccountWithRelations> => {
+
+  return customFetch<AccountWithRelations>(getGetAccountUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAccountQueryKey = (orgId: string,
+    accountId: string,) => {
+    return [
+    `/api/orgs/${orgId}/accounts/${accountId}`
+    ] as const;
+    }
+
+
+export const getGetAccountQueryOptions = <TData = Awaited<ReturnType<typeof getAccount>>, TError = ErrorType<void>>(orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAccount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAccountQueryKey(orgId,accountId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAccount>>> = ({ signal }) => getAccount(orgId,accountId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined && accountId !== null && accountId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAccount>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAccountQueryResult = NonNullable<Awaited<ReturnType<typeof getAccount>>>
+export type GetAccountQueryError = ErrorType<void>
+
+
+/**
+ * @summary Account detail with related contacts and opportunities
+ */
+
+export function useGetAccount<TData = Awaited<ReturnType<typeof getAccount>>, TError = ErrorType<void>>(
+ orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAccount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAccountQueryOptions(orgId,accountId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateAccountUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}`
+}
+
+/**
+ * @summary Update an account
+ */
+export const updateAccount = async (orgId: string,
+    accountId: string,
+    accountUpdate: AccountUpdate, options?: Parameters<typeof customFetch>[1]): Promise<AccountDetail> => {
+
+  return customFetch<AccountDetail>(getUpdateAccountUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accountUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateAccountMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAccount>>, TError,{orgId: string;accountId: string;data: BodyType<AccountUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAccount>>, TError,{orgId: string;accountId: string;data: BodyType<AccountUpdate>}, TContext> => {
+
+const mutationKey = ['updateAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAccount>>, {orgId: string;accountId: string;data: BodyType<AccountUpdate>}> = (props) => {
+          const {orgId,accountId,data} = props ?? {};
+
+          return  updateAccount(orgId,accountId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAccountMutationResult = NonNullable<Awaited<ReturnType<typeof updateAccount>>>
+    export type UpdateAccountMutationBody = BodyType<AccountUpdate>
+    export type UpdateAccountMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update an account
+ */
+export const useUpdateAccount = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAccount>>, TError,{orgId: string;accountId: string;data: BodyType<AccountUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAccount>>,
+        TError,
+        {orgId: string;accountId: string;data: BodyType<AccountUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateAccountMutationOptions(options));
+    }
+
+export const getDeleteAccountUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}`
+}
+
+/**
+ * @summary Soft delete an account (sets is_active false)
+ */
+export const deleteAccount = async (orgId: string,
+    accountId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteAccountUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteAccountMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAccount>>, TError,{orgId: string;accountId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAccount>>, TError,{orgId: string;accountId: string}, TContext> => {
+
+const mutationKey = ['deleteAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAccount>>, {orgId: string;accountId: string}> = (props) => {
+          const {orgId,accountId} = props ?? {};
+
+          return  deleteAccount(orgId,accountId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAccountMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAccount>>>
+
+    export type DeleteAccountMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Soft delete an account (sets is_active false)
+ */
+export const useDeleteAccount = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAccount>>, TError,{orgId: string;accountId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAccount>>,
+        TError,
+        {orgId: string;accountId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteAccountMutationOptions(options));
+    }
+
+export const getListContactsUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}/contacts`
+}
+
+/**
+ * @summary List contacts for an account
+ */
+export const listContacts = async (orgId: string,
+    accountId: string, options?: Parameters<typeof customFetch>[1]): Promise<Contact[]> => {
+
+  return customFetch<Contact[]>(getListContactsUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListContactsQueryKey = (orgId: string,
+    accountId: string,) => {
+    return [
+    `/api/orgs/${orgId}/accounts/${accountId}/contacts`
+    ] as const;
+    }
+
+
+export const getListContactsQueryOptions = <TData = Awaited<ReturnType<typeof listContacts>>, TError = ErrorType<unknown>>(orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listContacts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListContactsQueryKey(orgId,accountId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listContacts>>> = ({ signal }) => listContacts(orgId,accountId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined && accountId !== null && accountId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listContacts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListContactsQueryResult = NonNullable<Awaited<ReturnType<typeof listContacts>>>
+export type ListContactsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List contacts for an account
+ */
+
+export function useListContacts<TData = Awaited<ReturnType<typeof listContacts>>, TError = ErrorType<unknown>>(
+ orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listContacts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListContactsQueryOptions(orgId,accountId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateContactUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}/contacts`
+}
+
+/**
+ * @summary Create a contact under an account
+ */
+export const createContact = async (orgId: string,
+    accountId: string,
+    contactCreate: ContactCreate, options?: Parameters<typeof customFetch>[1]): Promise<Contact> => {
+
+  return customFetch<Contact>(getCreateContactUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(contactCreate)
+  }
+);}
+
+
+
+
+
+export const getCreateContactMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createContact>>, TError,{orgId: string;accountId: string;data: BodyType<ContactCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createContact>>, TError,{orgId: string;accountId: string;data: BodyType<ContactCreate>}, TContext> => {
+
+const mutationKey = ['createContact'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createContact>>, {orgId: string;accountId: string;data: BodyType<ContactCreate>}> = (props) => {
+          const {orgId,accountId,data} = props ?? {};
+
+          return  createContact(orgId,accountId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateContactMutationResult = NonNullable<Awaited<ReturnType<typeof createContact>>>
+    export type CreateContactMutationBody = BodyType<ContactCreate>
+    export type CreateContactMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a contact under an account
+ */
+export const useCreateContact = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createContact>>, TError,{orgId: string;accountId: string;data: BodyType<ContactCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createContact>>,
+        TError,
+        {orgId: string;accountId: string;data: BodyType<ContactCreate>},
+        TContext
+      > => {
+      return useMutation(getCreateContactMutationOptions(options));
+    }
+
+export const getGetContactUrl = (orgId: string,
+    contactId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/contacts/${contactId}`
+}
+
+/**
+ * @summary Contact detail
+ */
+export const getContact = async (orgId: string,
+    contactId: string, options?: Parameters<typeof customFetch>[1]): Promise<Contact> => {
+
+  return customFetch<Contact>(getGetContactUrl(orgId,contactId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetContactQueryKey = (orgId: string,
+    contactId: string,) => {
+    return [
+    `/api/orgs/${orgId}/contacts/${contactId}`
+    ] as const;
+    }
+
+
+export const getGetContactQueryOptions = <TData = Awaited<ReturnType<typeof getContact>>, TError = ErrorType<void>>(orgId: string,
+    contactId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getContact>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetContactQueryKey(orgId,contactId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getContact>>> = ({ signal }) => getContact(orgId,contactId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined && contactId !== null && contactId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getContact>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetContactQueryResult = NonNullable<Awaited<ReturnType<typeof getContact>>>
+export type GetContactQueryError = ErrorType<void>
+
+
+/**
+ * @summary Contact detail
+ */
+
+export function useGetContact<TData = Awaited<ReturnType<typeof getContact>>, TError = ErrorType<void>>(
+ orgId: string,
+    contactId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getContact>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetContactQueryOptions(orgId,contactId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateContactUrl = (orgId: string,
+    contactId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/contacts/${contactId}`
+}
+
+/**
+ * @summary Update a contact
+ */
+export const updateContact = async (orgId: string,
+    contactId: string,
+    contactUpdate: ContactUpdate, options?: Parameters<typeof customFetch>[1]): Promise<Contact> => {
+
+  return customFetch<Contact>(getUpdateContactUrl(orgId,contactId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(contactUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateContactMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateContact>>, TError,{orgId: string;contactId: string;data: BodyType<ContactUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateContact>>, TError,{orgId: string;contactId: string;data: BodyType<ContactUpdate>}, TContext> => {
+
+const mutationKey = ['updateContact'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateContact>>, {orgId: string;contactId: string;data: BodyType<ContactUpdate>}> = (props) => {
+          const {orgId,contactId,data} = props ?? {};
+
+          return  updateContact(orgId,contactId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateContactMutationResult = NonNullable<Awaited<ReturnType<typeof updateContact>>>
+    export type UpdateContactMutationBody = BodyType<ContactUpdate>
+    export type UpdateContactMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a contact
+ */
+export const useUpdateContact = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateContact>>, TError,{orgId: string;contactId: string;data: BodyType<ContactUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateContact>>,
+        TError,
+        {orgId: string;contactId: string;data: BodyType<ContactUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateContactMutationOptions(options));
+    }
+
+export const getDeleteContactUrl = (orgId: string,
+    contactId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/contacts/${contactId}`
+}
+
+/**
+ * @summary Soft delete a contact
+ */
+export const deleteContact = async (orgId: string,
+    contactId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteContactUrl(orgId,contactId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteContactMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteContact>>, TError,{orgId: string;contactId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteContact>>, TError,{orgId: string;contactId: string}, TContext> => {
+
+const mutationKey = ['deleteContact'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteContact>>, {orgId: string;contactId: string}> = (props) => {
+          const {orgId,contactId} = props ?? {};
+
+          return  deleteContact(orgId,contactId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteContactMutationResult = NonNullable<Awaited<ReturnType<typeof deleteContact>>>
+
+    export type DeleteContactMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Soft delete a contact
+ */
+export const useDeleteContact = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteContact>>, TError,{orgId: string;contactId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteContact>>,
+        TError,
+        {orgId: string;contactId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteContactMutationOptions(options));
+    }
+
+export const getCreateActivityUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}/activities`
+}
+
+/**
+ * @summary Log a note, call, or email against an account (append-only)
+ */
+export const createActivity = async (orgId: string,
+    accountId: string,
+    activityCreate: ActivityCreate, options?: Parameters<typeof customFetch>[1]): Promise<Activity> => {
+
+  return customFetch<Activity>(getCreateActivityUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(activityCreate)
+  }
+);}
+
+
+
+
+
+export const getCreateActivityMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createActivity>>, TError,{orgId: string;accountId: string;data: BodyType<ActivityCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createActivity>>, TError,{orgId: string;accountId: string;data: BodyType<ActivityCreate>}, TContext> => {
+
+const mutationKey = ['createActivity'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createActivity>>, {orgId: string;accountId: string;data: BodyType<ActivityCreate>}> = (props) => {
+          const {orgId,accountId,data} = props ?? {};
+
+          return  createActivity(orgId,accountId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateActivityMutationResult = NonNullable<Awaited<ReturnType<typeof createActivity>>>
+    export type CreateActivityMutationBody = BodyType<ActivityCreate>
+    export type CreateActivityMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Log a note, call, or email against an account (append-only)
+ */
+export const useCreateActivity = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createActivity>>, TError,{orgId: string;accountId: string;data: BodyType<ActivityCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createActivity>>,
+        TError,
+        {orgId: string;accountId: string;data: BodyType<ActivityCreate>},
+        TContext
+      > => {
+      return useMutation(getCreateActivityMutationOptions(options));
+    }
+
+export const getGetAccountTimelineUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}/timeline`
+}
+
+/**
+ * @summary Unified chronological timeline of all activities for an account
+ */
+export const getAccountTimeline = async (orgId: string,
+    accountId: string, options?: Parameters<typeof customFetch>[1]): Promise<Activity[]> => {
+
+  return customFetch<Activity[]>(getGetAccountTimelineUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAccountTimelineQueryKey = (orgId: string,
+    accountId: string,) => {
+    return [
+    `/api/orgs/${orgId}/accounts/${accountId}/timeline`
+    ] as const;
+    }
+
+
+export const getGetAccountTimelineQueryOptions = <TData = Awaited<ReturnType<typeof getAccountTimeline>>, TError = ErrorType<unknown>>(orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAccountTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAccountTimelineQueryKey(orgId,accountId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAccountTimeline>>> = ({ signal }) => getAccountTimeline(orgId,accountId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined && accountId !== null && accountId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAccountTimeline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAccountTimelineQueryResult = NonNullable<Awaited<ReturnType<typeof getAccountTimeline>>>
+export type GetAccountTimelineQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Unified chronological timeline of all activities for an account
+ */
+
+export function useGetAccountTimeline<TData = Awaited<ReturnType<typeof getAccountTimeline>>, TError = ErrorType<unknown>>(
+ orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAccountTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAccountTimelineQueryOptions(orgId,accountId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAttachFileToActivityUrl = (orgId: string,
+    activityId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/activities/${activityId}/attach-file`
+}
+
+/**
+ * @summary Attach an uploaded file to an activity (and its account's files list)
+ */
+export const attachFileToActivity = async (orgId: string,
+    activityId: string,
+    attachFileRequest: AttachFileRequest, options?: Parameters<typeof customFetch>[1]): Promise<Activity> => {
+
+  return customFetch<Activity>(getAttachFileToActivityUrl(orgId,activityId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(attachFileRequest)
+  }
+);}
+
+
+
+
+
+export const getAttachFileToActivityMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof attachFileToActivity>>, TError,{orgId: string;activityId: string;data: BodyType<AttachFileRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof attachFileToActivity>>, TError,{orgId: string;activityId: string;data: BodyType<AttachFileRequest>}, TContext> => {
+
+const mutationKey = ['attachFileToActivity'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof attachFileToActivity>>, {orgId: string;activityId: string;data: BodyType<AttachFileRequest>}> = (props) => {
+          const {orgId,activityId,data} = props ?? {};
+
+          return  attachFileToActivity(orgId,activityId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AttachFileToActivityMutationResult = NonNullable<Awaited<ReturnType<typeof attachFileToActivity>>>
+    export type AttachFileToActivityMutationBody = BodyType<AttachFileRequest>
+    export type AttachFileToActivityMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Attach an uploaded file to an activity (and its account's files list)
+ */
+export const useAttachFileToActivity = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof attachFileToActivity>>, TError,{orgId: string;activityId: string;data: BodyType<AttachFileRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof attachFileToActivity>>,
+        TError,
+        {orgId: string;activityId: string;data: BodyType<AttachFileRequest>},
+        TContext
+      > => {
+      return useMutation(getAttachFileToActivityMutationOptions(options));
+    }
+
+export const getListSegmentsUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/segments`
+}
+
+/**
+ * @summary List saved segments
+ */
+export const listSegments = async (orgId: string, options?: Parameters<typeof customFetch>[1]): Promise<Segment[]> => {
+
+  return customFetch<Segment[]>(getListSegmentsUrl(orgId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSegmentsQueryKey = (orgId: string,) => {
+    return [
+    `/api/orgs/${orgId}/segments`
+    ] as const;
+    }
+
+
+export const getListSegmentsQueryOptions = <TData = Awaited<ReturnType<typeof listSegments>>, TError = ErrorType<unknown>>(orgId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSegments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSegmentsQueryKey(orgId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSegments>>> = ({ signal }) => listSegments(orgId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSegments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSegmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listSegments>>>
+export type ListSegmentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List saved segments
+ */
+
+export function useListSegments<TData = Awaited<ReturnType<typeof listSegments>>, TError = ErrorType<unknown>>(
+ orgId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSegments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSegmentsQueryOptions(orgId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateSegmentUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/segments`
+}
+
+/**
+ * @summary Create a saved segment with conditions
+ */
+export const createSegment = async (orgId: string,
+    segmentCreate: SegmentCreate, options?: Parameters<typeof customFetch>[1]): Promise<Segment> => {
+
+  return customFetch<Segment>(getCreateSegmentUrl(orgId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(segmentCreate)
+  }
+);}
+
+
+
+
+
+export const getCreateSegmentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSegment>>, TError,{orgId: string;data: BodyType<SegmentCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSegment>>, TError,{orgId: string;data: BodyType<SegmentCreate>}, TContext> => {
+
+const mutationKey = ['createSegment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSegment>>, {orgId: string;data: BodyType<SegmentCreate>}> = (props) => {
+          const {orgId,data} = props ?? {};
+
+          return  createSegment(orgId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSegmentMutationResult = NonNullable<Awaited<ReturnType<typeof createSegment>>>
+    export type CreateSegmentMutationBody = BodyType<SegmentCreate>
+    export type CreateSegmentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a saved segment with conditions
+ */
+export const useCreateSegment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSegment>>, TError,{orgId: string;data: BodyType<SegmentCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSegment>>,
+        TError,
+        {orgId: string;data: BodyType<SegmentCreate>},
+        TContext
+      > => {
+      return useMutation(getCreateSegmentMutationOptions(options));
+    }
+
+export const getUpdateSegmentUrl = (orgId: string,
+    segmentId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/segments/${segmentId}`
+}
+
+/**
+ * @summary Update a saved segment
+ */
+export const updateSegment = async (orgId: string,
+    segmentId: string,
+    segmentCreate: SegmentCreate, options?: Parameters<typeof customFetch>[1]): Promise<Segment> => {
+
+  return customFetch<Segment>(getUpdateSegmentUrl(orgId,segmentId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(segmentCreate)
+  }
+);}
+
+
+
+
+
+export const getUpdateSegmentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSegment>>, TError,{orgId: string;segmentId: string;data: BodyType<SegmentCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSegment>>, TError,{orgId: string;segmentId: string;data: BodyType<SegmentCreate>}, TContext> => {
+
+const mutationKey = ['updateSegment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSegment>>, {orgId: string;segmentId: string;data: BodyType<SegmentCreate>}> = (props) => {
+          const {orgId,segmentId,data} = props ?? {};
+
+          return  updateSegment(orgId,segmentId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSegmentMutationResult = NonNullable<Awaited<ReturnType<typeof updateSegment>>>
+    export type UpdateSegmentMutationBody = BodyType<SegmentCreate>
+    export type UpdateSegmentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a saved segment
+ */
+export const useUpdateSegment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSegment>>, TError,{orgId: string;segmentId: string;data: BodyType<SegmentCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateSegment>>,
+        TError,
+        {orgId: string;segmentId: string;data: BodyType<SegmentCreate>},
+        TContext
+      > => {
+      return useMutation(getUpdateSegmentMutationOptions(options));
+    }
+
+export const getDeleteSegmentUrl = (orgId: string,
+    segmentId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/segments/${segmentId}`
+}
+
+/**
+ * @summary Delete a saved segment
+ */
+export const deleteSegment = async (orgId: string,
+    segmentId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteSegmentUrl(orgId,segmentId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteSegmentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSegment>>, TError,{orgId: string;segmentId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSegment>>, TError,{orgId: string;segmentId: string}, TContext> => {
+
+const mutationKey = ['deleteSegment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSegment>>, {orgId: string;segmentId: string}> = (props) => {
+          const {orgId,segmentId} = props ?? {};
+
+          return  deleteSegment(orgId,segmentId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteSegmentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteSegment>>>
+
+    export type DeleteSegmentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a saved segment
+ */
+export const useDeleteSegment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSegment>>, TError,{orgId: string;segmentId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteSegment>>,
+        TError,
+        {orgId: string;segmentId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteSegmentMutationOptions(options));
+    }
+
+export const getPreviewSegmentUrl = (orgId: string,
+    segmentId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/segments/${segmentId}/preview`
+}
+
+/**
+ * @summary Preview accounts matching a saved segment
+ */
+export const previewSegment = async (orgId: string,
+    segmentId: string, options?: Parameters<typeof customFetch>[1]): Promise<Account[]> => {
+
+  return customFetch<Account[]>(getPreviewSegmentUrl(orgId,segmentId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPreviewSegmentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewSegment>>, TError,{orgId: string;segmentId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewSegment>>, TError,{orgId: string;segmentId: string}, TContext> => {
+
+const mutationKey = ['previewSegment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewSegment>>, {orgId: string;segmentId: string}> = (props) => {
+          const {orgId,segmentId} = props ?? {};
+
+          return  previewSegment(orgId,segmentId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewSegmentMutationResult = NonNullable<Awaited<ReturnType<typeof previewSegment>>>
+
+    export type PreviewSegmentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Preview accounts matching a saved segment
+ */
+export const usePreviewSegment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewSegment>>, TError,{orgId: string;segmentId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewSegment>>,
+        TError,
+        {orgId: string;segmentId: string},
+        TContext
+      > => {
+      return useMutation(getPreviewSegmentMutationOptions(options));
+    }
+
+export const getPreviewSegmentConditionsUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/segments/preview`
+}
+
+/**
+ * @summary Preview accounts matching ad-hoc conditions (for the segment builder)
+ */
+export const previewSegmentConditions = async (orgId: string,
+    segmentConditions: SegmentConditions, options?: Parameters<typeof customFetch>[1]): Promise<Account[]> => {
+
+  return customFetch<Account[]>(getPreviewSegmentConditionsUrl(orgId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(segmentConditions)
+  }
+);}
+
+
+
+
+
+export const getPreviewSegmentConditionsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewSegmentConditions>>, TError,{orgId: string;data: BodyType<SegmentConditions>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewSegmentConditions>>, TError,{orgId: string;data: BodyType<SegmentConditions>}, TContext> => {
+
+const mutationKey = ['previewSegmentConditions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewSegmentConditions>>, {orgId: string;data: BodyType<SegmentConditions>}> = (props) => {
+          const {orgId,data} = props ?? {};
+
+          return  previewSegmentConditions(orgId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewSegmentConditionsMutationResult = NonNullable<Awaited<ReturnType<typeof previewSegmentConditions>>>
+    export type PreviewSegmentConditionsMutationBody = BodyType<SegmentConditions>
+    export type PreviewSegmentConditionsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Preview accounts matching ad-hoc conditions (for the segment builder)
+ */
+export const usePreviewSegmentConditions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewSegmentConditions>>, TError,{orgId: string;data: BodyType<SegmentConditions>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewSegmentConditions>>,
+        TError,
+        {orgId: string;data: BodyType<SegmentConditions>},
+        TContext
+      > => {
+      return useMutation(getPreviewSegmentConditionsMutationOptions(options));
+    }
+
+export const getRequestUploadUrlUrl = () => {
+
+
+
+
+  return `/api/storage/uploads/request-url`
+}
+
+/**
+ * @summary Request a presigned URL for file upload
+ */
+export const requestUploadUrl = async (uploadUrlRequest: UploadUrlRequest, options?: Parameters<typeof customFetch>[1]): Promise<UploadUrlResponse> => {
+
+  return customFetch<UploadUrlResponse>(getRequestUploadUrlUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(uploadUrlRequest)
+  }
+);}
+
+
+
+
+
+export const getRequestUploadUrlMutationOptions = <TError = ErrorType<ErrorEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestUploadUrl>>, TError,{data: BodyType<UploadUrlRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestUploadUrl>>, TError,{data: BodyType<UploadUrlRequest>}, TContext> => {
+
+const mutationKey = ['requestUploadUrl'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestUploadUrl>>, {data: BodyType<UploadUrlRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestUploadUrl(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestUploadUrlMutationResult = NonNullable<Awaited<ReturnType<typeof requestUploadUrl>>>
+    export type RequestUploadUrlMutationBody = BodyType<UploadUrlRequest>
+    export type RequestUploadUrlMutationError = ErrorType<ErrorEnvelope>
+
+    /**
+ * @summary Request a presigned URL for file upload
+ */
+export const useRequestUploadUrl = <TError = ErrorType<ErrorEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestUploadUrl>>, TError,{data: BodyType<UploadUrlRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestUploadUrl>>,
+        TError,
+        {data: BodyType<UploadUrlRequest>},
+        TContext
+      > => {
+      return useMutation(getRequestUploadUrlMutationOptions(options));
+    }
+
+export const getGetPublicObjectUrl = (filePath: string,) => {
+
+
+
+
+  return `/api/storage/public-objects/${filePath}`
+}
+
+/**
+ * @summary Serve a public asset from PUBLIC_OBJECT_SEARCH_PATHS
+ */
+export const getPublicObject = async (filePath: string, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetPublicObjectUrl(filePath),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicObjectQueryKey = (filePath: string,) => {
+    return [
+    `/api/storage/public-objects/${filePath}`
+    ] as const;
+    }
+
+
+export const getGetPublicObjectQueryOptions = <TData = Awaited<ReturnType<typeof getPublicObject>>, TError = ErrorType<ErrorEnvelope>>(filePath: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicObject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicObjectQueryKey(filePath);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicObject>>> = ({ signal }) => getPublicObject(filePath, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: filePath !== null && filePath !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicObject>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicObjectQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicObject>>>
+export type GetPublicObjectQueryError = ErrorType<ErrorEnvelope>
+
+
+/**
+ * @summary Serve a public asset from PUBLIC_OBJECT_SEARCH_PATHS
+ */
+
+export function useGetPublicObject<TData = Awaited<ReturnType<typeof getPublicObject>>, TError = ErrorType<ErrorEnvelope>>(
+ filePath: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicObject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicObjectQueryOptions(filePath,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetStorageObjectUrl = (objectPath: string,) => {
+
+
+
+
+  return `/api/storage/objects/${objectPath}`
+}
+
+/**
+ * @summary Serve an object entity from PRIVATE_OBJECT_DIR
+ */
+export const getStorageObject = async (objectPath: string, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetStorageObjectUrl(objectPath),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStorageObjectQueryKey = (objectPath: string,) => {
+    return [
+    `/api/storage/objects/${objectPath}`
+    ] as const;
+    }
+
+
+export const getGetStorageObjectQueryOptions = <TData = Awaited<ReturnType<typeof getStorageObject>>, TError = ErrorType<ErrorEnvelope>>(objectPath: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStorageObject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStorageObjectQueryKey(objectPath);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStorageObject>>> = ({ signal }) => getStorageObject(objectPath, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: objectPath !== null && objectPath !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStorageObject>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStorageObjectQueryResult = NonNullable<Awaited<ReturnType<typeof getStorageObject>>>
+export type GetStorageObjectQueryError = ErrorType<ErrorEnvelope>
+
+
+/**
+ * @summary Serve an object entity from PRIVATE_OBJECT_DIR
+ */
+
+export function useGetStorageObject<TData = Awaited<ReturnType<typeof getStorageObject>>, TError = ErrorType<ErrorEnvelope>>(
+ objectPath: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStorageObject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStorageObjectQueryOptions(objectPath,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

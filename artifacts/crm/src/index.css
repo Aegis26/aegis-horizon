@@ -223,4 +223,71 @@
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
+
+  /* Landing Animations */
+  @keyframes slideUpReveal {
+    0% { opacity: 0; transform: translateY(30px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes floatOrb {
+    0%, 100% { transform: translateY(0px) translateX(0px); }
+    25% { transform: translateY(-30px) translateX(20px); }
+    50% { transform: translateY(-60px) translateX(0px); }
+    75% { transform: translateY(-30px) translateX(-20px); }
+  }
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 20px rgba(0, 180, 216, 0.3); transform: scale(1); }
+    50% { box-shadow: 0 0 40px rgba(0, 180, 216, 0.5); transform: scale(1.05); }
+  }
+  @keyframes gradientShimmer {
+    0% { background-position: -1000% center; }
+    100% { background-position: 1000% center; }
+  }
+  @keyframes fadeInBlur {
+    0% { opacity: 0; filter: blur(10px); }
+    100% { opacity: 1; filter: blur(0); }
+  }
+  @keyframes scaleInEntrance {
+    0% { opacity: 0; transform: scale(0.9); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes growWidth {
+    0% { width: 0%; }
+    100% { width: 100%; }
+  }
+  @keyframes slideHorizontal {
+    0%, 100% { transform: translateX(-5%); }
+    50% { transform: translateX(5%); }
+  }
+  @keyframes slideVertical {
+    0%, 100% { transform: translateY(-5%); }
+    50% { transform: translateY(5%); }
+  }
+  @keyframes scanlines {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+  }
+
+  .animate-slideUpReveal { animation: slideUpReveal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+  .animate-float { animation: floatOrb 8s ease-in-out infinite; will-change: transform; }
+  .animate-pulse-glow { animation: pulseGlow 3s ease-in-out infinite; will-change: transform, box-shadow; }
+  .animate-gradient-shimmer { animation: gradientShimmer 6s ease infinite; background-size: 200% 100%; }
+  .animate-fadeInBlur { animation: fadeInBlur 0.8s ease forwards; }
+  .animate-scaleInEntrance { animation: scaleInEntrance 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  @media (hover: none) and (pointer: coarse) {
+    .card-hover:hover {
+      border-color: rgba(0, 180, 216, 0.1);
+      box-shadow: none;
+      transform: none;
+    }
+  }
 }

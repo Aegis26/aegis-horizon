@@ -8,6 +8,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 
 import { Shell } from "@/components/layout/Shell";
+import { AuthLayout } from "@/components/auth/AuthLayout";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import Accounts from "@/pages/Accounts";
@@ -88,17 +89,17 @@ const clerkAppearance = {
 
 function SignInPage() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
+    <AuthLayout>
       <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
-    </div>
+    </AuthLayout>
   );
 }
 
 function SignUpPage() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
+    <AuthLayout>
       <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
-    </div>
+    </AuthLayout>
   );
 }
 

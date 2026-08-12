@@ -1,0 +1,1693 @@
+# Aegis Horizon — The Most Ambitious Landing Page & Auth Refinement Brief
+
+**Vision:** A landing page and authentication experience so visually stunning and technically sophisticated that users feel they've accessed a command center, not a form. Every pixel, every animation, every interaction tells them: *"This is built by serious people for serious work."*
+
+**Standard:** Enterprise-grade visual design meets cutting-edge web animation. Think Vercel, Linear, or Stripe—but with the technical depth of a command-and-control interface. Premium micro-interactions, sophisticated animations, and architectural depth at every layer.
+
+**Goal:** The moment a prospect lands on the page, they're captivated. By the time they complete signup, they're already invested in the experience and ready to see the product.
+
+---
+
+## 1. Visual Direction & Design Principles
+
+### The Aesthetic: "Precision. Authority. Forward."
+
+- **Color Palette**: Deep navy backgrounds with electric blue accents, white typography
+- **Motion**: Subtle, purposeful, never arbitrary. Every animation serves function + delight
+- **Depth**: Multiple visual layers create perceived depth—glassmorphism, shadows, layering
+- **Typography**: Archivo for headings (geometric, commanding), Public Sans for body (clean, professional)
+- **Imagery**: Geometric patterns, data visualization, tech-forward iconography
+- **Responsiveness**: Premium experience on mobile—not a scaled-down desktop version
+
+### Design Principles
+1. **Contrast is King** — Electric blue on deep navy must be sharp and readable
+2. **Whitespace is Intentional** — Every gap serves rhythm and clarity
+3. **Motion is Purposeful** — No decoration without function
+4. **Hierarchy is Invisible** — Users know what to focus on without thinking
+5. **Performance is Assumed** — Animations run at 60fps, no jank
+6. **Accessibility is Built-in** — Focus states, color contrast, keyboard nav, reduced-motion support
+
+---
+
+## 2. Animated Hero Section
+
+### Hero Layout (Landing Page)
+
+```jsx
+// pages/landing.tsx
+export default function LandingPage() {
+  return (
+    <div className="relative min-h-screen w-full overflow-hidden bg-bg-dark">
+      {/* Animated Background Grid */}
+      <AnimatedBackgroundGrid />
+      
+      {/* Floating Geometric Elements */}
+      <FloatingGeometricLayer />
+      
+      {/* Navigation Bar */}
+      <NavBar />
+      
+      {/* Hero Section */}
+      <section className="relative h-screen flex items-center justify-center">
+        <div className="absolute inset-0 overflow-hidden">
+          {/* Animated gradient orbs */}
+          <GradientOrb
+            position="top-left"
+            color="primary"
+            size="lg"
+            animation="float"
+            duration={8}
+          />
+          <GradientOrb
+            position="bottom-right"
+            color="secondary"
+            size="xl"
+            animation="pulse-glow"
+            duration={6}
+          />
+        </div>
+        
+        {/* Hero Content */}
+        <div className="relative z-10 max-w-3xl text-center px-6">
+          {/* Tagline with animated underline */}
+          <div className="mb-8 inline-block">
+            <p className="text-small uppercase tracking-widest text-primary opacity-80">
+              See Beyond the Horizon
+            </p>
+            <div className="h-1 bg-gradient-to-r from-transparent via-primary to-transparent mt-2 animate-pulse-glow" />
+          </div>
+          
+          {/* Main Heading with word-by-word animation */}
+          <h1 className="font-display text-6xl md:text-7xl font-weight-800 text-white mb-6 leading-tight">
+            <AnimatedTextReveal text="The command center for serious sales teams." />
+          </h1>
+          
+          {/* Subheading with staggered fade-in */}
+          <p className="text-xl md:text-2xl text-text-light text-opacity-70 mb-12 max-w-2xl mx-auto leading-relaxed">
+            <AnimatedFadeIn delay={0.4}>
+              Aegis Horizon brings clarity to customer relationships. Every interaction,
+              every opportunity, every insight—visible at a glance. Focus on data-driven decisions.
+            </AnimatedFadeIn>
+          </p>
+          
+          {/* CTA Buttons with hover animations */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <AnimatedButton variant="primary" size="lg">
+              Start Forecasting
+              <ArrowIcon className="ml-2 group-hover:translate-x-1 transition-transform" />
+            </AnimatedButton>
+            <AnimatedButton variant="secondary" size="lg">
+              Watch Demo
+            </AnimatedButton>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+```
+
+### Animated Text Reveal Component
+
+```typescript
+// components/AnimatedTextReveal.tsx
+import { useEffect, useRef, useState } from 'react';
+
+interface Props {
+  text: string;
+  staggerDelay?: number;
+}
+
+export function AnimatedTextReveal({ text, staggerDelay = 0.05 }: Props) {
+  const [isVisible, setIsVisible] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const words = text.split(' ');
+
+  return (
+    <span ref={ref} className="inline-block">
+      {words.map((word, idx) => (
+        <span
+          key={idx}
+          className="inline-block"
+          style={{
+            animation: isVisible ? `slideUpReveal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards` : 'none',
+            animationDelay: `${idx * staggerDelay}s`,
+            opacity: isVisible ? 1 : 0,
+            transform: isVisible ? 'translateY(0)' : 'translateY(20px)',
+          }}
+        >
+          {word}&nbsp;
+        </span>
+      ))}
+    </span>
+  );
+}
+```
+
+### CSS Animations for Hero
+
+```css
+/* hero-animations.css */
+
+/* Sliding text reveal */
+@keyframes slideUpReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Floating gradient orb */
+@keyframes floatOrb {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px);
+  }
+  25% {
+    transform: translateY(-30px) translateX(20px);
+  }
+  50% {
+    transform: translateY(-60px) translateX(0px);
+  }
+  75% {
+    transform: translateY(-30px) translateX(-20px);
+  }
+}
+
+/* Pulsing glow effect */
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(0, 180, 216, 0.3);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(0, 180, 216, 0.5);
+    transform: scale(1.1);
+  }
+}
+
+/* Gradient shimmer */
+@keyframes gradientShimmer {
+  0% {
+    background-position: -1000% center;
+  }
+  100% {
+    background-position: 1000% center;
+  }
+}
+
+/* Fade in with slight blur */
+@keyframes fadeInBlur {
+  0% {
+    opacity: 0;
+    filter: blur(10px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* Scale and fade entrance */
+@keyframes scaleInEntrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-float {
+  animation: floatOrb 8s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 3s ease-in-out infinite;
+}
+
+.animate-gradient-shimmer {
+  animation: gradientShimmer 6s ease infinite;
+  background-size: 200% 100%;
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+---
+
+## 3. Animated Background Grid System
+
+### Multi-Layer Background
+
+```typescript
+// components/AnimatedBackgroundGrid.tsx
+import React from 'react';
+
+export function AnimatedBackgroundGrid() {
+  return (
+    <div className="absolute inset-0 overflow-hidden">
+      {/* Layer 1: Static Grid */}
+      <div
+        className="absolute inset-0 opacity-5"
+        style={{
+          backgroundImage: `
+            linear-gradient(0deg, transparent 24%, rgba(0, 180, 216, 0.05) 25%, rgba(0, 180, 216, 0.05) 26%, transparent 27%, transparent 74%, rgba(0, 180, 216, 0.05) 75%, rgba(0, 180, 216, 0.05) 76%, transparent 77%, transparent),
+            linear-gradient(90deg, transparent 24%, rgba(0, 180, 216, 0.05) 25%, rgba(0, 180, 216, 0.05) 26%, transparent 27%, transparent 74%, rgba(0, 180, 216, 0.05) 75%, rgba(0, 180, 216, 0.05) 76%, transparent 77%, transparent)
+          `,
+          backgroundSize: '60px 60px',
+        }}
+      />
+
+      {/* Layer 2: Animated Grid Lines (subtle) */}
+      <svg
+        className="absolute inset-0 w-full h-full opacity-10"
+        preserveAspectRatio="xMidYMid slice"
+      >
+        <defs>
+          <pattern id="grid" width="80" height="80" patternUnits="userSpaceOnUse">
+            <path
+              d="M 80 0 L 0 0 0 80"
+              fill="none"
+              stroke="url(#gridGradient)"
+              strokeWidth="0.5"
+            />
+          </pattern>
+          <linearGradient id="gridGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="rgba(0, 180, 216, 0.3)" />
+            <stop offset="100%" stopColor="rgba(0, 180, 216, 0.05)" />
+          </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)" />
+      </svg>
+
+      {/* Layer 3: Radial Gradient Overlay */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(circle at 50% 50%, rgba(0, 180, 216, 0.1) 0%, transparent 70%)',
+        }}
+      />
+
+      {/* Layer 4: Animated gradient beam (horizontal) */}
+      <div
+        className="absolute -top-1/2 -bottom-1/2 left-1/4 w-96 h-96 blur-3xl opacity-20"
+        style={{
+          background:
+            'linear-gradient(90deg, transparent, rgba(0, 180, 216, 0.4), transparent)',
+          animation: 'slideHorizontal 15s ease-in-out infinite',
+        }}
+      />
+
+      {/* Layer 5: Animated gradient beam (vertical) */}
+      <div
+        className="absolute -left-1/2 -right-1/2 top-1/3 w-96 h-96 blur-3xl opacity-15"
+        style={{
+          background:
+            'linear-gradient(180deg, rgba(0, 102, 204, 0.3), transparent, rgba(0, 102, 204, 0.2))',
+          animation: 'slideVertical 20s ease-in-out infinite',
+        }}
+      />
+    </div>
+  );
+}
+```
+
+### Background Animation CSS
+
+```css
+/* background-animations.css */
+
+@keyframes slideHorizontal {
+  0%, 100% {
+    transform: translateX(-100px);
+  }
+  50% {
+    transform: translateX(100px);
+  }
+}
+
+@keyframes slideVertical {
+  0%, 100% {
+    transform: translateY(-100px);
+  }
+  50% {
+    transform: translateY(100px);
+  }
+}
+
+@keyframes orbitRotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes scanlines {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+/* Subtle scanline effect on entire page (tech-forward feel) */
+.hero::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.15),
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  animation: scanlines 8s linear infinite;
+}
+```
+
+---
+
+## 4. Floating Geometric Elements
+
+### 3D-like Floating Cards
+
+```typescript
+// components/FloatingCard.tsx
+import React, { useEffect, useState } from 'react';
+
+interface FloatingCardProps {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  delay?: number;
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+}
+
+export function FloatingCard({
+  title,
+  description,
+  icon,
+  delay = 0,
+  position,
+}: FloatingCardProps) {
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [isHovered, setIsHovered] = useState(false);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePosition({ x: e.clientX, y: e.clientY });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  const getPositionClass = () => {
+    const positions = {
+      'top-left': 'top-20 left-20',
+      'top-right': 'top-20 right-20',
+      'bottom-left': 'bottom-20 left-20',
+      'bottom-right': 'bottom-20 right-20',
+    };
+    return positions[position];
+  };
+
+  return (
+    <div
+      className={`absolute w-72 ${getPositionClass()}`}
+      style={{
+        animation: `float 6s ease-in-out infinite`,
+        animationDelay: `${delay}s`,
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div
+        className="
+          relative
+          p-6
+          rounded-xl
+          border border-primary border-opacity-20
+          bg-gradient-to-br from-bg-dark to-bg-dark
+          backdrop-blur-md
+          shadow-lg
+          transition-all duration-300
+          cursor-pointer
+          group
+        "
+        style={{
+          transform: isHovered
+            ? `translateY(-8px) scale(1.05) perspective(1200px)`
+            : 'translateY(0) scale(1)',
+          boxShadow: isHovered
+            ? '0 20px 40px rgba(0, 180, 216, 0.2)'
+            : '0 10px 30px rgba(0, 0, 0, 0.3)',
+          background: isHovered
+            ? 'linear-gradient(135deg, rgba(0, 180, 216, 0.1) 0%, rgba(0, 102, 204, 0.05) 100%)'
+            : 'linear-gradient(135deg, rgba(10, 14, 39, 0.8) 0%, rgba(10, 14, 39, 0.6) 100%)',
+        }}
+      >
+        {/* Gradient border on hover */}
+        {isHovered && (
+          <div
+            className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{
+              background:
+                'linear-gradient(135deg, rgba(0, 180, 216, 0.3), rgba(0, 102, 204, 0.2))',
+              pointerEvents: 'none',
+            }}
+          />
+        )}
+
+        {/* Content */}
+        <div className="relative z-10">
+          <div className="text-4xl mb-4 text-primary">{icon}</div>
+          <h3 className="font-display text-label text-white mb-2">{title}</h3>
+          <p className="text-small text-text-light text-opacity-70">
+            {description}
+          </p>
+        </div>
+
+        {/* Animated corner accent */}
+        <div
+          className="absolute top-0 right-0 w-20 h-20 border-t-2 border-r-2 border-primary rounded-tr-xl opacity-0 group-hover:opacity-100 transition-all"
+          style={{
+            animation: isHovered ? 'cornerGlow 0.6s ease' : 'none',
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## 5. Premium Authentication Flow
+
+### Sign-Up Page with Progressive Reveal
+
+```typescript
+// pages/auth/signup.tsx
+import React, { useState } from 'react';
+import { AnimatedButton } from '@/components/AnimatedButton';
+import { AnimatedInput } from '@/components/AnimatedInput';
+
+export default function SignUp() {
+  const [formStep, setFormStep] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+
+  return (
+    <div className="min-h-screen bg-bg-dark flex items-center justify-center relative overflow-hidden">
+      {/* Animated Background */}
+      <AnimatedBackgroundGrid />
+
+      {/* Floating Accent Elements */}
+      <div className="absolute top-20 right-20 w-96 h-96 bg-primary opacity-5 rounded-full blur-3xl animate-pulse-glow" />
+      <div className="absolute bottom-20 left-20 w-96 h-96 bg-secondary opacity-5 rounded-full blur-3xl animate-float" />
+
+      {/* Form Container */}
+      <div
+        className="relative z-10 w-full max-w-md"
+        style={{
+          animation: 'scaleInEntrance 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        }}
+      >
+        {/* Logo */}
+        <div className="text-center mb-12">
+          <img
+            src="/assets/branding/aegis-horizon-logo.png"
+            alt="Aegis Horizon"
+            className="h-10 mx-auto mb-6"
+          />
+          <h1 className="font-display text-h2 text-white mb-2">Create Account</h1>
+          <p className="text-text-light text-opacity-60">
+            Join thousands of teams using Horizon
+          </p>
+        </div>
+
+        {/* Form Card */}
+        <div
+          className="
+            relative
+            p-8
+            rounded-xl
+            border border-primary border-opacity-20
+            bg-gradient-to-br from-bg-dark via-bg-dark to-bg-dark
+            backdrop-blur-xl
+            shadow-xl
+          "
+        >
+          {/* Progressive form steps with animation */}
+          {formStep === 1 && (
+            <div
+              className="space-y-6"
+              style={{
+                animation: 'fadeInBlur 0.5s ease',
+              }}
+            >
+              <div>
+                <label className="block text-label font-display mb-2">
+                  Full Name
+                </label>
+                <AnimatedInput
+                  type="text"
+                  placeholder="Chris McKeithen"
+                  icon="user"
+                />
+              </div>
+
+              <div>
+                <label className="block text-label font-display mb-2">
+                  Work Email
+                </label>
+                <AnimatedInput
+                  type="email"
+                  placeholder="chris@aegiscyberdefense.co"
+                  icon="mail"
+                />
+              </div>
+
+              <div>
+                <label className="block text-label font-display mb-2">
+                  Company Name
+                </label>
+                <AnimatedInput
+                  type="text"
+                  placeholder="Aegis Horizon"
+                  icon="building"
+                />
+              </div>
+
+              <AnimatedButton
+                variant="primary"
+                size="lg"
+                className="w-full"
+                onClick={() => setFormStep(2)}
+              >
+                Continue
+              </AnimatedButton>
+            </div>
+          )}
+
+          {formStep === 2 && (
+            <div
+              className="space-y-6"
+              style={{
+                animation: 'fadeInBlur 0.5s ease',
+              }}
+            >
+              <div>
+                <label className="block text-label font-display mb-2">
+                  Password
+                </label>
+                <AnimatedInput
+                  type="password"
+                  placeholder="••••••••"
+                  icon="lock"
+                  showStrength
+                />
+              </div>
+
+              <div>
+                <label className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded border-primary bg-bg-dark cursor-pointer"
+                  />
+                  <span className="text-small text-text-light text-opacity-70">
+                    I agree to the Terms of Service and Privacy Policy
+                  </span>
+                </label>
+              </div>
+
+              <AnimatedButton
+                variant="primary"
+                size="lg"
+                className="w-full"
+                isLoading={isLoading}
+                onClick={async () => {
+                  setIsLoading(true);
+                  // Signup logic
+                  await new Promise(resolve => setTimeout(resolve, 1500));
+                  setIsLoading(false);
+                }}
+              >
+                {isLoading ? 'Creating Account...' : 'Create Account'}
+              </AnimatedButton>
+
+              <button
+                className="w-full text-center text-small text-primary hover:text-opacity-80 transition-all"
+                onClick={() => setFormStep(1)}
+              >
+                Back
+              </button>
+            </div>
+          )}
+
+          {/* Divider */}
+          <div className="flex items-center gap-4 my-8">
+            <div className="flex-1 h-px bg-primary bg-opacity-20" />
+            <span className="text-small text-text-light text-opacity-40">or</span>
+            <div className="flex-1 h-px bg-primary bg-opacity-20" />
+          </div>
+
+          {/* Social Login with hover effects */}
+          <div className="grid grid-cols-2 gap-4">
+            <button className="relative py-3 px-4 rounded-lg border border-primary border-opacity-20 hover:border-opacity-50 transition-all group">
+              <div className="absolute inset-0 bg-primary opacity-0 group-hover:opacity-5 rounded-lg transition-all" />
+              <span className="relative text-small font-display text-text-light">
+                Google
+              </span>
+            </button>
+            <button className="relative py-3 px-4 rounded-lg border border-primary border-opacity-20 hover:border-opacity-50 transition-all group">
+              <div className="absolute inset-0 bg-primary opacity-0 group-hover:opacity-5 rounded-lg transition-all" />
+              <span className="relative text-small font-display text-text-light">
+                GitHub
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Sign In Link */}
+        <p className="text-center text-small text-text-light text-opacity-60 mt-8">
+          Already have an account?{' '}
+          <a
+            href="/auth/signin"
+            className="text-primary hover:text-opacity-80 font-display transition-all"
+          >
+            Sign In
+          </a>
+        </p>
+
+        {/* Trust Badges */}
+        <div className="mt-12 flex items-center justify-center gap-6">
+          <div className="text-center">
+            <div className="text-primary text-opacity-60 mb-1">🔒</div>
+            <p className="text-tiny text-text-light text-opacity-50">
+              SOC 2 Certified
+            </p>
+          </div>
+          <div className="w-px h-8 bg-primary bg-opacity-20" />
+          <div className="text-center">
+            <div className="text-primary text-opacity-60 mb-1">🌐</div>
+            <p className="text-tiny text-text-light text-opacity-50">
+              Enterprise Grade
+            </p>
+          </div>
+          <div className="w-px h-8 bg-primary bg-opacity-20" />
+          <div className="text-center">
+            <div className="text-primary text-opacity-60 mb-1">⚡</div>
+            <p className="text-tiny text-text-light text-opacity-50">
+              99.9% Uptime
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+### Animated Input Component
+
+```typescript
+// components/AnimatedInput.tsx
+import React, { useState, useRef } from 'react';
+
+interface AnimatedInputProps {
+  type: string;
+  placeholder: string;
+  icon?: string;
+  showStrength?: boolean;
+}
+
+export function AnimatedInput({
+  type,
+  placeholder,
+  icon,
+  showStrength,
+}: AnimatedInputProps) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [value, setValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const getPasswordStrength = (val: string) => {
+    if (val.length < 6) return { level: 0, text: 'Weak', color: 'error' };
+    if (val.length < 10) return { level: 1, text: 'Fair', color: 'warning' };
+    if (!/[!@#$%^&*]/.test(val)) return { level: 2, text: 'Good', color: 'info' };
+    return { level: 3, text: 'Strong', color: 'success' };
+  };
+
+  const strength = showStrength ? getPasswordStrength(value) : null;
+
+  return (
+    <div className="relative">
+      <div
+        className="
+          relative
+          overflow-hidden
+          rounded-lg
+          border-2
+          transition-all duration-200
+          bg-bg-dark bg-opacity-50
+        "
+        style={{
+          borderColor: isFocused ? 'rgba(0, 180, 216, 0.5)' : 'rgba(0, 180, 216, 0.2)',
+          boxShadow: isFocused
+            ? '0 0 20px rgba(0, 180, 216, 0.2)'
+            : '0 0 0 rgba(0, 180, 216, 0)',
+        }}
+      >
+        {/* Animated focus glow */}
+        {isFocused && (
+          <div
+            className="absolute inset-0 pointer-events-none opacity-0 animate-pulse"
+            style={{
+              background:
+                'linear-gradient(90deg, transparent, rgba(0, 180, 216, 0.1), transparent)',
+            }}
+          />
+        )}
+
+        {/* Input container */}
+        <div className="flex items-center gap-3 px-4 py-3">
+          {icon && (
+            <div
+              className="text-primary transition-all"
+              style={{
+                transform: isFocused ? 'scale(1.2)' : 'scale(1)',
+                opacity: isFocused ? 1 : 0.6,
+              }}
+            >
+              {getIconByName(icon)}
+            </div>
+          )}
+
+          <input
+            ref={inputRef}
+            type={type}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder={placeholder}
+            className="
+              flex-1
+              bg-transparent
+              outline-none
+              text-text-light
+              placeholder-text-light placeholder-opacity-40
+              font-sans
+              transition-all
+            "
+          />
+        </div>
+      </div>
+
+      {/* Password strength indicator */}
+      {showStrength && value && (
+        <div className="mt-2">
+          <div className="flex gap-1 mb-1">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className="flex-1 h-1 rounded-full bg-primary bg-opacity-20 overflow-hidden"
+              >
+                <div
+                  className={`h-full transition-all ${
+                    i <= strength!.level ? `bg-${strength!.color}` : ''
+                  }`}
+                  style={{
+                    width: i <= strength!.level ? '100%' : '0%',
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+          <p className={`text-tiny text-${strength!.color}`}>
+            {strength!.text} password
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getIconByName(name: string) {
+  const icons: Record<string, JSX.Element> = {
+    user: <UserIcon size={20} />,
+    mail: <MailIcon size={20} />,
+    lock: <LockIcon size={20} />,
+    building: <BuildingIcon size={20} />,
+  };
+  return icons[name] || null;
+}
+```
+
+### Animated Button Component
+
+```typescript
+// components/AnimatedButton.tsx
+import React, { useState } from 'react';
+
+interface AnimatedButtonProps {
+  children: React.ReactNode;
+  variant: 'primary' | 'secondary' | 'tertiary';
+  size: 'sm' | 'md' | 'lg';
+  isLoading?: boolean;
+  onClick?: () => void | Promise<void>;
+  className?: string;
+}
+
+export function AnimatedButton({
+  children,
+  variant,
+  size,
+  isLoading,
+  onClick,
+  className,
+}: AnimatedButtonProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const variantStyles = {
+    primary: 'bg-primary text-bg-dark hover:shadow-glow',
+    secondary:
+      'border border-primary border-opacity-30 text-primary hover:bg-primary hover:bg-opacity-10',
+    tertiary: 'text-primary hover:bg-primary hover:bg-opacity-5',
+  };
+
+  const sizeStyles = {
+    sm: 'px-3 py-1.5 text-label',
+    md: 'px-5 py-2.5 text-label',
+    lg: 'px-6 py-3 text-base',
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      disabled={isLoading}
+      className={`
+        relative
+        font-display font-weight-600
+        rounded-lg
+        transition-all duration-200
+        overflow-hidden
+        group
+        ${variantStyles[variant]}
+        ${sizeStyles[size]}
+        ${className}
+        disabled:opacity-50 disabled:cursor-not-allowed
+      `}
+    >
+      {/* Shimmer effect on hover */}
+      {isHovered && (
+        <div
+          className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{
+            background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
+            animation: 'shimmer 0.6s ease',
+          }}
+        />
+      )}
+
+      {/* Loading spinner */}
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="spinner" />
+        </div>
+      )}
+
+      {/* Text with loading opacity */}
+      <span className={`transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}>
+        {children}
+      </span>
+    </button>
+  );
+}
+```
+
+---
+
+## 6. Feature Showcase Section
+
+### Animated Feature Cards with Visual Proof
+
+```typescript
+// components/FeatureShowcase.tsx
+import React, { useState } from 'react';
+
+const features = [
+  {
+    title: 'Customer 360',
+    description:
+      'Every interaction, every opportunity, every insight in one unified view. No more lost data.',
+    icon: '👁️',
+    stat: '100% Visibility',
+    details: [
+      'Unified customer timeline',
+      'Real-time relationship mapping',
+      'Historical context at a glance',
+    ],
+    gradient: 'from-blue-500 to-cyan-500',
+  },
+  {
+    title: 'AI-Powered Intelligence',
+    description:
+      'Predictive insights that show you what will happen before it happens.',
+    icon: '🤖',
+    stat: '85% Prediction Accuracy',
+    details: [
+      'Churn risk scoring',
+      'Revenue forecasting',
+      'Opportunity scoring',
+    ],
+    gradient: 'from-purple-500 to-pink-500',
+  },
+  {
+    title: 'Seamless Automation',
+    description:
+      'Workflows that do the work. Focus on strategy, not busywork.',
+    icon: '⚡',
+    stat: '10x Faster Closes',
+    details: [
+      'No-code workflow builder',
+      'Auto-responses',
+      'Smart task routing',
+    ],
+    gradient: 'from-orange-500 to-red-500',
+  },
+];
+
+export function FeatureShowcase() {
+  const [activeFeature, setActiveFeature] = useState(0);
+
+  return (
+    <section className="relative min-h-screen py-32 px-6 bg-bg-dark overflow-hidden">
+      <AnimatedBackgroundGrid />
+
+      <div className="relative z-10 max-w-6xl mx-auto">
+        <div className="text-center mb-20">
+          <h2 className="font-display text-6xl font-weight-800 text-white mb-6">
+            <AnimatedTextReveal text="Powerful features that scale with your needs." />
+          </h2>
+          <p className="text-xl text-text-light text-opacity-70 max-w-2xl mx-auto">
+            Built for sales leaders who refuse to compromise between simplicity and power.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-16">
+          {features.map((feature, idx) => (
+            <div
+              key={idx}
+              onClick={() => setActiveFeature(idx)}
+              className="cursor-pointer group"
+              style={{
+                animation: `fadeInBlur 0.6s ease ${idx * 0.15}s both`,
+              }}
+            >
+              <div
+                className="
+                  relative
+                  p-8
+                  rounded-xl
+                  border-2
+                  transition-all duration-300
+                  h-full
+                "
+                style={{
+                  borderColor:
+                    activeFeature === idx
+                      ? 'rgba(0, 180, 216, 0.5)'
+                      : 'rgba(0, 180, 216, 0.2)',
+                  background:
+                    activeFeature === idx
+                      ? 'linear-gradient(135deg, rgba(0, 180, 216, 0.15) 0%, rgba(0, 102, 204, 0.08) 100%)'
+                      : 'rgba(10, 14, 39, 0.5)',
+                  boxShadow:
+                    activeFeature === idx
+                      ? '0 0 30px rgba(0, 180, 216, 0.2)'
+                      : '0 10px 30px rgba(0, 0, 0, 0.3)',
+                  transform: activeFeature === idx ? 'scale(1.05)' : 'scale(1)',
+                }}
+              >
+                <div className="text-5xl mb-4">{feature.icon}</div>
+                <h3 className="font-display text-h3 text-white mb-3">
+                  {feature.title}
+                </h3>
+                <p className="text-body text-text-light text-opacity-70 mb-6">
+                  {feature.description}
+                </p>
+
+                {activeFeature === idx && (
+                  <div
+                    className="pt-6 border-t border-primary border-opacity-20 space-y-2"
+                    style={{
+                      animation: 'fadeInBlur 0.4s ease',
+                    }}
+                  >
+                    {feature.details.map((detail, i) => (
+                      <p
+                        key={i}
+                        className="text-small text-primary flex items-center gap-2"
+                      >
+                        <span className="text-lg">✓</span>
+                        {detail}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Feature Deep-Dive Section */}
+        <div
+          className="
+            relative
+            p-12
+            rounded-xl
+            border border-primary border-opacity-20
+            bg-gradient-to-br from-bg-dark to-bg-dark
+            backdrop-blur-xl
+          "
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            {/* Content */}
+            <div>
+              <h3 className="font-display text-h2 text-white mb-6">
+                {features[activeFeature].title}
+              </h3>
+              <p className="text-body text-text-light text-opacity-70 mb-8">
+                {features[activeFeature].description}
+              </p>
+
+              <div className="flex flex-col gap-4">
+                {features[activeFeature].details.map((detail, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-4"
+                    style={{
+                      animation: `slideUpReveal 0.5s ease ${i * 0.1}s both`,
+                    }}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-primary bg-opacity-20 flex items-center justify-center flex-shrink-0">
+                      <span className="text-primary text-sm">✓</span>
+                    </div>
+                    <span className="text-body text-text-light">{detail}</span>
+                  </div>
+                ))}
+              </div>
+
+              <button className="mt-8 btn-primary">
+                Learn More →
+              </button>
+            </div>
+
+            {/* Visual Proof (Animated Stats) */}
+            <div className="flex flex-col justify-center">
+              <div
+                className="
+                  relative
+                  p-8
+                  rounded-xl
+                  bg-gradient-to-br from-primary from-opacity-10 to-secondary to-opacity-5
+                  border border-primary border-opacity-20
+                  text-center
+                "
+                style={{
+                  animation: 'scaleInEntrance 0.6s ease',
+                }}
+              >
+                <div className="text-6xl font-display font-weight-800 text-primary mb-4">
+                  {features[activeFeature].stat}
+                </div>
+                <p className="text-body text-text-light text-opacity-70">
+                  Teams using {features[activeFeature].title} see these results
+                </p>
+
+                {/* Animated progress bar */}
+                <div className="mt-8">
+                  <div className="h-2 bg-bg-dark rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary to-secondary"
+                      style={{
+                        animation: `growWidth 2s cubic-bezier(0.34, 1.56, 0.64, 1) both`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+```
+
+---
+
+## 7. Pricing Section with Interactive Customization
+
+```typescript
+// components/PricingShowcase.tsx
+import React, { useState } from 'react';
+
+export function PricingShowcase() {
+  const [selectedPlan, setSelectedPlan] = useState('professional');
+
+  const plans = [
+    {
+      name: 'Essential',
+      price: '$29',
+      description: 'For growing teams',
+      features: ['Customer 360', 'Email integration', 'Basic reporting'],
+      cta: 'Start Free',
+      highlighted: false,
+    },
+    {
+      name: 'Professional',
+      price: '$69',
+      description: 'For scaling operations',
+      features: [
+        'Everything in Essential',
+        'AI Copilot',
+        'Advanced automation',
+        'Custom reporting',
+      ],
+      cta: 'Start Free',
+      highlighted: true,
+    },
+    {
+      name: 'Enterprise',
+      price: 'Custom',
+      description: 'For mission-critical work',
+      features: [
+        'Everything in Professional',
+        'Predictive intelligence',
+        'Dedicated support',
+        'Custom integrations',
+      ],
+      cta: 'Contact Sales',
+      highlighted: false,
+    },
+  ];
+
+  return (
+    <section className="relative min-h-screen py-32 px-6 bg-bg-dark overflow-hidden">
+      <div className="relative z-10 max-w-6xl mx-auto">
+        <div className="text-center mb-20">
+          <h2 className="font-display text-6xl font-weight-800 text-white mb-6">
+            Plans that scale with your business
+          </h2>
+          <p className="text-xl text-text-light text-opacity-70">
+            Simple pricing. No surprises. Cancel anytime.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {plans.map((plan, idx) => (
+            <div
+              key={idx}
+              className={`relative rounded-xl overflow-hidden transition-all duration-300 cursor-pointer group`}
+              onClick={() => setSelectedPlan(plan.name.toLowerCase())}
+              style={{
+                animation: `fadeInBlur 0.6s ease ${idx * 0.15}s both`,
+                transform:
+                  selectedPlan === plan.name.toLowerCase()
+                    ? 'scale(1.05)'
+                    : 'scale(1)',
+              }}
+            >
+              {/* Highlighted plan glow */}
+              {plan.highlighted && (
+                <div
+                  className="absolute -inset-1 bg-gradient-to-r from-primary to-secondary rounded-xl blur opacity-25 group-hover:opacity-50 transition-all"
+                  style={{
+                    animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                  }}
+                />
+              )}
+
+              <div
+                className={`relative p-8 rounded-xl border-2 h-full flex flex-col`}
+                style={{
+                  borderColor:
+                    plan.highlighted || selectedPlan === plan.name.toLowerCase()
+                      ? 'rgba(0, 180, 216, 0.5)'
+                      : 'rgba(0, 180, 216, 0.2)',
+                  background: plan.highlighted
+                    ? 'linear-gradient(135deg, rgba(0, 180, 216, 0.15) 0%, rgba(0, 102, 204, 0.08) 100%)'
+                    : 'rgba(10, 14, 39, 0.5)',
+                  boxShadow:
+                    plan.highlighted || selectedPlan === plan.name.toLowerCase()
+                      ? '0 20px 40px rgba(0, 180, 216, 0.15)'
+                      : 'none',
+                }}
+              >
+                {plan.highlighted && (
+                  <div className="mb-4">
+                    <span className="inline-block px-3 py-1 rounded-full bg-primary bg-opacity-20 text-primary text-tiny font-display font-weight-600">
+                      Most Popular
+                    </span>
+                  </div>
+                )}
+
+                <h3 className="font-display text-h3 text-white mb-2">
+                  {plan.name}
+                </h3>
+                <p className="text-small text-text-light text-opacity-60 mb-6">
+                  {plan.description}
+                </p>
+
+                <div className="mb-6">
+                  <span className="font-display text-4xl font-weight-800 text-white">
+                    {plan.price}
+                  </span>
+                  {plan.price !== 'Custom' && (
+                    <span className="text-small text-text-light text-opacity-60 ml-2">
+                      /user/month
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  className={`mb-8 py-3 px-4 rounded-lg font-display font-weight-600 transition-all ${
+                    plan.highlighted
+                      ? 'bg-primary text-bg-dark hover:shadow-glow'
+                      : 'border border-primary border-opacity-30 text-primary hover:bg-primary hover:bg-opacity-10'
+                  }`}
+                >
+                  {plan.cta}
+                </button>
+
+                <div className="flex-1 space-y-3 border-t border-primary border-opacity-20 pt-6">
+                  {plan.features.map((feature, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <span className="text-primary">✓</span>
+                      <span className="text-small text-text-light">
+                        {feature}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+```
+
+---
+
+## 8. Advanced CSS Animations Library
+
+### Shimmer Effect
+
+```css
+@keyframes shimmer {
+  0% {
+    background-position: -1000% 0;
+  }
+  100% {
+    background-position: 1000% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.2) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+```
+
+### Corner Glow Effect
+
+```css
+@keyframes cornerGlow {
+  0% {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    width: 100px;
+    height: 100px;
+  }
+}
+```
+
+### Gradient Morph
+
+```css
+@keyframes gradientMorph {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.gradient-morph {
+  background-size: 200% 200%;
+  animation: gradientMorph 8s ease infinite;
+}
+```
+
+### Grow Width Animation
+
+```css
+@keyframes growWidth {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+```
+
+---
+
+## 9. Mobile Responsiveness
+
+### Mobile-Optimized Hero
+
+```typescript
+// Mobile first approach
+export function MobileHero() {
+  return (
+    <section className="
+      min-h-screen
+      bg-bg-dark
+      flex flex-col items-center justify-center
+      px-4 py-12
+      md:px-6 md:py-20
+      lg:px-8 lg:py-32
+    ">
+      {/* Mobile-optimized text sizes */}
+      <h1 className="
+        font-display
+        text-3xl sm:text-4xl md:text-5xl lg:text-7xl
+        font-weight-800
+        text-white
+        text-center
+        mb-4 sm:mb-6 md:mb-8
+      ">
+        Command center for sales teams
+      </h1>
+
+      {/* Stack buttons vertically on mobile */}
+      <div className="
+        flex flex-col sm:flex-row
+        gap-3 sm:gap-4
+        w-full sm:w-auto
+        justify-center
+      ">
+        <button className="btn-primary w-full sm:w-auto">Start Free</button>
+        <button className="btn-secondary w-full sm:w-auto">Watch Demo</button>
+      </div>
+    </section>
+  );
+}
+```
+
+### Touch-Optimized Tap Targets
+
+```css
+/* Ensure all interactive elements are ≥ 44px on mobile */
+button, a, input[type='checkbox'], input[type='radio'] {
+  min-height: 44px;
+  min-width: 44px;
+  padding: min(0.5rem, max(12px, 1vw));
+}
+
+/* Reduce hover effects on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  button:hover {
+    box-shadow: none;
+    transform: none;
+  }
+
+  .card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: rgba(0, 180, 216, 0.1);
+  }
+}
+```
+
+---
+
+## 10. Reduced Motion Support
+
+### Respect User Preferences
+
+```css
+/* Disable animations for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .animate-float,
+  .animate-pulse-glow,
+  .animate-gradient-shimmer {
+    animation: none;
+  }
+}
+```
+
+---
+
+## 11. Performance Optimization
+
+### CSS Containment
+
+```css
+/* Isolate components for better performance */
+.card,
+.button,
+.input,
+.modal {
+  contain: layout style paint;
+}
+
+/* Optimize animations */
+.animate-float {
+  will-change: transform;
+  transform: translateZ(0); /* GPU acceleration */
+}
+```
+
+### Lazy Loading Images
+
+```typescript
+<img
+  src="/logo.png"
+  alt="Aegis Horizon"
+  loading="lazy"
+  decoding="async"
+  className="h-10"
+/>
+```
+
+---
+
+## 12. Implementation Checklist for Agent
+
+Before landing page ships, verify:
+
+### Hero Section
+- [ ] Text reveal animation works smoothly (word by word)
+- [ ] Background grid is subtle (5–10% opacity)
+- [ ] Floating orbs animate continuously without jank
+- [ ] CTA buttons have glow effect on hover
+- [ ] All animations respect prefers-reduced-motion
+
+### Auth Pages
+- [ ] Form inputs focus with glow and blue border
+- [ ] Password strength indicator updates in real-time
+- [ ] Multi-step form transitions smoothly
+- [ ] Loading spinner appears when submitting
+- [ ] Social login buttons have hover states
+- [ ] Focus rings visible on all interactive elements
+
+### Feature Showcase
+- [ ] Feature cards scale and glow on hover
+- [ ] Active feature highlighted with border and shadow
+- [ ] Deep-dive content fades in when feature selected
+- [ ] Stats animate from 0 to final value
+- [ ] Progress bars grow smoothly
+
+### Pricing
+- [ ] Cards scale up when selected
+- [ ] "Most Popular" plan highlighted with glow
+- [ ] Prices and features are readable
+- [ ] CTA buttons change based on plan
+
+### General
+- [ ] All animations run at 60fps (no dropped frames)
+- [ ] No color contrast issues (4.5:1 minimum)
+- [ ] Keyboard navigation works on all pages
+- [ ] Mobile responsive (bottom nav, stacked buttons)
+- [ ] Reduced motion respected (all animations disabled)
+- [ ] Page load time under 3 seconds
+- [ ] No layout shift (CLS under 0.1)
+
+---
+
+## 13. Definition of Done (Landing Page & Auth Polish)
+
+This phase is complete when:
+
+1. ✅ Hero section immediately impresses with animated text + geometric backgrounds
+2. ✅ All animations are smooth (60fps), with no jank or stuttering
+3. ✅ Auth flow feels premium (multi-step, visual feedback, password strength)
+4. ✅ Feature showcase tells a story (interactivity shows depth)
+5. ✅ Pricing page is clear and prominent
+6. ✅ All focus rings visible (keyboard nav tested)
+7. ✅ Mobile experience is polished (not a squeezed desktop version)
+8. ✅ Reduced motion respected (animations disabled for preference)
+9. ✅ No color contrast issues (accessibility verified)
+10. ✅ Page loads fast (Lighthouse score >90)
+11. ✅ Every micro-interaction has purpose (no decoration)
+12. ✅ First-time visitor feels: *"This is built by serious people"*
+
+**Once verified, landing page is ship-ready and drives signup conversions.**
+
+---
+
+## 14. Copy & Messaging Brief
+
+### Hero Headlines
+
+- ✅ **"The command center for serious sales teams."** — Authority, clarity
+- ✅ **"See Beyond the Horizon"** — Tagline, forward-thinking
+- ✅ **"Every interaction, every opportunity, every insight—visible at a glance."** — Benefit-driven
+
+### Feature Copy
+
+- ✅ **"Customer 360"** — Clarity of what you get
+- ✅ **"100% Visibility"** — Quantifiable promise
+- ✅ **"No more lost data."** — Problem-solution
+
+### CTA Copy
+
+- ✅ **"Start Forecasting"** — Action-oriented (not "Get Started")
+- ✅ **"Watch Demo"** — Clear call (not "Learn More")
+- ✅ **"Start Free"** — Removes friction (not "Sign Up Now")
+
+### Tone
+
+- Confident, not arrogant
+- Technical, not jargon-heavy
+- Action-oriented, not wishy-washy
+- Clear over clever
+
+---
+
+## 15. Design System Integration
+
+All landing page components use the **Aegis Horizon Brand Guidelines**:
+
+- **Colors**: Deep navy + electric blue only
+- **Typography**: Archivo (headings), Public Sans (body), Roboto Mono (data)
+- **Spacing**: 4px grid system (4, 8, 12, 16, 20, 24, 32px)
+- **Shadows**: Shadow hierarchy (xs, sm, md, lg, xl, glow)
+- **Borders**: 1–2px electric blue at 10–50% opacity
+- **Animations**: Cubic-bezier(0.34, 1.56, 0.64, 1) for entrance, ease-in-out for continuous
+
+---
+
+## 16. Commit Message & Summary
+
+When Agent completes landing page refinement:
+
+```
+git commit -m "feat: Landing page & auth experience - premium design polish
+
+- Animated hero with text reveal + geometric backgrounds
+- Premium auth flow with multi-step form + password strength
+- Feature showcase with interactive deep-dives
+- Pricing section with dynamic plan selection
+- Advanced animations (shimmer, glow, parallax)
+- Mobile-optimized responsive design
+- Accessibility audit (WCAG AA, focus rings, color contrast)
+- Performance optimization (60fps, Lighthouse >90)
+- Reduced motion support for accessibility
+
+This is the most ambitious landing page design in the CRM space.
+Users should feel like they've accessed a command center."
+```
+
+---
+
+## Final Note
+
+This brief is **not just ambitious**—it's a commitment to excellence. Every pixel, every animation, every interaction should feel intentional. The landing page isn't marketing fluff; it's a **preview of the product experience inside**.
+
+Users who convert from this page will already be impressed before they even log in.
+
+Ship it like you built Forge, like you built Credo, like you built Cyber Defense. **This is your most sophisticated visual design yet.**

@@ -1,0 +1,1220 @@
+# Aegis Horizon — Phase 1 UI/UX Refinement Brief
+
+**Goal:** Transform Phase 1 from default shadcn into enterprise-grade, where every pixel is intentional. This is a polish pass executed by Replit Agent before shipping Phase 1 to beta users.
+
+**Standard:** Every component must feel like it was designed by a 50-person design team. No default Tailwind grays. No unrefined shadows. No clunky interactions.
+
+---
+
+## 1. Global Refinements
+
+### Shadows (Shadow Hierarchy)
+
+CSS custom properties to replace all default shadows:
+
+```css
+/* shadows.css */
+:root {
+  /* Subtle elevation (cards, inputs on hover) */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 180, 216, 0.08), 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  
+  /* Standard elevation (cards, modals) */
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 180, 216, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 180, 216, 0.08);
+  
+  /* Pronounced elevation (floating nav, modals on top) */
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 180, 216, 0.1);
+  
+  /* Glow effect (hover on primary buttons, focus states) */
+  --glow-primary: 0 0 16px rgba(0, 180, 216, 0.3);
+  --glow-primary-hover: 0 0 24px rgba(0, 180, 216, 0.4);
+  
+  /* Inset shadow (pressed states, active elements) */
+  --shadow-inset: inset 0 2px 4px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* Apply to default Tailwind shadow classes */
+.shadow-xs { box-shadow: var(--shadow-xs); }
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+.shadow-xl { box-shadow: var(--shadow-xl); }
+.shadow-glow { box-shadow: var(--glow-primary); }
+```
+
+### Transitions (Smooth, not jarring)
+
+```css
+/* transitions.css */
+:root {
+  --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* All interactive elements use these */
+button, a, input, select, textarea {
+  transition: var(--transition-base);
+}
+
+/* Slower for modals/overlays */
+.modal, .dropdown {
+  transition: var(--transition-slow);
+}
+```
+
+### Opacity & Hover States
+
+```css
+/* opacity.css */
+:root {
+  --opacity-hover: 0.08;
+  --opacity-active: 0.12;
+  --opacity-disabled: 0.5;
+}
+
+/* Hover overlay for non-button interactive elements */
+.interactive:hover {
+  background-color: rgba(0, 180, 216, var(--opacity-hover));
+}
+
+.interactive:active {
+  background-color: rgba(0, 180, 216, var(--opacity-active));
+}
+
+.interactive:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+```
+
+---
+
+## 2. Component Refinement Specifications
+
+### Buttons (All States)
+
+**Primary Button — Electric Blue**
+
+```jsx
+// button.primary.tsx
+<button className="
+  relative
+  bg-primary text-bg-dark
+  px-5 py-2.5
+  rounded-md
+  font-display text-label
+  font-weight-600
+  shadow-sm
+  transition-all
+  duration-200
+  ease-in-out
+  
+  hover:shadow-lg hover:shadow-glow
+  hover:bg-opacity-95
+  
+  active:shadow-inset
+  active:bg-opacity-90
+  
+  focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary
+  
+  disabled:opacity-50 disabled:cursor-not-allowed
+">
+  Label
+</button>
+```
+
+**CSS Detail:**
+
+```css
+.btn-primary {
+  background-color: #00B4D8;
+  color: #0A0E27;
+  position: relative;
+  overflow: hidden;
+  
+  /* Smooth color transition on hover */
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-primary::before {
+  /* Ripple effect overlay, fades on hover */
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  transition: left 0.3s ease;
+}
+
+.btn-primary:hover::before {
+  left: 100%;
+}
+
+.btn-primary:hover {
+  box-shadow: 0 0 16px rgba(0, 180, 216, 0.3);
+  transform: translateY(-1px); /* Subtle lift */
+}
+
+.btn-primary:active {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  transform: translateY(0);
+}
+```
+
+**Secondary Button — Ghost Style**
+
+```css
+.btn-secondary {
+  background-color: transparent;
+  color: #0066CC;
+  border: 1px solid rgba(0, 102, 204, 0.3);
+  
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background-color: rgba(0, 102, 204, 0.08);
+  border-color: #0066CC;
+  box-shadow: 0 0 12px rgba(0, 102, 204, 0.15);
+}
+
+.btn-secondary:active {
+  background-color: rgba(0, 102, 204, 0.12);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+```
+
+**Tertiary / Text Button — Minimal**
+
+```css
+.btn-tertiary {
+  background-color: transparent;
+  color: #00B4D8;
+  border: none;
+  
+  transition: all 0.15s ease;
+}
+
+.btn-tertiary:hover {
+  background-color: rgba(0, 180, 216, 0.08);
+}
+
+.btn-tertiary:active {
+  background-color: rgba(0, 180, 216, 0.12);
+}
+```
+
+**Button Sizes**
+
+| Size | Height | Padding | Font | Use |
+|------|--------|---------|------|-----|
+| **xs** | 28px | px-2 py-1 | text-small | Compact rows, secondary actions |
+| **sm** | 32px | px-3 py-1.5 | text-label | Form actions, filters |
+| **md** | 40px | px-5 py-2.5 | text-label | Primary actions (default) |
+| **lg** | 48px | px-6 py-3 | text-base | Page-level actions (CTA) |
+
+### Cards & Surfaces
+
+**Base Card**
+
+```jsx
+<div className="
+  bg-bg-dark
+  border border-primary border-opacity-10
+  rounded-lg
+  shadow-md
+  overflow-hidden
+  transition-all duration-200
+  hover:shadow-lg hover:border-opacity-20
+">
+  {content}
+</div>
+```
+
+**CSS:**
+
+```css
+.card {
+  background-color: #0A0E27;
+  border: 1px solid rgba(0, 180, 216, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 180, 216, 0.06);
+  
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 180, 216, 0.08);
+  border-color: rgba(0, 180, 216, 0.2);
+}
+
+.card-elevated {
+  background: rgba(10, 14, 39, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 180, 216, 0.15);
+}
+```
+
+**Card Header + Body + Footer Structure**
+
+```jsx
+<div className="card">
+  <div className="
+    px-6 py-4
+    border-b border-primary border-opacity-10
+    flex items-center justify-between
+  ">
+    <h3 className="font-display text-h3">Title</h3>
+    <button className="btn-tertiary">Action</button>
+  </div>
+  
+  <div className="px-6 py-4">
+    {/* Main content */}
+  </div>
+  
+  <div className="
+    px-6 py-3
+    border-t border-primary border-opacity-10
+    flex justify-end gap-3
+  ">
+    <button className="btn-secondary">Cancel</button>
+    <button className="btn-primary">Save</button>
+  </div>
+</div>
+```
+
+### Form Inputs
+
+**Text Input / Select / Textarea**
+
+```jsx
+<input
+  type="text"
+  placeholder="Search accounts..."
+  className="
+    w-full
+    bg-bg-dark bg-opacity-50
+    border border-primary border-opacity-20
+    rounded-md
+    px-4 py-2.5
+    font-sans text-body
+    text-text-light placeholder-text-light placeholder-opacity-40
+    shadow-sm
+    transition-all duration-150
+    
+    hover:border-opacity-30
+    hover:shadow-md
+    
+    focus:outline-none
+    focus:border-opacity-50
+    focus:shadow-md
+    focus:ring-2 focus:ring-primary focus:ring-opacity-20
+  "
+/>
+```
+
+**CSS:**
+
+```css
+input,
+textarea,
+select {
+  background-color: rgba(10, 14, 39, 0.5);
+  border: 1px solid rgba(0, 180, 216, 0.2);
+  border-radius: 6px;
+  color: #F5F7FA;
+  padding: 10px 12px;
+  font-family: 'Public Sans', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  
+  box-shadow: 0 1px 3px 0 rgba(0, 180, 216, 0.08), 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+input:hover,
+textarea:hover,
+select:hover {
+  border-color: rgba(0, 180, 216, 0.3);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 180, 216, 0.06);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: rgba(0, 180, 216, 0.5);
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 180, 216, 0.06),
+    0 0 0 3px rgba(0, 180, 216, 0.1);
+}
+
+input::placeholder {
+  color: rgba(245, 247, 250, 0.4);
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: rgba(10, 14, 39, 0.3);
+}
+```
+
+**Label + Hint Text Pattern**
+
+```jsx
+<div className="space-y-2">
+  <label htmlFor="email" className="
+    block font-display text-label
+    text-text-light
+  ">
+    Email Address
+  </label>
+  <input id="email" type="email" className="input-base" />
+  <p className="text-small text-text-light text-opacity-60">
+    We'll only use this for account notifications.
+  </p>
+</div>
+```
+
+### Badges & Status Indicators
+
+**Badge Base**
+
+```jsx
+<span className="
+  inline-flex items-center gap-1
+  px-3 py-1
+  rounded-full
+  font-display text-small font-weight-600
+  border
+">
+  {content}
+</span>
+```
+
+**CSS Variants:**
+
+```css
+.badge-success {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.badge-success:hover {
+  background-color: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.badge-warning {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.badge-warning:hover {
+  background-color: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+.badge-error {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-error:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.badge-info {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.badge-info:hover {
+  background-color: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+```
+
+### Tables (Data Presentation)
+
+**Table Header**
+
+```jsx
+<thead className="
+  bg-bg-dark bg-opacity-50
+  border-b border-primary border-opacity-20
+">
+  <tr>
+    <th className="
+      px-6 py-3
+      text-left
+      font-display text-label
+      text-text-light text-opacity-70
+      font-weight-600
+      uppercase
+      tracking-wide
+    ">
+      Column Name
+    </th>
+  </tr>
+</thead>
+```
+
+**Table Body Row**
+
+```jsx
+<tbody>
+  <tr className="
+    border-b border-primary border-opacity-10
+    transition-all duration-150
+    hover:bg-bg-dark hover:bg-opacity-50
+  ">
+    <td className="
+      px-6 py-4
+      text-body
+      text-text-light
+    ">
+      Cell content
+    </td>
+  </tr>
+</tbody>
+```
+
+**Table CSS (Full)**
+
+```css
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+thead {
+  background-color: rgba(10, 14, 39, 0.5);
+  border-bottom: 1px solid rgba(0, 180, 216, 0.2);
+}
+
+th {
+  padding: 12px 24px;
+  text-align: left;
+  font-family: 'Archivo', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(245, 247, 250, 0.7);
+  background-color: rgba(10, 14, 39, 0.5);
+}
+
+tbody tr {
+  border-bottom: 1px solid rgba(0, 180, 216, 0.1);
+  transition: background-color 0.15s ease;
+}
+
+tbody tr:hover {
+  background-color: rgba(0, 180, 216, 0.08);
+}
+
+tbody tr:last-child {
+  border-bottom: none;
+}
+
+td {
+  padding: 16px 24px;
+  color: #F5F7FA;
+  vertical-align: middle;
+}
+
+/* Alternating row colors for legibility */
+tbody tr:nth-child(even) {
+  background-color: rgba(10, 14, 39, 0.2);
+}
+
+tbody tr:nth-child(even):hover {
+  background-color: rgba(0, 180, 216, 0.12);
+}
+```
+
+### Empty States
+
+**Empty State Container**
+
+```jsx
+<div className="
+  flex flex-col items-center justify-center
+  min-h-96
+  px-6 py-20
+  bg-bg-dark bg-opacity-30
+  rounded-lg
+  border border-primary border-opacity-10
+  text-center
+">
+  <div className="
+    w-20 h-20
+    bg-primary bg-opacity-10
+    rounded-full
+    flex items-center justify-center
+    mb-6
+  ">
+    <Icon name="inbox" size={32} className="text-primary opacity-50" />
+  </div>
+  
+  <h3 className="font-display text-h3 mb-2">
+    No accounts yet
+  </h3>
+  
+  <p className="text-body text-text-light text-opacity-70 max-w-sm mb-6">
+    Create your first account to get started managing customer relationships.
+  </p>
+  
+  <button className="btn-primary">
+    Create Account
+  </button>
+</div>
+```
+
+**CSS:**
+
+```css
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 384px;
+  padding: 80px 24px;
+  background-color: rgba(10, 14, 39, 0.3);
+  border: 1px solid rgba(0, 180, 216, 0.1);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.empty-state-icon {
+  width: 80px;
+  height: 80px;
+  background-color: rgba(0, 180, 216, 0.1);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.empty-state-icon svg {
+  width: 40px;
+  height: 40px;
+  color: #00B4D8;
+  opacity: 0.5;
+}
+
+.empty-state h3 {
+  margin-bottom: 12px;
+}
+
+.empty-state p {
+  max-width: 448px;
+  margin-bottom: 24px;
+  color: rgba(245, 247, 250, 0.7);
+}
+```
+
+### Loading States
+
+**Skeleton Loader**
+
+```jsx
+<div className="
+  bg-bg-dark bg-opacity-50
+  rounded-md
+  h-12
+  animate-pulse
+  border border-primary border-opacity-10
+"
+/>
+```
+
+**CSS:**
+
+```css
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 180, 216, 0.05) 0%,
+    rgba(0, 180, 216, 0.1) 50%,
+    rgba(0, 180, 216, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-text {
+  height: 16px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.skeleton-card {
+  height: 200px;
+  border-radius: 8px;
+}
+```
+
+**Loading Spinner**
+
+```jsx
+<div className="
+  w-8 h-8
+  border-2 border-primary border-opacity-20
+  border-t-primary
+  rounded-full
+  animate-spin
+"
+/>
+```
+
+**CSS:**
+
+```css
+.spinner {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border: 2px solid rgba(0, 180, 216, 0.2);
+  border-top-color: #00B4D8;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+```
+
+### Modals & Dialogs
+
+**Modal Overlay + Content**
+
+```jsx
+<div className="
+  fixed inset-0
+  bg-black bg-opacity-50
+  backdrop-blur-sm
+  flex items-center justify-center
+  z-50
+  transition-opacity duration-200
+">
+  <div className="
+    bg-bg-dark
+    border border-primary border-opacity-20
+    rounded-lg
+    shadow-xl
+    max-w-md w-full mx-4
+    overflow-hidden
+    transform transition-all duration-200
+  ">
+    {/* Modal content */}
+  </div>
+</div>
+```
+
+**CSS:**
+
+```css
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  animation: fadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal {
+  background-color: #0A0E27;
+  border: 1px solid rgba(0, 180, 216, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 180, 216, 0.1);
+  max-width: 448px;
+  width: 100%;
+  margin: 16px;
+  overflow: hidden;
+  animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+```
+
+### Sidebar Navigation
+
+**Sidebar Structure**
+
+```jsx
+<aside className="
+  w-64
+  bg-bg-dark
+  border-r border-primary border-opacity-10
+  fixed left-0 top-0 bottom-0
+  flex flex-col
+  overflow-y-auto
+">
+  {/* Logo */}
+  <div className="
+    px-6 py-6
+    border-b border-primary border-opacity-10
+  ">
+    <img src="/assets/branding/aegis-horizon-logo.png" alt="Aegis Horizon" className="h-8" />
+  </div>
+  
+  {/* Navigation Items */}
+  <nav className="flex-1 px-4 py-6 space-y-1">
+    {/* Nav items with hover states */}
+  </nav>
+  
+  {/* User Profile Section */}
+  <div className="
+    px-6 py-4
+    border-t border-primary border-opacity-10
+  ">
+    {/* User menu */}
+  </div>
+</aside>
+```
+
+**Navigation Item**
+
+```jsx
+<a
+  href="/accounts"
+  className="
+    flex items-center gap-3
+    px-4 py-3
+    rounded-md
+    font-sans text-body
+    text-text-light text-opacity-70
+    transition-all duration-150
+    
+    hover:bg-primary hover:bg-opacity-10
+    hover:text-text-light
+    
+    active:bg-primary active:bg-opacity-20
+    active:text-primary
+  "
+>
+  <Icon name="users" size={20} />
+  <span>Accounts</span>
+</a>
+```
+
+---
+
+## 3. Alert & Notification Refinement
+
+### Alerts (Inline, on Page)
+
+```jsx
+<div className="
+  flex items-start gap-4
+  px-6 py-4
+  bg-success bg-opacity-10
+  border border-success border-opacity-30
+  rounded-lg
+  text-sm
+">
+  <Icon name="check-circle" size={20} className="text-success flex-shrink-0 mt-0.5" />
+  <div>
+    <p className="font-display text-label text-success mb-1">Success</p>
+    <p className="text-body text-text-light text-opacity-80">
+      Account created successfully. You can start adding contacts.
+    </p>
+  </div>
+  <button className="ml-auto flex-shrink-0 text-text-light text-opacity-50 hover:text-opacity-100">
+    <Icon name="x" size={16} />
+  </button>
+</div>
+```
+
+**CSS Variants:**
+
+```css
+.alert {
+  display: flex;
+  gap: 16px;
+  padding: 16px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  border: 1px solid;
+  animation: slideDown 0.3s ease;
+}
+
+.alert-success {
+  background-color: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #10B981;
+}
+
+.alert-warning {
+  background-color: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #F59E0B;
+}
+
+.alert-error {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #EF4444;
+}
+
+.alert-info {
+  background-color: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #3B82F6;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+```
+
+### Toasts (Corner Notifications)
+
+```jsx
+<div className="
+  flex items-start gap-4
+  px-6 py-4
+  bg-bg-dark
+  border border-primary border-opacity-20
+  rounded-lg
+  shadow-xl
+  max-w-sm
+  animate-slideInRight
+">
+  <Icon name="check-circle" size={20} className="text-success flex-shrink-0" />
+  <div className="flex-1">
+    <p className="font-display text-label mb-1">Saved!</p>
+    <p className="text-small text-text-light text-opacity-70">
+      Your changes have been saved.
+    </p>
+  </div>
+  <button className="flex-shrink-0 text-text-light text-opacity-50 hover:text-opacity-100">
+    <Icon name="x" size={16} />
+  </button>
+</div>
+```
+
+---
+
+## 4. Dashboard & Page-Level Refinements
+
+### Page Header
+
+```jsx
+<header className="
+  px-8 py-6
+  border-b border-primary border-opacity-10
+  flex items-center justify-between
+  bg-bg-dark bg-opacity-50
+  backdrop-filter backdrop-blur-sm
+  sticky top-0 z-40
+">
+  <div>
+    <h1 className="font-display text-h1 mb-1">Accounts</h1>
+    <p className="text-small text-text-light text-opacity-60">
+      Manage all your customer relationships
+    </p>
+  </div>
+  
+  <button className="btn-primary">
+    Create Account
+  </button>
+</header>
+```
+
+### Stats Cards (Dashboard Tiles)
+
+```jsx
+<div className="
+  card
+  flex flex-col
+  gap-2
+">
+  <div className="flex items-center justify-between">
+    <p className="text-small text-text-light text-opacity-60 uppercase tracking-wide">
+      Total Revenue
+    </p>
+    <div className="
+      w-10 h-10
+      bg-primary bg-opacity-10
+      rounded-md
+      flex items-center justify-center
+    ">
+      <Icon name="trending-up" size={16} className="text-primary" />
+    </div>
+  </div>
+  
+  <div>
+    <p className="font-display text-h2 font-weight-700">$487,290</p>
+    <p className="text-small text-success">
+      +12.5% from last month
+    </p>
+  </div>
+</div>
+```
+
+**CSS:**
+
+```css
+.stat-card {
+  background-color: #0A0E27;
+  border: 1px solid rgba(0, 180, 216, 0.1);
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+  border-color: rgba(0, 180, 216, 0.2);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 180, 216, 0.08);
+}
+
+.stat-card-icon {
+  width: 40px;
+  height: 40px;
+  background-color: rgba(0, 180, 216, 0.1);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-card-value {
+  font-family: 'Archivo', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #F5F7FA;
+  margin-bottom: 8px;
+}
+
+.stat-card-change {
+  font-size: 12px;
+  font-weight: 600;
+  color: #10B981;
+}
+
+.stat-card-change.negative {
+  color: #EF4444;
+}
+```
+
+---
+
+## 5. Interaction Refinements
+
+### Focus Management
+
+All interactive elements must have visible focus rings:
+
+```css
+*:focus-visible {
+  outline: 2px solid #00B4D8;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Except buttons which have custom focus styles */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #00B4D8;
+  outline-offset: 2px;
+}
+```
+
+### Disabled States
+
+```css
+[disabled],
+[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+```
+
+### Loading States on Buttons
+
+```jsx
+<button disabled className="btn-primary relative">
+  {loading ? (
+    <>
+      <span className="opacity-0">Save</span>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="spinner" />
+      </div>
+    </>
+  ) : (
+    'Save'
+  )}
+</button>
+```
+
+### Link Styling
+
+```css
+a {
+  color: #00B4D8;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  border-bottom: 1px solid rgba(0, 180, 216, 0.3);
+  padding-bottom: 2px;
+}
+
+a:hover {
+  border-color: #00B4D8;
+  text-decoration: underline;
+}
+
+a:active {
+  color: #0066CC;
+}
+
+a:visited {
+  color: #0066CC;
+}
+```
+
+---
+
+## 6. Refinement Checklist for Agent
+
+Before Phase 1 ships, verify:
+
+### Buttons
+- [ ] All button states (default, hover, active, disabled, loading) work smoothly
+- [ ] No hard color changes; use opacity and glow for depth
+- [ ] Button sizes are consistent (xs/sm/md/lg defined above)
+- [ ] Focus rings are visible on all buttons
+
+### Cards
+- [ ] All cards have subtle electric blue border (opacity 10–20%)
+- [ ] Hover state adds slight glow and shadow lift
+- [ ] No white backgrounds; only deep navy
+- [ ] Padding is consistent (24px inside cards)
+
+### Forms
+- [ ] Inputs have subtle background (opacity 50%)
+- [ ] Focus state shows ring + border brightening
+- [ ] Labels are bold (Archivo 600)
+- [ ] Helper text is smaller and muted
+- [ ] Disabled inputs have reduced opacity (50%)
+
+### Tables
+- [ ] Header is uppercase, gray text
+- [ ] Rows alternate slightly darker (nth-child even bg)
+- [ ] Hover on row changes background, not text color
+- [ ] Numbers are right-aligned, monospace font
+- [ ] Borders are subtle (electric blue, opacity 10–20%)
+
+### Navigation
+- [ ] Sidebar is fixed, scrollable
+- [ ] Logo is centered at top
+- [ ] Active nav item is highlighted (bg + text color change)
+- [ ] Hover on nav items shows background glow
+- [ ] Mobile collapses to bottom tab bar or hamburger
+
+### Empty States
+- [ ] Icon is large (40–80px)
+- [ ] Text hierarchy is clear (heading, description, CTA)
+- [ ] Card has light background to stand out
+- [ ] CTA button is prominent
+
+### Notifications
+- [ ] Toasts slide in from corner smoothly
+- [ ] Alerts have colored left border or icon
+- [ ] All states (success, warning, error, info) use correct colors
+- [ ] Close button is accessible (focus ring visible)
+
+### Accessibility
+- [ ] All text meets 4.5:1 contrast minimum
+- [ ] Focus rings are visible on every interactive element
+- [ ] No color alone conveys meaning (always pair with icon/text)
+- [ ] Tap targets are ≥ 44px on mobile
+- [ ] Keyboard navigation works on all forms and nav
+
+---
+
+## 7. Implementation Instructions for Agent
+
+When this brief is handed to the Replit Agent, instruct it to:
+
+1. **Import all color and shadow variables** from the CSS custom properties above into `globals.css`
+2. **Replace all shadcn/ui default styling** with the refined specs above (shadows, borders, transitions)
+3. **Update every component** to match the exact states defined (hover, active, disabled, loading)
+4. **Test every interaction** — ensure smooth transitions, no jarring color jumps, all focus rings visible
+5. **Screenshot each component state** (default, hover, active, disabled) and verify visually
+6. **Verify accessibility** with axe DevTools in browser dev console
+7. **Test on mobile** — ensure proper scaling, tap targets, and touch feedback
+8. **Commit with message:** `refactor: Phase 1 UI polish - enterprise-grade component refinement`
+
+---
+
+## 8. Definition of Done (Phase 1 Polish)
+
+Phase 1 refinement is complete when:
+
+1. ✅ All buttons have smooth hover, active, disabled, and loading states
+2. ✅ All cards have subtle borders and shadows with hover lift
+3. ✅ All form inputs show focus rings + glow on interaction
+4. ✅ All tables are readable with proper contrast and spacing
+5. ✅ Navigation sidebar is polished (logo, active states, scrolling)
+6. ✅ All modals and alerts animate smoothly (fade/slide, not jarring)
+7. ✅ Empty states are prominent and actionable
+8. ✅ No color contrast issues (all text 4.5:1 minimum)
+9. ✅ Keyboard navigation works on all pages
+10. ✅ Mobile responsive (bottom nav or collapse sidebar)
+11. ✅ Zero default Tailwind grays visible (only brand colors)
+12. ✅ All timestamps and numbers use monospace font
+
+**Once verified, Phase 1 is ship-ready.** Move to Phase 2.

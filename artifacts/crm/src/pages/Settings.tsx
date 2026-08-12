@@ -112,17 +112,20 @@ export default function Settings() {
   };
 
   if (orgLoading || membersLoading) {
-    return <div className="animate-pulse h-96 bg-muted rounded-xl"></div>;
+    return <div className="p-8"><div className="skeleton h-96 rounded-xl"></div></div>;
   }
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight font-display">Organization Settings</h1>
-        <p className="text-muted-foreground mt-2">Manage your workspace preferences and team access.</p>
-      </div>
+    <div>
+      <header className="px-8 py-6 border-b border-primary/10 flex items-center justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-40">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight font-display mb-1">Organization Settings</h1>
+          <p className="text-sm text-muted-foreground">Manage your workspace preferences and team access.</p>
+        </div>
+      </header>
 
-      <Card>
+      <div className="p-8 space-y-8 max-w-5xl mx-auto">
+        <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-display">
             <Building2 className="h-5 w-5" />
@@ -268,6 +271,7 @@ export default function Settings() {
           </Table>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

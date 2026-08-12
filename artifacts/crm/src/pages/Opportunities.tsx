@@ -38,66 +38,73 @@ export default function Opportunities() {
   }
 
   if (isLoading) {
-    return <div className="animate-pulse h-64 bg-muted rounded-xl"></div>;
+    return <div className="p-8"><div className="skeleton h-64 rounded-xl"></div></div>;
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div>
+      <header className="px-8 py-6 border-b border-primary/10 flex items-center justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-40">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight font-display">Opportunities</h1>
-          <p className="text-muted-foreground mt-2">Track and manage your deal pipeline.</p>
+          <h1 className="text-3xl font-bold tracking-tight font-display mb-1">Opportunities</h1>
+          <p className="text-sm text-muted-foreground">Track and manage your deal pipeline.</p>
         </div>
-        <Button className="gap-2 font-display"><Plus className="h-4 w-4"/> Create opportunity</Button>
-      </div>
+        <Button className="gap-2"><Plus className="h-4 w-4"/> Create opportunity</Button>
+      </header>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Deal Name</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead className="text-right">Value</TableHead>
-                <TableHead className="text-right">Probability</TableHead>
-                <TableHead className="text-right">Expected Close</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {opps?.length === 0 ? (
+      <div className="p-8">
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="h-48 text-center">
-                    <div className="flex flex-col items-center justify-center text-muted-foreground">
-                      <Target className="h-8 w-8 mb-4 opacity-20" />
-                      <p>No opportunities yet. Create your first.</p>
-                    </div>
-                  </TableCell>
+                  <TableHead>Deal Name</TableHead>
+                  <TableHead>Stage</TableHead>
+                  <TableHead className="text-right">Value</TableHead>
+                  <TableHead className="text-right">Probability</TableHead>
+                  <TableHead className="text-right">Expected Close</TableHead>
                 </TableRow>
-              ) : (
-                opps?.map((opp) => (
-                  <TableRow key={opp.id} className="cursor-pointer hover:bg-muted/50">
-                    <TableCell className="font-medium">{opp.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="capitalize">
-                        {opp.stage.replace("_", " ")}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-medium">
-                      {opp.value ? formatCurrency(Number(opp.value)) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {opp.probability ? `${opp.probability}%` : "—"}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {formatDate(opp.expectedCloseDate)}
+              </TableHeader>
+              <TableBody>
+                {opps?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="p-0">
+                      <div className="flex flex-col items-center justify-center min-h-[384px] px-6 py-20 bg-background/30 text-center">
+                        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-6">
+                          <Target className="h-10 w-10 text-primary opacity-50" />
+                        </div>
+                        <h3 className="font-display text-2xl font-bold mb-2">No opportunities yet</h3>
+                        <p className="text-muted-foreground max-w-sm">
+                          Deal tracking arrives in the next release. Your pipeline will appear here.
+                        </p>
+                      </div>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                ) : (
+                  opps?.map((opp) => (
+                    <TableRow key={opp.id} className="cursor-pointer">
+                      <TableCell className="font-medium text-foreground">{opp.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">
+                          {opp.stage.replace("_", " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-medium text-foreground">
+                        {opp.value ? formatCurrency(Number(opp.value)) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-muted-foreground/80">
+                        {opp.probability ? `${opp.probability}%` : "—"}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-muted-foreground/80">
+                        {formatDate(opp.expectedCloseDate)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

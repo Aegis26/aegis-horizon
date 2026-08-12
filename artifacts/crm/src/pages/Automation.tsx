@@ -34,41 +34,43 @@ export default function Automation() {
   }
 
   if (isLoading) {
-    return <div className="animate-pulse h-64 bg-muted rounded-xl"></div>;
+    return <div className="p-8"><div className="skeleton h-64 rounded-xl"></div></div>;
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div>
+      <header className="px-8 py-6 border-b border-primary/10 flex items-center justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-40">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight font-display">Automation</h1>
-          <p className="text-muted-foreground mt-2">Visual workflows and triggers.</p>
+          <h1 className="text-3xl font-bold tracking-tight font-display mb-1">Automation</h1>
+          <p className="text-sm text-muted-foreground">Visual workflows and triggers.</p>
         </div>
-        <Button className="gap-2 font-display"><Plus className="h-4 w-4"/> Create workflow</Button>
-      </div>
+        <Button className="gap-2"><Plus className="h-4 w-4"/> Create workflow</Button>
+      </header>
 
-      {workflows?.length === 0 ? (
-        <div className="border border-border/50 bg-card/50 rounded-xl p-12 flex flex-col items-center justify-center text-center">
-          <div className="h-20 w-20 bg-primary/10 text-primary rounded-xl border border-primary/20 flex items-center justify-center mb-6">
-            <WorkflowIcon className="h-10 w-10" />
-          </div>
-          <h3 className="text-xl font-bold mb-2 font-display">No workflows yet</h3>
-          <p className="text-muted-foreground max-w-sm mb-6">
-            Automate repetitive tasks like sending emails when an opportunity closes or updating account health scores.
-          </p>
-          <Button variant="outline" className="gap-2 bg-transparent text-foreground border-primary/20 hover:bg-primary/10 hover:border-primary/50">
-            <Plus className="h-4 w-4" /> Start from Template
-          </Button>
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {workflows?.map(wf => (
-            <div key={wf.id} className="p-4 border rounded-lg bg-card">
-              Workflow {wf.id}
+      <div className="p-8">
+        {workflows?.length === 0 ? (
+          <div className="flex flex-col items-center justify-center min-h-[384px] px-6 py-20 bg-background/30 rounded-lg border border-primary/10 text-center">
+            <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-6">
+              <WorkflowIcon className="h-10 w-10 text-primary opacity-50" />
             </div>
-          ))}
-        </div>
-      )}
+            <h3 className="font-display text-2xl font-bold mb-2">No workflows yet</h3>
+            <p className="text-muted-foreground max-w-sm mb-6">
+              Automate repetitive tasks like sending emails when an opportunity closes or updating account health scores.
+            </p>
+            <Button variant="outline" className="gap-2 bg-transparent text-foreground border-primary/20 hover:bg-primary/10 hover:border-primary/50">
+              <Plus className="h-4 w-4" /> Start from Template
+            </Button>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {workflows?.map(wf => (
+              <div key={wf.id} className="p-4 border rounded-lg bg-card">
+                Workflow {wf.id}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

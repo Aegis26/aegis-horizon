@@ -44,7 +44,7 @@ export default function Billing() {
   }, [org?.enabledFeatures]);
 
   if (catalogLoading || orgLoading) {
-    return <div className="animate-pulse h-[600px] bg-muted rounded-xl"></div>;
+    return <div className="p-8"><div className="skeleton h-[600px] rounded-xl"></div></div>;
   }
 
   if (!catalog || !org) return null;
@@ -108,15 +108,18 @@ export default function Billing() {
   };
 
   return (
-    <div className="space-y-8 pb-12">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight font-display">Feature Compositor</h1>
-        <p className="text-muted-foreground mt-2 max-w-2xl">
-          Aegis Horizon is modular. Choose an out-of-the-box plan or build your exact CRM by enabling only the features you need.
-        </p>
-      </div>
+    <div>
+      <header className="px-8 py-6 border-b border-primary/10 flex items-center justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-40">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight font-display mb-1">Feature Compositor</h1>
+          <p className="text-sm text-muted-foreground">
+            Aegis Horizon is modular. Choose an out-of-the-box plan or build your exact CRM.
+          </p>
+        </div>
+      </header>
 
-      <div className="flex items-center justify-center gap-4 py-4 bg-muted/50 rounded-xl max-w-sm mx-auto">
+      <div className="p-8 space-y-8 pb-12">
+        <div className="flex items-center justify-center gap-4 py-4 bg-background/50 border border-primary/10 rounded-xl max-w-sm mx-auto shadow-sm">
         <span className={!isAnnual ? "font-semibold" : "text-muted-foreground"}>Monthly</span>
         <Switch checked={isAnnual} onCheckedChange={setIsAnnual} />
         <span className={isAnnual ? "font-semibold" : "text-muted-foreground"}>
@@ -261,6 +264,7 @@ export default function Billing() {
           </div>
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }

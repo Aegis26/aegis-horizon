@@ -1,0 +1,457 @@
+import { useState } from "react";
+import {
+  useListLeads, getListLeadsQueryKey,
+  useCreateLead, useUpdateLead, useDeleteLead, useQualifyLead, useRescoreLeads,
+  useListLeadScoringRules, getListLeadScoringRulesQueryKey,
+  useCreateLeadScoringRule, useUpdateLeadScoringRule, useDeleteLeadScoringRule,
+  getListOpportunitiesQueryKey, getListAccountsQueryKey,
+} from "@workspace/api-client-react";
+import type { Lead, LeadScoringRule, SegmentCondition } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useOrgStore } from "@/store/org-store";
+import { useLocation } from "wouter";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { Plus, UserPlus, Sparkles, Trash2, Pencil, ArrowUpRight, RefreshCw } from "lucide-react";
+import { formatDate } from "@/lib/format";
+
+const STATUS_COLORS: Record<string, string> = {
+  new: "border-primary/40 text-primary",
+  working: "border-amber-500/40 text-amber-400",
+  qualified: "border-emerald-500/40 text-emerald-400",
+  disqualified: "border-muted-foreground/40 text-muted-foreground",
+};
+
+const LEAD_FIELDS = [
+  "company", "title", "industry", "companySize", "annualRevenue", "intentScore",
+  "country", "state", "productInterest", "source", "email",
+];
+const OPERATORS = ["equals", "not_equals", "contains", "gt", "gte", "lt", "lte", "is_empty", "is_not_empty"] as const;
+
+export default function Leads() {
+  const { selectedOrgId } = useOrgStore();
+  const orgId = selectedOrgId || "";
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+
+  const [editLead, setEditLead] = useState<Lead | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editRule, setEditRule] = useState<LeadScoringRule | null>(null);
+  const [ruleOpen, setRuleOpen] = useState(false);
+
+  const { data: leads, isLoading } = useListLeads(orgId, undefined, {
+    query: { enabled: !!orgId, retry: false, queryKey: getListLeadsQueryKey(orgId) },
+  });
+  const { data: rules } = useListLeadScoringRules(orgId, {
+    query: { enabled: !!orgId, retry: false, queryKey: getListLeadScoringRulesQueryKey(orgId) },
+  });
+
+  const createLead = useCreateLead();
+  const updateLead = useUpdateLead();
+  const deleteLead = useDeleteLead();
+  const qualifyLead = useQualifyLead();
+  const rescore = useRescoreLeads();
+  const createRule = useCreateLeadScoringRule();
+  const updateRule = useUpdateLeadScoringRule();
+  const deleteRule = useDeleteLeadScoringRule();
+
+  const invalidateLeads = () => queryClient.invalidateQueries({ queryKey: getListLeadsQueryKey(orgId) });
+  const invalidateRules = () => queryClient.invalidateQueries({ queryKey: getListLeadScoringRulesQueryKey(orgId) });
+
+  const onError = (title: string) => (e: unknown) =>
+    toast({ title, description: (e as Error).message, variant: "destructive" });
+
+  if (isLoading) return <div className="p-8"><div className="skeleton h-64 rounded-xl"></div></div>;
+
+  return (
+    <div>
+      <header className="px-8 py-6 border-b border-primary/10 flex items-center justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-40">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight font-display mb-1">Leads</h1>
+          <p className="text-sm text-muted-foreground">Score, route, and qualify inbound leads.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            disabled={rescore.isPending}
+            onClick={() =>
+              rescore.mutate({ orgId }, {
+                onSuccess: (r) => { invalidateLeads(); toast({ title: "Leads rescored", description: `${r.leadsRescored} leads rescored and routed.` }); },
+                onError: onError("Rescore failed"),
+              })
+            }
+          >
+            <RefreshCw className="h-4 w-4" /> {rescore.isPending ? "Rescoring..." : "Rescore all"}
+          </Button>
+          <Button className="gap-2" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" /> Add lead
+          </Button>
+        </div>
+      </header>
+
+      <div className="p-8">
+        <Tabs defaultValue="leads">
+          <TabsList className="mb-4">
+            <TabsTrigger value="leads">Leads</TabsTrigger>
+            <TabsTrigger value="rules">Scoring rules</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="leads">
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Score</TableHead>
+                      <TableHead>Assigned to</TableHead>
+                      <TableHead>Territory</TableHead>
+                      <TableHead className="text-right">Created</TableHead>
+                      <TableHead className="w-40"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {!leads || leads.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="p-0">
+                          <div className="flex flex-col items-center justify-center min-h-[320px] px-6 py-16 bg-background/30 text-center">
+                            <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-6">
+                              <UserPlus className="h-10 w-10 text-primary opacity-50" />
+                            </div>
+                            <h3 className="font-display text-2xl font-bold mb-2">No leads yet</h3>
+                            <p className="text-muted-foreground max-w-sm">Add a lead and scoring rules will rank it automatically.</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      leads.map((lead) => (
+                        <TableRow key={lead.id}>
+                          <TableCell className="font-medium text-foreground">{lead.firstName} {lead.lastName}</TableCell>
+                          <TableCell className="text-muted-foreground">{lead.company ?? "—"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={`capitalize ${STATUS_COLORS[lead.status] ?? ""}`}>{lead.status}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-medium">{lead.score}</TableCell>
+                          <TableCell className="text-muted-foreground">{lead.assignedToName ?? "Unassigned"}</TableCell>
+                          <TableCell className="text-muted-foreground">{lead.territoryName ?? "—"}</TableCell>
+                          <TableCell className="text-right font-mono text-muted-foreground/80">{formatDate(lead.createdAt)}</TableCell>
+                          <TableCell>
+                            <div className="flex justify-end gap-1">
+                              {lead.status !== "qualified" && lead.status !== "disqualified" && (
+                                <Button
+                                  size="sm" variant="outline" className="gap-1.5"
+                                  disabled={qualifyLead.isPending}
+                                  onClick={() =>
+                                    qualifyLead.mutate({ orgId, leadId: lead.id, data: {} }, {
+                                      onSuccess: () => {
+                                        invalidateLeads();
+                                        queryClient.invalidateQueries({ queryKey: getListOpportunitiesQueryKey(orgId) });
+                                        queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey(orgId) });
+                                        toast({ title: "Lead qualified", description: "An opportunity was created in your pipeline." });
+                                      },
+                                      onError: onError("Could not qualify lead"),
+                                    })
+                                  }
+                                >
+                                  <ArrowUpRight className="h-3.5 w-3.5" /> Qualify
+                                </Button>
+                              )}
+                              <Button size="sm" variant="ghost" onClick={() => setEditLead(lead)}><Pencil className="h-3.5 w-3.5" /></Button>
+                              <Button
+                                size="sm" variant="ghost"
+                                onClick={() =>
+                                  deleteLead.mutate({ orgId, leadId: lead.id }, { onSuccess: invalidateLeads, onError: onError("Could not delete lead") })
+                                }
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="rules">
+            <div className="flex justify-end mb-3">
+              <Button className="gap-2" onClick={() => { setEditRule(null); setRuleOpen(true); }}>
+                <Sparkles className="h-4 w-4" /> New rule
+              </Button>
+            </div>
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Rule</TableHead>
+                      <TableHead>Conditions</TableHead>
+                      <TableHead>Action</TableHead>
+                      <TableHead className="text-right">Priority</TableHead>
+                      <TableHead>Active</TableHead>
+                      <TableHead className="w-24"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {!rules || rules.length === 0 ? (
+                      <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No scoring rules yet. Rules add or set points when all conditions match.</TableCell></TableRow>
+                    ) : (
+                      rules.map((rule) => (
+                        <TableRow key={rule.id}>
+                          <TableCell className="font-medium text-foreground">{rule.name}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-md">
+                            {rule.conditions.map((c, i) => (
+                              <span key={i}>{i > 0 && " AND "}<span className="font-mono">{c.field} {c.operator.replace("_", " ")} {c.value ?? ""}</span></span>
+                            ))}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">{rule.actionType === "add" ? `+${rule.points}` : `= ${rule.points}`}</TableCell>
+                          <TableCell className="text-right font-mono">{rule.priority}</TableCell>
+                          <TableCell>
+                            <Switch
+                              checked={rule.isActive}
+                              onCheckedChange={(isActive) =>
+                                updateRule.mutate(
+                                  { orgId, ruleId: rule.id, data: { name: rule.name, conditions: rule.conditions, actionType: rule.actionType, points: rule.points, priority: rule.priority, isActive } },
+                                  { onSuccess: invalidateRules, onError: onError("Could not update rule") },
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex justify-end gap-1">
+                              <Button size="sm" variant="ghost" onClick={() => { setEditRule(rule); setRuleOpen(true); }}><Pencil className="h-3.5 w-3.5" /></Button>
+                              <Button size="sm" variant="ghost" onClick={() => deleteRule.mutate({ orgId, ruleId: rule.id }, { onSuccess: invalidateRules, onError: onError("Could not delete rule") })}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {(createOpen || editLead) && (
+        <LeadFormDialog
+          lead={editLead}
+          pending={createLead.isPending || updateLead.isPending}
+          onClose={() => { setCreateOpen(false); setEditLead(null); }}
+          onSave={(data) => {
+            const opts = {
+              onSuccess: () => { setCreateOpen(false); setEditLead(null); invalidateLeads(); },
+              onError: onError("Could not save lead"),
+            };
+            if (editLead) updateLead.mutate({ orgId, leadId: editLead.id, data }, opts);
+            else createLead.mutate({ orgId, data: data as unknown as Parameters<typeof createLead.mutate>[0]["data"] }, opts);
+          }}
+        />
+      )}
+
+      {ruleOpen && (
+        <RuleFormDialog
+          rule={editRule}
+          pending={createRule.isPending || updateRule.isPending}
+          onClose={() => { setRuleOpen(false); setEditRule(null); }}
+          onSave={(data) => {
+            const opts = { onSuccess: () => { setRuleOpen(false); setEditRule(null); invalidateRules(); }, onError: onError("Could not save rule") };
+            if (editRule) updateRule.mutate({ orgId, ruleId: editRule.id, data }, opts);
+            else createRule.mutate({ orgId, data }, opts);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function LeadFormDialog({ lead, onClose, onSave, pending }: {
+  lead: Lead | null;
+  onClose: () => void;
+  onSave: (data: Record<string, unknown>) => void;
+  pending: boolean;
+}) {
+  const [form, setForm] = useState({
+    firstName: lead?.firstName ?? "",
+    lastName: lead?.lastName ?? "",
+    email: lead?.email ?? "",
+    company: lead?.company ?? "",
+    title: lead?.title ?? "",
+    industry: lead?.industry ?? "",
+    companySize: lead?.companySize?.toString() ?? "",
+    annualRevenue: lead?.annualRevenue ?? "",
+    intentScore: lead?.intentScore?.toString() ?? "",
+    country: lead?.country ?? "",
+    state: lead?.state ?? "",
+    productInterest: lead?.productInterest ?? "",
+    source: lead?.source ?? "",
+    status: lead?.status ?? "new",
+  });
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader><DialogTitle className="font-display">{lead ? "Edit lead" : "Add lead"}</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2"><Label>First name</Label><Input value={form.firstName} onChange={set("firstName")} /></div>
+          <div className="space-y-2"><Label>Last name</Label><Input value={form.lastName} onChange={set("lastName")} /></div>
+          <div className="space-y-2 col-span-2"><Label>Email</Label><Input type="email" value={form.email} onChange={set("email")} /></div>
+          <div className="space-y-2"><Label>Company</Label><Input value={form.company} onChange={set("company")} /></div>
+          <div className="space-y-2"><Label>Title</Label><Input value={form.title} onChange={set("title")} /></div>
+          <div className="space-y-2"><Label>Industry</Label><Input value={form.industry} onChange={set("industry")} /></div>
+          <div className="space-y-2"><Label>Company size</Label><Input type="number" min="0" value={form.companySize} onChange={set("companySize")} className="font-mono" /></div>
+          <div className="space-y-2"><Label>Annual revenue (USD)</Label><Input type="number" min="0" value={form.annualRevenue} onChange={set("annualRevenue")} className="font-mono" /></div>
+          <div className="space-y-2"><Label>Intent score (0-100)</Label><Input type="number" min="0" max="100" value={form.intentScore} onChange={set("intentScore")} className="font-mono" /></div>
+          <div className="space-y-2"><Label>Country</Label><Input value={form.country} onChange={set("country")} placeholder="US" /></div>
+          <div className="space-y-2"><Label>State</Label><Input value={form.state} onChange={set("state")} placeholder="CA" /></div>
+          <div className="space-y-2"><Label>Product interest</Label><Input value={form.productInterest} onChange={set("productInterest")} /></div>
+          <div className="space-y-2"><Label>Source</Label><Input value={form.source} onChange={set("source")} placeholder="webinar, referral..." /></div>
+          {lead && (
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={form.status} onValueChange={(status) => setForm((f) => ({ ...f, status: status as typeof f.status }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["new", "working", "qualified", "disqualified"].map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button
+            disabled={!form.firstName || !form.lastName || !form.email || pending}
+            onClick={() =>
+              onSave({
+                firstName: form.firstName,
+                lastName: form.lastName,
+                email: form.email,
+                company: form.company || null,
+                title: form.title || null,
+                industry: form.industry || null,
+                companySize: form.companySize ? Number(form.companySize) : null,
+                annualRevenue: form.annualRevenue ? form.annualRevenue : null,
+                intentScore: form.intentScore ? Number(form.intentScore) : null,
+                country: form.country || null,
+                state: form.state || null,
+                productInterest: form.productInterest || null,
+                source: form.source || null,
+                ...(lead ? { status: form.status } : {}),
+              })
+            }
+          >
+            {pending ? "Saving..." : "Save lead"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RuleFormDialog({ rule, onClose, onSave, pending }: {
+  rule: LeadScoringRule | null;
+  onClose: () => void;
+  onSave: (data: { name: string; conditions: SegmentCondition[]; actionType: "add" | "set"; points: number; priority?: number; isActive?: boolean }) => void;
+  pending: boolean;
+}) {
+  const [name, setName] = useState(rule?.name ?? "");
+  const [actionType, setActionType] = useState<"add" | "set">(rule?.actionType ?? "add");
+  const [points, setPoints] = useState(rule?.points?.toString() ?? "10");
+  const [priority, setPriority] = useState(rule?.priority?.toString() ?? "0");
+  const [conditions, setConditions] = useState<SegmentCondition[]>(
+    rule?.conditions?.length ? rule.conditions : [{ field: "industry", operator: "equals", value: "" }],
+  );
+
+  const updateCondition = (i: number, patch: Partial<SegmentCondition>) =>
+    setConditions((cs) => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader><DialogTitle className="font-display">{rule ? "Edit scoring rule" : "New scoring rule"}</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2"><Label>Rule name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Enterprise intent boost" /></div>
+          <div>
+            <Label className="mb-2 block">Conditions (all must match)</Label>
+            <div className="space-y-2">
+              {conditions.map((c, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <Select value={c.field} onValueChange={(field) => updateCondition(i, { field })}>
+                    <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                    <SelectContent>{LEAD_FIELDS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <Select value={c.operator} onValueChange={(operator) => updateCondition(i, { operator: operator as SegmentCondition["operator"] })}>
+                    <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                    <SelectContent>{OPERATORS.map((o) => <SelectItem key={o} value={o}>{o.replace("_", " ")}</SelectItem>)}</SelectContent>
+                  </Select>
+                  {c.operator !== "is_empty" && c.operator !== "is_not_empty" && (
+                    <Input className="flex-1" value={c.value ?? ""} onChange={(e) => updateCondition(i, { value: e.target.value })} />
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => setConditions((cs) => cs.filter((_, j) => j !== i))} disabled={conditions.length === 1}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <Button size="sm" variant="outline" className="mt-2 gap-1.5" onClick={() => setConditions((cs) => [...cs, { field: "industry", operator: "equals", value: "" }])}>
+              <Plus className="h-3.5 w-3.5" /> Add condition
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Action</Label>
+              <Select value={actionType} onValueChange={(v) => setActionType(v as "add" | "set")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="add">Add points</SelectItem>
+                  <SelectItem value="set">Set score</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2"><Label>Points</Label><Input type="number" value={points} onChange={(e) => setPoints(e.target.value)} className="font-mono" /></div>
+            <div className="space-y-2"><Label>Priority</Label><Input type="number" value={priority} onChange={(e) => setPriority(e.target.value)} className="font-mono" /></div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button
+            disabled={!name || !points || pending}
+            onClick={() =>
+              onSave({
+                name,
+                conditions,
+                actionType,
+                points: Number(points),
+                priority: Number(priority) || 0,
+                isActive: rule?.isActive ?? true,
+              })
+            }
+          >
+            {pending ? "Saving..." : "Save rule"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

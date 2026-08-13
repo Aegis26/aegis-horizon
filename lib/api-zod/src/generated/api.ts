@@ -1043,6 +1043,11 @@ export const ListOpportunitiesParams = zod.object({
   "orgId": zod.coerce.string()
 })
 
+export const ListOpportunitiesQueryParams = zod.object({
+  "pipelineId": zod.coerce.string().optional(),
+  "stage": zod.coerce.string().optional()
+})
+
 export const ListOpportunitiesResponseItem = zod.object({
   "id": zod.string(),
   "accountId": zod.string().optional(),
@@ -1055,6 +1060,1186 @@ export const ListOpportunitiesResponseItem = zod.object({
   "createdAt": zod.string().nullish()
 })
 export const ListOpportunitiesResponse = zod.array(ListOpportunitiesResponseItem)
+
+
+/**
+ * @summary Create an opportunity
+ */
+export const CreateOpportunityParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+
+export const createOpportunityBodyProbabilityMin = 0;
+export const createOpportunityBodyProbabilityMax = 100;
+
+
+
+export const CreateOpportunityBody = zod.object({
+  "accountId": zod.string(),
+  "name": zod.string().min(1),
+  "pipelineId": zod.string().nullish(),
+  "stage": zod.string().nullish(),
+  "probability": zod.number().int().min(createOpportunityBodyProbabilityMin).max(createOpportunityBodyProbabilityMax).nullish(),
+  "value": zod.string().nullish(),
+  "expectedCloseDate": zod.string().nullish(),
+  "nextAction": zod.string().nullish()
+})
+
+export const CreateOpportunityResponse = zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullish(),
+  "name": zod.string(),
+  "pipelineId": zod.string().nullish(),
+  "stage": zod.string(),
+  "probability": zod.number().nullish(),
+  "value": zod.string().nullish(),
+  "expectedCloseDate": zod.string().nullish(),
+  "actualCloseDate": zod.string().nullish(),
+  "forecastCategory": zod.string().nullish(),
+  "lossReason": zod.string().nullish(),
+  "nextAction": zod.string().nullish(),
+  "ownerUserId": zod.string().nullish(),
+  "ownerName": zod.string().nullish(),
+  "stageHistory": zod.array(zod.object({
+  "id": zod.string(),
+  "fromStage": zod.string().nullish(),
+  "toStage": zod.string(),
+  "changedByName": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "createdAt": zod.string().nullish(),
+  "updatedAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Opportunity detail with stage history and quotes
+ */
+export const GetOpportunityParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "opportunityId": zod.coerce.string()
+})
+
+export const GetOpportunityResponse = zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullish(),
+  "name": zod.string(),
+  "pipelineId": zod.string().nullish(),
+  "stage": zod.string(),
+  "probability": zod.number().nullish(),
+  "value": zod.string().nullish(),
+  "expectedCloseDate": zod.string().nullish(),
+  "actualCloseDate": zod.string().nullish(),
+  "forecastCategory": zod.string().nullish(),
+  "lossReason": zod.string().nullish(),
+  "nextAction": zod.string().nullish(),
+  "ownerUserId": zod.string().nullish(),
+  "ownerName": zod.string().nullish(),
+  "stageHistory": zod.array(zod.object({
+  "id": zod.string(),
+  "fromStage": zod.string().nullish(),
+  "toStage": zod.string(),
+  "changedByName": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "createdAt": zod.string().nullish(),
+  "updatedAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update an opportunity (stage changes are logged; probability auto-suggested from stage unless overridden)
+ */
+export const UpdateOpportunityParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "opportunityId": zod.coerce.string()
+})
+
+
+
+export const updateOpportunityBodyProbabilityMin = 0;
+export const updateOpportunityBodyProbabilityMax = 100;
+
+
+
+export const UpdateOpportunityBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "pipelineId": zod.string().nullish(),
+  "stage": zod.string().min(1).optional(),
+  "probability": zod.number().int().min(updateOpportunityBodyProbabilityMin).max(updateOpportunityBodyProbabilityMax).nullish(),
+  "value": zod.string().nullish(),
+  "expectedCloseDate": zod.string().nullish(),
+  "forecastCategory": zod.string().nullish(),
+  "lossReason": zod.string().nullish(),
+  "nextAction": zod.string().nullish(),
+  "ownerUserId": zod.string().nullish()
+})
+
+export const UpdateOpportunityResponse = zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullish(),
+  "name": zod.string(),
+  "pipelineId": zod.string().nullish(),
+  "stage": zod.string(),
+  "probability": zod.number().nullish(),
+  "value": zod.string().nullish(),
+  "expectedCloseDate": zod.string().nullish(),
+  "actualCloseDate": zod.string().nullish(),
+  "forecastCategory": zod.string().nullish(),
+  "lossReason": zod.string().nullish(),
+  "nextAction": zod.string().nullish(),
+  "ownerUserId": zod.string().nullish(),
+  "ownerName": zod.string().nullish(),
+  "stageHistory": zod.array(zod.object({
+  "id": zod.string(),
+  "fromStage": zod.string().nullish(),
+  "toStage": zod.string(),
+  "changedByName": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "createdAt": zod.string().nullish(),
+  "updatedAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Delete an opportunity
+ */
+export const DeleteOpportunityParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "opportunityId": zod.coerce.string()
+})
+
+export const DeleteOpportunityResponse = zod.void()
+
+
+/**
+ * @summary Mark opportunity closed-won and flag its account as a customer
+ */
+export const ConvertOpportunityToCustomerParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "opportunityId": zod.coerce.string()
+})
+
+export const ConvertOpportunityToCustomerResponse = zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullish(),
+  "name": zod.string(),
+  "pipelineId": zod.string().nullish(),
+  "stage": zod.string(),
+  "probability": zod.number().nullish(),
+  "value": zod.string().nullish(),
+  "expectedCloseDate": zod.string().nullish(),
+  "actualCloseDate": zod.string().nullish(),
+  "forecastCategory": zod.string().nullish(),
+  "lossReason": zod.string().nullish(),
+  "nextAction": zod.string().nullish(),
+  "ownerUserId": zod.string().nullish(),
+  "ownerName": zod.string().nullish(),
+  "stageHistory": zod.array(zod.object({
+  "id": zod.string(),
+  "fromStage": zod.string().nullish(),
+  "toStage": zod.string(),
+  "changedByName": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "createdAt": zod.string().nullish(),
+  "updatedAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary List pipelines (a default pipeline is auto-created if none exist)
+ */
+export const ListPipelinesParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+
+
+export const listPipelinesResponseStagesItemProbabilityMin = 0;
+export const listPipelinesResponseStagesItemProbabilityMax = 100;
+
+
+
+export const ListPipelinesResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "isDefault": zod.boolean(),
+  "stages": zod.array(zod.object({
+  "key": zod.string().min(1),
+  "name": zod.string().min(1),
+  "probability": zod.number().int().min(listPipelinesResponseStagesItemProbabilityMin).max(listPipelinesResponseStagesItemProbabilityMax),
+  "forecastCategory": zod.enum(['pipeline', 'best_case', 'committed', 'closed_won', 'closed_lost']),
+  "order": zod.number().int()
+})),
+  "createdAt": zod.string().nullish()
+})
+export const ListPipelinesResponse = zod.array(ListPipelinesResponseItem)
+
+
+/**
+ * @summary Create a pipeline with custom stages
+ */
+export const CreatePipelineParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+
+
+
+export const createPipelineBodyStagesItemProbabilityMin = 0;
+export const createPipelineBodyStagesItemProbabilityMax = 100;
+
+export const createPipelineBodyStagesMin = 2;
+
+
+
+export const CreatePipelineBody = zod.object({
+  "name": zod.string().min(1),
+  "stages": zod.array(zod.object({
+  "key": zod.string().min(1),
+  "name": zod.string().min(1),
+  "probability": zod.number().int().min(createPipelineBodyStagesItemProbabilityMin).max(createPipelineBodyStagesItemProbabilityMax),
+  "forecastCategory": zod.enum(['pipeline', 'best_case', 'committed', 'closed_won', 'closed_lost']),
+  "order": zod.number().int()
+})).min(createPipelineBodyStagesMin)
+})
+
+
+
+export const createPipelineResponseStagesItemProbabilityMin = 0;
+export const createPipelineResponseStagesItemProbabilityMax = 100;
+
+
+
+export const CreatePipelineResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "isDefault": zod.boolean(),
+  "stages": zod.array(zod.object({
+  "key": zod.string().min(1),
+  "name": zod.string().min(1),
+  "probability": zod.number().int().min(createPipelineResponseStagesItemProbabilityMin).max(createPipelineResponseStagesItemProbabilityMax),
+  "forecastCategory": zod.enum(['pipeline', 'best_case', 'committed', 'closed_won', 'closed_lost']),
+  "order": zod.number().int()
+})),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update a pipeline's name or stages
+ */
+export const UpdatePipelineParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "pipelineId": zod.coerce.string()
+})
+
+
+
+
+export const updatePipelineBodyStagesItemProbabilityMin = 0;
+export const updatePipelineBodyStagesItemProbabilityMax = 100;
+
+export const updatePipelineBodyStagesMin = 2;
+
+
+
+export const UpdatePipelineBody = zod.object({
+  "name": zod.string().min(1),
+  "stages": zod.array(zod.object({
+  "key": zod.string().min(1),
+  "name": zod.string().min(1),
+  "probability": zod.number().int().min(updatePipelineBodyStagesItemProbabilityMin).max(updatePipelineBodyStagesItemProbabilityMax),
+  "forecastCategory": zod.enum(['pipeline', 'best_case', 'committed', 'closed_won', 'closed_lost']),
+  "order": zod.number().int()
+})).min(updatePipelineBodyStagesMin)
+})
+
+
+
+export const updatePipelineResponseStagesItemProbabilityMin = 0;
+export const updatePipelineResponseStagesItemProbabilityMax = 100;
+
+
+
+export const UpdatePipelineResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "isDefault": zod.boolean(),
+  "stages": zod.array(zod.object({
+  "key": zod.string().min(1),
+  "name": zod.string().min(1),
+  "probability": zod.number().int().min(updatePipelineResponseStagesItemProbabilityMin).max(updatePipelineResponseStagesItemProbabilityMax),
+  "forecastCategory": zod.enum(['pipeline', 'best_case', 'committed', 'closed_won', 'closed_lost']),
+  "order": zod.number().int()
+})),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary List leads with scores
+ */
+export const ListLeadsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListLeadsQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "q": zod.coerce.string().optional()
+})
+
+export const ListLeadsResponseItem = zod.object({
+  "id": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "company": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "industry": zod.string().nullish(),
+  "companySize": zod.number().int().nullish(),
+  "annualRevenue": zod.string().nullish(),
+  "intentScore": zod.number().int().nullish(),
+  "country": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "productInterest": zod.string().nullish(),
+  "source": zod.string().nullish(),
+  "status": zod.enum(['new', 'working', 'qualified', 'disqualified']),
+  "score": zod.number().int(),
+  "assignedToUserId": zod.string().nullish(),
+  "assignedToName": zod.string().nullish(),
+  "territoryId": zod.string().nullish(),
+  "territoryName": zod.string().nullish(),
+  "convertedOpportunityId": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+export const ListLeadsResponse = zod.array(ListLeadsResponseItem)
+
+
+/**
+ * @summary Create a lead (auto-scored and auto-assigned to matching territory owner)
+ */
+export const CreateLeadParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+
+
+export const createLeadBodyIntentScoreMin = 0;
+export const createLeadBodyIntentScoreMax = 100;
+
+
+
+export const CreateLeadBody = zod.object({
+  "firstName": zod.string().min(1),
+  "lastName": zod.string().min(1),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "company": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "industry": zod.string().nullish(),
+  "companySize": zod.number().int().nullish(),
+  "annualRevenue": zod.string().nullish(),
+  "intentScore": zod.number().int().min(createLeadBodyIntentScoreMin).max(createLeadBodyIntentScoreMax).nullish(),
+  "country": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "productInterest": zod.string().nullish(),
+  "source": zod.string().nullish()
+})
+
+export const CreateLeadResponse = zod.object({
+  "id": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "company": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "industry": zod.string().nullish(),
+  "companySize": zod.number().int().nullish(),
+  "annualRevenue": zod.string().nullish(),
+  "intentScore": zod.number().int().nullish(),
+  "country": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "productInterest": zod.string().nullish(),
+  "source": zod.string().nullish(),
+  "status": zod.enum(['new', 'working', 'qualified', 'disqualified']),
+  "score": zod.number().int(),
+  "assignedToUserId": zod.string().nullish(),
+  "assignedToName": zod.string().nullish(),
+  "territoryId": zod.string().nullish(),
+  "territoryName": zod.string().nullish(),
+  "convertedOpportunityId": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update a lead (re-scores automatically unless score explicitly set)
+ */
+export const UpdateLeadParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "leadId": zod.coerce.string()
+})
+
+
+
+export const updateLeadBodyIntentScoreMin = 0;
+export const updateLeadBodyIntentScoreMax = 100;
+
+export const updateLeadBodyScoreMin = 0;
+export const updateLeadBodyScoreMax = 100;
+
+
+
+export const UpdateLeadBody = zod.object({
+  "firstName": zod.string().min(1).optional(),
+  "lastName": zod.string().min(1).optional(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "company": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "industry": zod.string().nullish(),
+  "companySize": zod.number().int().nullish(),
+  "annualRevenue": zod.string().nullish(),
+  "intentScore": zod.number().int().min(updateLeadBodyIntentScoreMin).max(updateLeadBodyIntentScoreMax).nullish(),
+  "country": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "productInterest": zod.string().nullish(),
+  "source": zod.string().nullish(),
+  "status": zod.enum(['new', 'working', 'qualified', 'disqualified']).optional(),
+  "score": zod.number().int().min(updateLeadBodyScoreMin).max(updateLeadBodyScoreMax).nullish(),
+  "assignedToUserId": zod.string().nullish(),
+  "territoryId": zod.string().nullish()
+})
+
+export const UpdateLeadResponse = zod.object({
+  "id": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "company": zod.string().nullish(),
+  "title": zod.string().nullish(),
+  "industry": zod.string().nullish(),
+  "companySize": zod.number().int().nullish(),
+  "annualRevenue": zod.string().nullish(),
+  "intentScore": zod.number().int().nullish(),
+  "country": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "productInterest": zod.string().nullish(),
+  "source": zod.string().nullish(),
+  "status": zod.enum(['new', 'working', 'qualified', 'disqualified']),
+  "score": zod.number().int(),
+  "assignedToUserId": zod.string().nullish(),
+  "assignedToName": zod.string().nullish(),
+  "territoryId": zod.string().nullish(),
+  "territoryName": zod.string().nullish(),
+  "convertedOpportunityId": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Soft delete a lead
+ */
+export const DeleteLeadParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "leadId": zod.coerce.string()
+})
+
+export const DeleteLeadResponse = zod.void()
+
+
+/**
+ * @summary Explicitly convert a lead into an opportunity (creates or links an account by company name)
+ */
+export const QualifyLeadParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "leadId": zod.coerce.string()
+})
+
+export const QualifyLeadBody = zod.object({
+  "opportunityName": zod.string().nullish(),
+  "value": zod.string().nullish(),
+  "expectedCloseDate": zod.string().nullish(),
+  "accountId": zod.string().nullish()
+})
+
+export const QualifyLeadResponse = zod.object({
+  "id": zod.string(),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullish(),
+  "name": zod.string(),
+  "pipelineId": zod.string().nullish(),
+  "stage": zod.string(),
+  "probability": zod.number().nullish(),
+  "value": zod.string().nullish(),
+  "expectedCloseDate": zod.string().nullish(),
+  "actualCloseDate": zod.string().nullish(),
+  "forecastCategory": zod.string().nullish(),
+  "lossReason": zod.string().nullish(),
+  "nextAction": zod.string().nullish(),
+  "ownerUserId": zod.string().nullish(),
+  "ownerName": zod.string().nullish(),
+  "stageHistory": zod.array(zod.object({
+  "id": zod.string(),
+  "fromStage": zod.string().nullish(),
+  "toStage": zod.string(),
+  "changedByName": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "createdAt": zod.string().nullish(),
+  "updatedAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Re-run scoring rules across all active leads
+ */
+export const RescoreLeadsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const RescoreLeadsResponse = zod.object({
+  "leadsRescored": zod.number().int()
+})
+
+
+/**
+ * @summary List lead scoring rules
+ */
+export const ListLeadScoringRulesParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListLeadScoringRulesResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.string().nullable()
+})),
+  "actionType": zod.enum(['add', 'set']),
+  "points": zod.number().int(),
+  "priority": zod.number().int(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string().nullish()
+})
+export const ListLeadScoringRulesResponse = zod.array(ListLeadScoringRulesResponseItem)
+
+
+/**
+ * @summary Create a lead scoring rule (admin-configurable)
+ */
+export const CreateLeadScoringRuleParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+
+
+export const createLeadScoringRuleBodyPointsMin = -100;
+export const createLeadScoringRuleBodyPointsMax = 100;
+
+
+
+export const CreateLeadScoringRuleBody = zod.object({
+  "name": zod.string().min(1),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.string().nullable()
+})).min(1),
+  "actionType": zod.enum(['add', 'set']),
+  "points": zod.number().int().min(createLeadScoringRuleBodyPointsMin).max(createLeadScoringRuleBodyPointsMax),
+  "priority": zod.number().int().optional(),
+  "isActive": zod.boolean().optional()
+})
+
+export const CreateLeadScoringRuleResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.string().nullable()
+})),
+  "actionType": zod.enum(['add', 'set']),
+  "points": zod.number().int(),
+  "priority": zod.number().int(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update a lead scoring rule
+ */
+export const UpdateLeadScoringRuleParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "ruleId": zod.coerce.string()
+})
+
+
+
+export const updateLeadScoringRuleBodyPointsMin = -100;
+export const updateLeadScoringRuleBodyPointsMax = 100;
+
+
+
+export const UpdateLeadScoringRuleBody = zod.object({
+  "name": zod.string().min(1),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.string().nullable()
+})).min(1),
+  "actionType": zod.enum(['add', 'set']),
+  "points": zod.number().int().min(updateLeadScoringRuleBodyPointsMin).max(updateLeadScoringRuleBodyPointsMax),
+  "priority": zod.number().int().optional(),
+  "isActive": zod.boolean().optional()
+})
+
+export const UpdateLeadScoringRuleResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.string().nullable()
+})),
+  "actionType": zod.enum(['add', 'set']),
+  "points": zod.number().int(),
+  "priority": zod.number().int(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Delete a lead scoring rule
+ */
+export const DeleteLeadScoringRuleParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "ruleId": zod.coerce.string()
+})
+
+export const DeleteLeadScoringRuleResponse = zod.void()
+
+
+/**
+ * @summary List quotes
+ */
+export const ListQuotesParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListQuotesQueryParams = zod.object({
+  "opportunityId": zod.coerce.string().optional()
+})
+
+
+export const listQuotesResponseLineItemsItemQuantityMin = 0;
+
+export const listQuotesResponseLineItemsItemUnitPriceMin = 0;
+
+export const listQuotesResponseLineItemsItemDiscountPercentMin = 0;
+export const listQuotesResponseLineItemsItemDiscountPercentMax = 100;
+
+
+
+export const ListQuotesResponseItem = zod.object({
+  "id": zod.string(),
+  "opportunityId": zod.string(),
+  "opportunityName": zod.string().nullish(),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullish(),
+  "quoteNumber": zod.string(),
+  "status": zod.enum(['draft', 'sent', 'accepted', 'rejected', 'expired']),
+  "lineItems": zod.array(zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().nullish(),
+  "quantity": zod.number().min(listQuotesResponseLineItemsItemQuantityMin),
+  "unitPrice": zod.number().min(listQuotesResponseLineItemsItemUnitPriceMin),
+  "discountPercent": zod.number().min(listQuotesResponseLineItemsItemDiscountPercentMin).max(listQuotesResponseLineItemsItemDiscountPercentMax).nullish()
+})),
+  "discountPercent": zod.number().nullish(),
+  "subtotal": zod.number(),
+  "total": zod.number(),
+  "validUntil": zod.string().nullish(),
+  "recipientEmail": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "sentAt": zod.string().nullish(),
+  "acceptedAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+export const ListQuotesResponse = zod.array(ListQuotesResponseItem)
+
+
+/**
+ * @summary Create a quote from an opportunity (line items default from the opportunity)
+ */
+export const CreateQuoteParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+
+export const createQuoteBodyLineItemsItemQuantityMin = 0;
+
+export const createQuoteBodyLineItemsItemUnitPriceMin = 0;
+
+export const createQuoteBodyLineItemsItemDiscountPercentMin = 0;
+export const createQuoteBodyLineItemsItemDiscountPercentMax = 100;
+
+export const createQuoteBodyDiscountPercentMin = 0;
+export const createQuoteBodyDiscountPercentMax = 100;
+
+
+
+export const CreateQuoteBody = zod.object({
+  "opportunityId": zod.string(),
+  "lineItems": zod.array(zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().nullish(),
+  "quantity": zod.number().min(createQuoteBodyLineItemsItemQuantityMin),
+  "unitPrice": zod.number().min(createQuoteBodyLineItemsItemUnitPriceMin),
+  "discountPercent": zod.number().min(createQuoteBodyLineItemsItemDiscountPercentMin).max(createQuoteBodyLineItemsItemDiscountPercentMax).nullish()
+})).optional(),
+  "discountPercent": zod.number().min(createQuoteBodyDiscountPercentMin).max(createQuoteBodyDiscountPercentMax).nullish(),
+  "validUntil": zod.string().nullish(),
+  "recipientEmail": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+
+export const createQuoteResponseLineItemsItemQuantityMin = 0;
+
+export const createQuoteResponseLineItemsItemUnitPriceMin = 0;
+
+export const createQuoteResponseLineItemsItemDiscountPercentMin = 0;
+export const createQuoteResponseLineItemsItemDiscountPercentMax = 100;
+
+
+
+export const CreateQuoteResponse = zod.object({
+  "id": zod.string(),
+  "opportunityId": zod.string(),
+  "opportunityName": zod.string().nullish(),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullish(),
+  "quoteNumber": zod.string(),
+  "status": zod.enum(['draft', 'sent', 'accepted', 'rejected', 'expired']),
+  "lineItems": zod.array(zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().nullish(),
+  "quantity": zod.number().min(createQuoteResponseLineItemsItemQuantityMin),
+  "unitPrice": zod.number().min(createQuoteResponseLineItemsItemUnitPriceMin),
+  "discountPercent": zod.number().min(createQuoteResponseLineItemsItemDiscountPercentMin).max(createQuoteResponseLineItemsItemDiscountPercentMax).nullish()
+})),
+  "discountPercent": zod.number().nullish(),
+  "subtotal": zod.number(),
+  "total": zod.number(),
+  "validUntil": zod.string().nullish(),
+  "recipientEmail": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "sentAt": zod.string().nullish(),
+  "acceptedAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Quote detail
+ */
+export const GetQuoteParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "quoteId": zod.coerce.string()
+})
+
+
+export const getQuoteResponseLineItemsItemQuantityMin = 0;
+
+export const getQuoteResponseLineItemsItemUnitPriceMin = 0;
+
+export const getQuoteResponseLineItemsItemDiscountPercentMin = 0;
+export const getQuoteResponseLineItemsItemDiscountPercentMax = 100;
+
+
+
+export const GetQuoteResponse = zod.object({
+  "id": zod.string(),
+  "opportunityId": zod.string(),
+  "opportunityName": zod.string().nullish(),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullish(),
+  "quoteNumber": zod.string(),
+  "status": zod.enum(['draft', 'sent', 'accepted', 'rejected', 'expired']),
+  "lineItems": zod.array(zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().nullish(),
+  "quantity": zod.number().min(getQuoteResponseLineItemsItemQuantityMin),
+  "unitPrice": zod.number().min(getQuoteResponseLineItemsItemUnitPriceMin),
+  "discountPercent": zod.number().min(getQuoteResponseLineItemsItemDiscountPercentMin).max(getQuoteResponseLineItemsItemDiscountPercentMax).nullish()
+})),
+  "discountPercent": zod.number().nullish(),
+  "subtotal": zod.number(),
+  "total": zod.number(),
+  "validUntil": zod.string().nullish(),
+  "recipientEmail": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "sentAt": zod.string().nullish(),
+  "acceptedAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update a draft quote's line items, discounts, or recipient
+ */
+export const UpdateQuoteParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "quoteId": zod.coerce.string()
+})
+
+
+export const updateQuoteBodyLineItemsItemQuantityMin = 0;
+
+export const updateQuoteBodyLineItemsItemUnitPriceMin = 0;
+
+export const updateQuoteBodyLineItemsItemDiscountPercentMin = 0;
+export const updateQuoteBodyLineItemsItemDiscountPercentMax = 100;
+
+export const updateQuoteBodyDiscountPercentMin = 0;
+export const updateQuoteBodyDiscountPercentMax = 100;
+
+
+
+export const UpdateQuoteBody = zod.object({
+  "lineItems": zod.array(zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().nullish(),
+  "quantity": zod.number().min(updateQuoteBodyLineItemsItemQuantityMin),
+  "unitPrice": zod.number().min(updateQuoteBodyLineItemsItemUnitPriceMin),
+  "discountPercent": zod.number().min(updateQuoteBodyLineItemsItemDiscountPercentMin).max(updateQuoteBodyLineItemsItemDiscountPercentMax).nullish()
+})).optional(),
+  "discountPercent": zod.number().min(updateQuoteBodyDiscountPercentMin).max(updateQuoteBodyDiscountPercentMax).nullish(),
+  "validUntil": zod.string().nullish(),
+  "recipientEmail": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+
+export const updateQuoteResponseLineItemsItemQuantityMin = 0;
+
+export const updateQuoteResponseLineItemsItemUnitPriceMin = 0;
+
+export const updateQuoteResponseLineItemsItemDiscountPercentMin = 0;
+export const updateQuoteResponseLineItemsItemDiscountPercentMax = 100;
+
+
+
+export const UpdateQuoteResponse = zod.object({
+  "id": zod.string(),
+  "opportunityId": zod.string(),
+  "opportunityName": zod.string().nullish(),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullish(),
+  "quoteNumber": zod.string(),
+  "status": zod.enum(['draft', 'sent', 'accepted', 'rejected', 'expired']),
+  "lineItems": zod.array(zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().nullish(),
+  "quantity": zod.number().min(updateQuoteResponseLineItemsItemQuantityMin),
+  "unitPrice": zod.number().min(updateQuoteResponseLineItemsItemUnitPriceMin),
+  "discountPercent": zod.number().min(updateQuoteResponseLineItemsItemDiscountPercentMin).max(updateQuoteResponseLineItemsItemDiscountPercentMax).nullish()
+})),
+  "discountPercent": zod.number().nullish(),
+  "subtotal": zod.number(),
+  "total": zod.number(),
+  "validUntil": zod.string().nullish(),
+  "recipientEmail": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "sentAt": zod.string().nullish(),
+  "acceptedAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Delete a draft quote
+ */
+export const DeleteQuoteParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "quoteId": zod.coerce.string()
+})
+
+export const DeleteQuoteResponse = zod.void()
+
+
+/**
+ * @summary Download the quote as a PDF
+ */
+export const GetQuotePdfParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "quoteId": zod.coerce.string()
+})
+
+export const GetQuotePdfResponse = zod.unknown()
+
+
+/**
+ * @summary Generate the quote PDF and email it to the recipient
+ */
+export const SendQuoteParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "quoteId": zod.coerce.string()
+})
+
+export const SendQuoteBody = zod.object({
+  "recipientEmail": zod.string().nullish(),
+  "message": zod.string().nullish()
+})
+
+
+export const sendQuoteResponseLineItemsItemQuantityMin = 0;
+
+export const sendQuoteResponseLineItemsItemUnitPriceMin = 0;
+
+export const sendQuoteResponseLineItemsItemDiscountPercentMin = 0;
+export const sendQuoteResponseLineItemsItemDiscountPercentMax = 100;
+
+
+
+export const SendQuoteResponse = zod.object({
+  "id": zod.string(),
+  "opportunityId": zod.string(),
+  "opportunityName": zod.string().nullish(),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullish(),
+  "quoteNumber": zod.string(),
+  "status": zod.enum(['draft', 'sent', 'accepted', 'rejected', 'expired']),
+  "lineItems": zod.array(zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().nullish(),
+  "quantity": zod.number().min(sendQuoteResponseLineItemsItemQuantityMin),
+  "unitPrice": zod.number().min(sendQuoteResponseLineItemsItemUnitPriceMin),
+  "discountPercent": zod.number().min(sendQuoteResponseLineItemsItemDiscountPercentMin).max(sendQuoteResponseLineItemsItemDiscountPercentMax).nullish()
+})),
+  "discountPercent": zod.number().nullish(),
+  "subtotal": zod.number(),
+  "total": zod.number(),
+  "validUntil": zod.string().nullish(),
+  "recipientEmail": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "sentAt": zod.string().nullish(),
+  "acceptedAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Mark a quote as accepted
+ */
+export const AcceptQuoteParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "quoteId": zod.coerce.string()
+})
+
+
+export const acceptQuoteResponseLineItemsItemQuantityMin = 0;
+
+export const acceptQuoteResponseLineItemsItemUnitPriceMin = 0;
+
+export const acceptQuoteResponseLineItemsItemDiscountPercentMin = 0;
+export const acceptQuoteResponseLineItemsItemDiscountPercentMax = 100;
+
+
+
+export const AcceptQuoteResponse = zod.object({
+  "id": zod.string(),
+  "opportunityId": zod.string(),
+  "opportunityName": zod.string().nullish(),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullish(),
+  "quoteNumber": zod.string(),
+  "status": zod.enum(['draft', 'sent', 'accepted', 'rejected', 'expired']),
+  "lineItems": zod.array(zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().nullish(),
+  "quantity": zod.number().min(acceptQuoteResponseLineItemsItemQuantityMin),
+  "unitPrice": zod.number().min(acceptQuoteResponseLineItemsItemUnitPriceMin),
+  "discountPercent": zod.number().min(acceptQuoteResponseLineItemsItemDiscountPercentMin).max(acceptQuoteResponseLineItemsItemDiscountPercentMax).nullish()
+})),
+  "discountPercent": zod.number().nullish(),
+  "subtotal": zod.number(),
+  "total": zod.number(),
+  "validUntil": zod.string().nullish(),
+  "recipientEmail": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "sentAt": zod.string().nullish(),
+  "acceptedAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary List territories
+ */
+export const ListTerritoriesParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListTerritoriesResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "ownerUserId": zod.string().nullish(),
+  "ownerName": zod.string().nullish(),
+  "countries": zod.array(zod.string()),
+  "states": zod.array(zod.string()),
+  "products": zod.array(zod.string()),
+  "quota": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+export const ListTerritoriesResponse = zod.array(ListTerritoriesResponseItem)
+
+
+/**
+ * @summary Create a territory
+ */
+export const CreateTerritoryParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+
+
+
+export const CreateTerritoryBody = zod.object({
+  "name": zod.string().min(1),
+  "ownerUserId": zod.string().nullish(),
+  "countries": zod.array(zod.string()).optional(),
+  "states": zod.array(zod.string()).optional(),
+  "products": zod.array(zod.string()).optional(),
+  "quota": zod.string().nullish()
+})
+
+export const CreateTerritoryResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "ownerUserId": zod.string().nullish(),
+  "ownerName": zod.string().nullish(),
+  "countries": zod.array(zod.string()),
+  "states": zod.array(zod.string()),
+  "products": zod.array(zod.string()),
+  "quota": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update a territory
+ */
+export const UpdateTerritoryParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "territoryId": zod.coerce.string()
+})
+
+
+
+
+export const UpdateTerritoryBody = zod.object({
+  "name": zod.string().min(1),
+  "ownerUserId": zod.string().nullish(),
+  "countries": zod.array(zod.string()).optional(),
+  "states": zod.array(zod.string()).optional(),
+  "products": zod.array(zod.string()).optional(),
+  "quota": zod.string().nullish()
+})
+
+export const UpdateTerritoryResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "ownerUserId": zod.string().nullish(),
+  "ownerName": zod.string().nullish(),
+  "countries": zod.array(zod.string()),
+  "states": zod.array(zod.string()),
+  "products": zod.array(zod.string()),
+  "quota": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Deactivate a territory
+ */
+export const DeleteTerritoryParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "territoryId": zod.coerce.string()
+})
+
+export const DeleteTerritoryResponse = zod.void()
+
+
+/**
+ * @summary Coverage matrix - territory, owner, account count, quota, achievement
+ */
+export const GetTerritoryCoverageParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const GetTerritoryCoverageResponseItem = zod.object({
+  "territoryId": zod.string(),
+  "territoryName": zod.string(),
+  "ownerName": zod.string().nullish(),
+  "accountCount": zod.number().int(),
+  "quota": zod.number().nullish(),
+  "openPipelineValue": zod.number(),
+  "closedWonValue": zod.number(),
+  "achievementPercent": zod.number().nullish()
+})
+export const GetTerritoryCoverageResponse = zod.array(GetTerritoryCoverageResponseItem)
+
+
+/**
+ * @summary Committed / best-case / pipeline totals by month
+ */
+export const GetForecastParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const getForecastQueryMonthsMax = 24;
+
+
+
+export const GetForecastQueryParams = zod.object({
+  "months": zod.coerce.number().int().min(1).max(getForecastQueryMonthsMax).optional(),
+  "ownerUserId": zod.coerce.string().optional()
+})
+
+export const GetForecastResponse = zod.object({
+  "months": zod.array(zod.object({
+  "month": zod.string(),
+  "committed": zod.number(),
+  "bestCase": zod.number(),
+  "pipeline": zod.number(),
+  "closedWon": zod.number()
+})),
+  "totals": zod.object({
+  "month": zod.string(),
+  "committed": zod.number(),
+  "bestCase": zod.number(),
+  "pipeline": zod.number(),
+  "closedWon": zod.number()
+})
+})
 
 
 /**

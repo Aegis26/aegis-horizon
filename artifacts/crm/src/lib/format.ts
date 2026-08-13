@@ -7,6 +7,14 @@ export function formatCurrency(cents: number) {
   }).format(cents / 100);
 }
 
+export function formatDollars(amount: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 export function formatDate(dateString: string | null | undefined) {
   if (!dateString) return "N/A";
   try {

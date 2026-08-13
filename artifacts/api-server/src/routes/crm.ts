@@ -31,7 +31,6 @@ import {
 } from "@workspace/db";
 import {
   ListAccountsResponse,
-  ListOpportunitiesResponse,
   ListWorkflowsResponse,
   CreateAccountBody,
   UpdateAccountBody,
@@ -1083,35 +1082,6 @@ router.post(
 );
 
 /* --------------------------- existing endpoints -------------------------- */
-
-router.get(
-  "/orgs/:orgId/opportunities",
-  attachUser,
-  attachOrg,
-  requireFeature("sales"),
-  async (req, res): Promise<void> => {
-    const rows = await db
-      .select()
-      .from(opportunities)
-      .where(eq(opportunities.orgId, req.currentOrg!.id))
-      .orderBy(desc(opportunities.createdAt));
-    res.json(
-      ListOpportunitiesResponse.parse(
-        rows.map((o) => ({
-          id: o.id,
-          accountId: o.accountId,
-          name: o.name,
-          stage: o.stage,
-          probability: o.probability,
-          value: o.value,
-          expectedCloseDate: o.expectedCloseDate,
-          forecastCategory: o.forecastCategory,
-          createdAt: o.createdAt.toISOString(),
-        })),
-      ),
-    );
-  },
-);
 
 router.get(
   "/orgs/:orgId/workflows",

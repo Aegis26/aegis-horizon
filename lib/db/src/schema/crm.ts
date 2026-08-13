@@ -193,6 +193,153 @@ export const segments = pgTable("segments", {
     .$onUpdate(() => new Date()),
 });
 
+export const pipelines = pgTable("pipelines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  isDefault: boolean("is_default").default(false).notNull(),
+  // Array of stage objects: { key, name, probability, forecastCategory, order, isClosedWon, isClosedLost }
+  stages: jsonb("stages").default([]).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export const opportunityStageHistory = pgTable("opportunity_stage_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  opportunityId: uuid("opportunity_id")
+    .notNull()
+    .references(() => opportunities.id, { onDelete: "cascade" }),
+  fromStage: text("from_stage"),
+  toStage: text("to_stage").notNull(),
+  changedByUserId: uuid("changed_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const territories = pgTable("territories", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  ownerUserId: uuid("owner_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  countries: text("countries").array().default([]),
+  states: text("states").array().default([]),
+  products: text("products").array().default([]),
+  quota: numeric("quota"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export const leads = pgTable("leads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  company: text("company"),
+  title: text("title"),
+  industry: text("industry"),
+  companySize: integer("company_size"),
+  annualRevenue: numeric("annual_revenue"),
+  intentScore: integer("intent_score"),
+  country: text("country"),
+  state: text("state"),
+  productInterest: text("product_interest"),
+  source: text("source"),
+  status: text("status").default("new").notNull(),
+  score: integer("score").default(0).notNull(),
+  assignedToUserId: uuid("assigned_to_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  territoryId: uuid("territory_id").references(() => territories.id, {
+    onDelete: "set null",
+  }),
+  convertedOpportunityId: uuid("converted_opportunity_id"),
+  metadata: jsonb("metadata").default({}),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export const leadScoringRules = pgTable("lead_scoring_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  // Array of condition objects: { field, operator, value }
+  conditions: jsonb("conditions").default([]).notNull(),
+  // Action: { type: "add" | "set", points: number }
+  actionType: text("action_type").default("add").notNull(),
+  points: integer("points").default(0).notNull(),
+  priority: integer("priority").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export const quotes = pgTable("quotes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  opportunityId: uuid("opportunity_id")
+    .notNull()
+    .references(() => opportunities.id, { onDelete: "cascade" }),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  quoteNumber: text("quote_number").notNull(),
+  status: text("status").default("draft").notNull(),
+  // Array of line item objects: { name, description, quantity, unitPriceCents, discountPercent }
+  lineItems: jsonb("line_items").default([]).notNull(),
+  discountPercent: numeric("discount_percent").default("0"),
+  validUntil: date("valid_until", { mode: "string" }),
+  recipientEmail: text("recipient_email"),
+  notes: text("notes"),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export type Pipeline = typeof pipelines.$inferSelect;
+export type OpportunityStageHistory = typeof opportunityStageHistory.$inferSelect;
+export type Territory = typeof territories.$inferSelect;
+export type Lead = typeof leads.$inferSelect;
+export type LeadScoringRule = typeof leadScoringRules.$inferSelect;
+export type Quote = typeof quotes.$inferSelect;
 export type Segment = typeof segments.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;

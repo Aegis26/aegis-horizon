@@ -612,6 +612,495 @@ export interface ErrorEnvelope {
   error: string;
 }
 
+export type PipelineStageForecastCategory = typeof PipelineStageForecastCategory[keyof typeof PipelineStageForecastCategory];
+
+
+export const PipelineStageForecastCategory = {
+  pipeline: 'pipeline',
+  best_case: 'best_case',
+  committed: 'committed',
+  closed_won: 'closed_won',
+  closed_lost: 'closed_lost',
+} as const;
+
+export interface PipelineStage {
+  /** @minLength 1 */
+  key: string;
+  /** @minLength 1 */
+  name: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  probability: number;
+  forecastCategory: PipelineStageForecastCategory;
+  order: number;
+}
+
+export interface Pipeline {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  stages: PipelineStage[];
+  /** @nullable */
+  createdAt?: string | null;
+}
+
+export interface PipelineCreate {
+  /** @minLength 1 */
+  name: string;
+  /** @minItems 2 */
+  stages: PipelineStage[];
+}
+
+export interface OpportunityCreate {
+  accountId: string;
+  /** @minLength 1 */
+  name: string;
+  /** @nullable */
+  pipelineId?: string | null;
+  /** @nullable */
+  stage?: string | null;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  probability?: number | null;
+  /** @nullable */
+  value?: string | null;
+  /** @nullable */
+  expectedCloseDate?: string | null;
+  /** @nullable */
+  nextAction?: string | null;
+}
+
+export interface OpportunityUpdate {
+  /** @minLength 1 */
+  name?: string;
+  /** @nullable */
+  pipelineId?: string | null;
+  /** @minLength 1 */
+  stage?: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  probability?: number | null;
+  /** @nullable */
+  value?: string | null;
+  /** @nullable */
+  expectedCloseDate?: string | null;
+  /** @nullable */
+  forecastCategory?: string | null;
+  /** @nullable */
+  lossReason?: string | null;
+  /** @nullable */
+  nextAction?: string | null;
+  /** @nullable */
+  ownerUserId?: string | null;
+}
+
+export interface StageHistoryEntry {
+  id: string;
+  /** @nullable */
+  fromStage?: string | null;
+  toStage: string;
+  /** @nullable */
+  changedByName?: string | null;
+  createdAt: string;
+}
+
+export interface OpportunityDetail {
+  id: string;
+  accountId: string;
+  /** @nullable */
+  accountName?: string | null;
+  name: string;
+  /** @nullable */
+  pipelineId?: string | null;
+  stage: string;
+  /** @nullable */
+  probability?: number | null;
+  /** @nullable */
+  value?: string | null;
+  /** @nullable */
+  expectedCloseDate?: string | null;
+  /** @nullable */
+  actualCloseDate?: string | null;
+  /** @nullable */
+  forecastCategory?: string | null;
+  /** @nullable */
+  lossReason?: string | null;
+  /** @nullable */
+  nextAction?: string | null;
+  /** @nullable */
+  ownerUserId?: string | null;
+  /** @nullable */
+  ownerName?: string | null;
+  stageHistory: StageHistoryEntry[];
+  /** @nullable */
+  createdAt?: string | null;
+  /** @nullable */
+  updatedAt?: string | null;
+}
+
+export type LeadStatus = typeof LeadStatus[keyof typeof LeadStatus];
+
+
+export const LeadStatus = {
+  new: 'new',
+  working: 'working',
+  qualified: 'qualified',
+  disqualified: 'disqualified',
+} as const;
+
+export interface Lead {
+  id: string;
+  firstName: string;
+  lastName: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  company?: string | null;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  industry?: string | null;
+  /** @nullable */
+  companySize?: number | null;
+  /** @nullable */
+  annualRevenue?: string | null;
+  /** @nullable */
+  intentScore?: number | null;
+  /** @nullable */
+  country?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  productInterest?: string | null;
+  /** @nullable */
+  source?: string | null;
+  status: LeadStatus;
+  score: number;
+  /** @nullable */
+  assignedToUserId?: string | null;
+  /** @nullable */
+  assignedToName?: string | null;
+  /** @nullable */
+  territoryId?: string | null;
+  /** @nullable */
+  territoryName?: string | null;
+  /** @nullable */
+  convertedOpportunityId?: string | null;
+  /** @nullable */
+  createdAt?: string | null;
+}
+
+export interface LeadCreate {
+  /** @minLength 1 */
+  firstName: string;
+  /** @minLength 1 */
+  lastName: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  company?: string | null;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  industry?: string | null;
+  /** @nullable */
+  companySize?: number | null;
+  /** @nullable */
+  annualRevenue?: string | null;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  intentScore?: number | null;
+  /** @nullable */
+  country?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  productInterest?: string | null;
+  /** @nullable */
+  source?: string | null;
+}
+
+export type LeadUpdateStatus = typeof LeadUpdateStatus[keyof typeof LeadUpdateStatus];
+
+
+export const LeadUpdateStatus = {
+  new: 'new',
+  working: 'working',
+  qualified: 'qualified',
+  disqualified: 'disqualified',
+} as const;
+
+export interface LeadUpdate {
+  /** @minLength 1 */
+  firstName?: string;
+  /** @minLength 1 */
+  lastName?: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  company?: string | null;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  industry?: string | null;
+  /** @nullable */
+  companySize?: number | null;
+  /** @nullable */
+  annualRevenue?: string | null;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  intentScore?: number | null;
+  /** @nullable */
+  country?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  productInterest?: string | null;
+  /** @nullable */
+  source?: string | null;
+  status?: LeadUpdateStatus;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  score?: number | null;
+  /** @nullable */
+  assignedToUserId?: string | null;
+  /** @nullable */
+  territoryId?: string | null;
+}
+
+export interface QualifyLeadRequest {
+  /** @nullable */
+  opportunityName?: string | null;
+  /** @nullable */
+  value?: string | null;
+  /** @nullable */
+  expectedCloseDate?: string | null;
+  /** @nullable */
+  accountId?: string | null;
+}
+
+export interface RescoreResult {
+  leadsRescored: number;
+}
+
+export type LeadScoringRuleActionType = typeof LeadScoringRuleActionType[keyof typeof LeadScoringRuleActionType];
+
+
+export const LeadScoringRuleActionType = {
+  add: 'add',
+  set: 'set',
+} as const;
+
+export interface LeadScoringRule {
+  id: string;
+  name: string;
+  conditions: SegmentCondition[];
+  actionType: LeadScoringRuleActionType;
+  points: number;
+  priority: number;
+  isActive: boolean;
+  /** @nullable */
+  createdAt?: string | null;
+}
+
+export type LeadScoringRuleCreateActionType = typeof LeadScoringRuleCreateActionType[keyof typeof LeadScoringRuleCreateActionType];
+
+
+export const LeadScoringRuleCreateActionType = {
+  add: 'add',
+  set: 'set',
+} as const;
+
+export interface LeadScoringRuleCreate {
+  /** @minLength 1 */
+  name: string;
+  /** @minItems 1 */
+  conditions: SegmentCondition[];
+  actionType: LeadScoringRuleCreateActionType;
+  /**
+     * @minimum -100
+     * @maximum 100
+     */
+  points: number;
+  priority?: number;
+  isActive?: boolean;
+}
+
+export interface QuoteLineItem {
+  /** @minLength 1 */
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  /** @minimum 0 */
+  quantity: number;
+  /** @minimum 0 */
+  unitPrice: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  discountPercent?: number | null;
+}
+
+export type QuoteStatus = typeof QuoteStatus[keyof typeof QuoteStatus];
+
+
+export const QuoteStatus = {
+  draft: 'draft',
+  sent: 'sent',
+  accepted: 'accepted',
+  rejected: 'rejected',
+  expired: 'expired',
+} as const;
+
+export interface Quote {
+  id: string;
+  opportunityId: string;
+  /** @nullable */
+  opportunityName?: string | null;
+  accountId: string;
+  /** @nullable */
+  accountName?: string | null;
+  quoteNumber: string;
+  status: QuoteStatus;
+  lineItems: QuoteLineItem[];
+  /** @nullable */
+  discountPercent?: number | null;
+  subtotal: number;
+  total: number;
+  /** @nullable */
+  validUntil?: string | null;
+  /** @nullable */
+  recipientEmail?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  sentAt?: string | null;
+  /** @nullable */
+  acceptedAt?: string | null;
+  /** @nullable */
+  createdAt?: string | null;
+}
+
+export interface QuoteCreate {
+  opportunityId: string;
+  lineItems?: QuoteLineItem[];
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  discountPercent?: number | null;
+  /** @nullable */
+  validUntil?: string | null;
+  /** @nullable */
+  recipientEmail?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface QuoteUpdate {
+  lineItems?: QuoteLineItem[];
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  discountPercent?: number | null;
+  /** @nullable */
+  validUntil?: string | null;
+  /** @nullable */
+  recipientEmail?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface QuoteSendRequest {
+  /** @nullable */
+  recipientEmail?: string | null;
+  /** @nullable */
+  message?: string | null;
+}
+
+export interface Territory {
+  id: string;
+  name: string;
+  /** @nullable */
+  ownerUserId?: string | null;
+  /** @nullable */
+  ownerName?: string | null;
+  countries: string[];
+  states: string[];
+  products: string[];
+  /** @nullable */
+  quota?: string | null;
+  /** @nullable */
+  createdAt?: string | null;
+}
+
+export interface TerritoryCreate {
+  /** @minLength 1 */
+  name: string;
+  /** @nullable */
+  ownerUserId?: string | null;
+  countries?: string[];
+  states?: string[];
+  products?: string[];
+  /** @nullable */
+  quota?: string | null;
+}
+
+export interface TerritoryCoverageRow {
+  territoryId: string;
+  territoryName: string;
+  /** @nullable */
+  ownerName?: string | null;
+  accountCount: number;
+  /** @nullable */
+  quota?: number | null;
+  openPipelineValue: number;
+  closedWonValue: number;
+  /** @nullable */
+  achievementPercent?: number | null;
+}
+
+export interface ForecastMonth {
+  month: string;
+  committed: number;
+  bestCase: number;
+  pipeline: number;
+  closedWon: number;
+}
+
+export interface Forecast {
+  months: ForecastMonth[];
+  totals: ForecastMonth;
+}
+
 export type ListAccountsParams = {
 /**
  * Search by name, industry, location, or custom field values
@@ -623,5 +1112,28 @@ industry?: string;
  */
 segmentId?: string;
 includeInactive?: boolean;
+};
+
+export type ListOpportunitiesParams = {
+pipelineId?: string;
+stage?: string;
+};
+
+export type ListLeadsParams = {
+status?: string;
+q?: string;
+};
+
+export type ListQuotesParams = {
+opportunityId?: string;
+};
+
+export type GetForecastParams = {
+/**
+ * @minimum 1
+ * @maximum 24
+ */
+months?: number;
+ownerUserId?: string;
 };
 

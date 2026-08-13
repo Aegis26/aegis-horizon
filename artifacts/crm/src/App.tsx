@@ -15,6 +15,10 @@ import Accounts from "@/pages/Accounts";
 import AccountDetail from "@/pages/AccountDetail";
 import Segments from "@/pages/Segments";
 import Opportunities from "@/pages/Opportunities";
+import Leads from "@/pages/Leads";
+import Quotes from "@/pages/Quotes";
+import Territories from "@/pages/Territories";
+import Forecast from "@/pages/Forecast";
 import Automation from "@/pages/Automation";
 import Billing from "@/pages/Billing";
 import Settings from "@/pages/Settings";
@@ -194,6 +198,10 @@ function ClerkProviderWithRoutes() {
           <Route path="/accounts/:accountId" component={() => <ProtectedRoute component={AccountDetail} />} />
           <Route path="/segments" component={() => <ProtectedRoute component={Segments} />} />
           <Route path="/opportunities" component={() => <ProtectedRoute component={Opportunities} />} />
+          <Route path="/leads" component={() => <ProtectedRoute component={Leads} />} />
+          <Route path="/quotes" component={() => <ProtectedRoute component={Quotes} />} />
+          <Route path="/territories" component={() => <ProtectedRoute component={Territories} />} />
+          <Route path="/forecast" component={() => <ProtectedRoute component={Forecast} />} />
           <Route path="/automation" component={() => <ProtectedRoute component={Automation} />} />
           <Route path="/billing" component={() => <ProtectedRoute component={Billing} />} />
           <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />

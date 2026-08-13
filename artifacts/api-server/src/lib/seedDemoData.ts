@@ -50,10 +50,10 @@ export async function seedDemoData(orgId: string, userId: string): Promise<void>
     .returning();
 
   const stages = [
-    { name: "Fleet tracking rollout", stage: "Discovery", probability: 20, value: "48000" },
-    { name: "Plant expansion suite", stage: "Qualification", probability: 35, value: "125000" },
-    { name: "Wealth desk platform", stage: "Proposal", probability: 60, value: "86000" },
-    { name: "Patient portal renewal", stage: "Negotiation", probability: 75, value: "54000" },
+    { name: "Fleet tracking rollout", stage: "prospecting", probability: 10, value: "48000", forecastCategory: "pipeline" },
+    { name: "Plant expansion suite", stage: "qualified", probability: 25, value: "125000", forecastCategory: "pipeline" },
+    { name: "Wealth desk platform", stage: "proposal", probability: 50, value: "86000", forecastCategory: "best_case" },
+    { name: "Patient portal renewal", stage: "negotiation", probability: 75, value: "54000", forecastCategory: "committed" },
   ];
 
   await db.insert(opportunities).values(
@@ -64,7 +64,7 @@ export async function seedDemoData(orgId: string, userId: string): Promise<void>
       stage: s.stage,
       probability: s.probability,
       value: s.value,
-      forecastCategory: s.probability >= 60 ? "commit" : "pipeline",
+      forecastCategory: s.forecastCategory,
       ownerUserId: userId,
       expectedCloseDate: new Date(Date.now() + (30 + i * 15) * 86400000)
         .toISOString()

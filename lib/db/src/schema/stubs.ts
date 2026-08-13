@@ -15,7 +15,6 @@ function stub(tableName: string) {
   });
 }
 
-export const quotes = stub("quotes");
 export const cases = stub("cases");
 export const contracts = stub("contracts");
 export const documents = stub("documents");

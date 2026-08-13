@@ -33,31 +33,5 @@ export const usageLogs = pgTable("usage_logs", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const pipelines = pgTable("pipelines", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  orgId: uuid("org_id")
-    .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  type: text("type").notNull(),
-  stages: jsonb("stages").default([]),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
-export const territories = pgTable("territories", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  orgId: uuid("org_id")
-    .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  type: text("type"),
-  criteria: jsonb("criteria").default({}),
-  ownerUserId: uuid("owner_user_id").references(() => users.id, {
-    onDelete: "set null",
-  }),
-  quota: numeric("quota"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
 export type FeatureEntitlement = typeof featureEntitlements.$inferSelect;
 export type UsageLog = typeof usageLogs.$inferSelect;

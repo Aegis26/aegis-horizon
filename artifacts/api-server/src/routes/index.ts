@@ -4,6 +4,7 @@ import authRouter from "./auth";
 import orgsRouter from "./orgs";
 import billingRouter from "./billing";
 import crmRouter from "./crm";
+import salesRouter from "./sales";
 import dashboardRouter from "./dashboard";
 import storageRouter from "./storage";
 
@@ -15,6 +16,7 @@ router.use(authRouter);
 // so their middleware chains (feature gates, role gates) apply.
 router.use(billingRouter);
 router.use(crmRouter);
+router.use(salesRouter);
 router.use(storageRouter);
 router.use(dashboardRouter);
 router.use(orgsRouter);

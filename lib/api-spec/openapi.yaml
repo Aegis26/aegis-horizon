@@ -15,6 +15,7 @@ tags:
   - name: features
   - name: billing
   - name: crm
+  - name: sales
   - name: dashboard
   - name: storage
 paths:
@@ -702,10 +703,18 @@ paths:
   /orgs/{orgId}/opportunities:
     get:
       operationId: listOpportunities
-      tags: [crm]
+      tags: [sales]
       summary: List opportunities (requires 'sales' feature; 403 otherwise)
       parameters:
         - $ref: "#/components/parameters/OrgId"
+        - name: pipelineId
+          in: query
+          required: false
+          schema: { type: string }
+        - name: stage
+          in: query
+          required: false
+          schema: { type: string }
       responses:
         "200":
           description: Opportunities
@@ -721,6 +730,569 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FeatureGateError"
+    post:
+      operationId: createOpportunity
+      tags: [sales]
+      summary: Create an opportunity
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpportunityCreate"
+      responses:
+        "201":
+          description: Created opportunity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpportunityDetail"
+  /orgs/{orgId}/opportunities/{opportunityId}:
+    get:
+      operationId: getOpportunity
+      tags: [sales]
+      summary: Opportunity detail with stage history and quotes
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/OpportunityId"
+      responses:
+        "200":
+          description: Opportunity detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpportunityDetail"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateOpportunity
+      tags: [sales]
+      summary: Update an opportunity (stage changes are logged; probability auto-suggested from stage unless overridden)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/OpportunityId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpportunityUpdate"
+      responses:
+        "200":
+          description: Updated opportunity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpportunityDetail"
+    delete:
+      operationId: deleteOpportunity
+      tags: [sales]
+      summary: Delete an opportunity
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/OpportunityId"
+      responses:
+        "204":
+          description: Deleted
+  /orgs/{orgId}/opportunities/{opportunityId}/convert-to-customer:
+    post:
+      operationId: convertOpportunityToCustomer
+      tags: [sales]
+      summary: Mark opportunity closed-won and flag its account as a customer
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/OpportunityId"
+      responses:
+        "200":
+          description: Updated opportunity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpportunityDetail"
+  /orgs/{orgId}/pipelines:
+    get:
+      operationId: listPipelines
+      tags: [sales]
+      summary: List pipelines (a default pipeline is auto-created if none exist)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Pipelines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pipeline"
+    post:
+      operationId: createPipeline
+      tags: [sales]
+      summary: Create a pipeline with custom stages
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PipelineCreate"
+      responses:
+        "201":
+          description: Created pipeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pipeline"
+  /orgs/{orgId}/pipelines/{pipelineId}:
+    patch:
+      operationId: updatePipeline
+      tags: [sales]
+      summary: Update a pipeline's name or stages
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - name: pipelineId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PipelineCreate"
+      responses:
+        "200":
+          description: Updated pipeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pipeline"
+  /orgs/{orgId}/leads:
+    get:
+      operationId: listLeads
+      tags: [sales]
+      summary: List leads with scores
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - name: status
+          in: query
+          required: false
+          schema: { type: string }
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lead"
+    post:
+      operationId: createLead
+      tags: [sales]
+      summary: Create a lead (auto-scored and auto-assigned to matching territory owner)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadCreate"
+      responses:
+        "201":
+          description: Created lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+  /orgs/{orgId}/leads/{leadId}:
+    patch:
+      operationId: updateLead
+      tags: [sales]
+      summary: Update a lead (re-scores automatically unless score explicitly set)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/LeadId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadUpdate"
+      responses:
+        "200":
+          description: Updated lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+    delete:
+      operationId: deleteLead
+      tags: [sales]
+      summary: Soft delete a lead
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/LeadId"
+      responses:
+        "204":
+          description: Deleted
+  /orgs/{orgId}/leads/{leadId}/qualify:
+    post:
+      operationId: qualifyLead
+      tags: [sales]
+      summary: Explicitly convert a lead into an opportunity (creates or links an account by company name)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/LeadId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QualifyLeadRequest"
+      responses:
+        "201":
+          description: Created opportunity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpportunityDetail"
+  /orgs/{orgId}/leads/rescore:
+    post:
+      operationId: rescoreLeads
+      tags: [sales]
+      summary: Re-run scoring rules across all active leads
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Rescore result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RescoreResult"
+  /orgs/{orgId}/lead-scoring-rules:
+    get:
+      operationId: listLeadScoringRules
+      tags: [sales]
+      summary: List lead scoring rules
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeadScoringRule"
+    post:
+      operationId: createLeadScoringRule
+      tags: [sales]
+      summary: Create a lead scoring rule (admin-configurable)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadScoringRuleCreate"
+      responses:
+        "201":
+          description: Created rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadScoringRule"
+  /orgs/{orgId}/lead-scoring-rules/{ruleId}:
+    patch:
+      operationId: updateLeadScoringRule
+      tags: [sales]
+      summary: Update a lead scoring rule
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/RuleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadScoringRuleCreate"
+      responses:
+        "200":
+          description: Updated rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadScoringRule"
+    delete:
+      operationId: deleteLeadScoringRule
+      tags: [sales]
+      summary: Delete a lead scoring rule
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/RuleId"
+      responses:
+        "204":
+          description: Deleted
+  /orgs/{orgId}/quotes:
+    get:
+      operationId: listQuotes
+      tags: [sales]
+      summary: List quotes
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - name: opportunityId
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Quotes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Quote"
+    post:
+      operationId: createQuote
+      tags: [sales]
+      summary: Create a quote from an opportunity (line items default from the opportunity)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteCreate"
+      responses:
+        "201":
+          description: Created quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+  /orgs/{orgId}/quotes/{quoteId}:
+    get:
+      operationId: getQuote
+      tags: [sales]
+      summary: Quote detail
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/QuoteId"
+      responses:
+        "200":
+          description: Quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateQuote
+      tags: [sales]
+      summary: Update a draft quote's line items, discounts, or recipient
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/QuoteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteUpdate"
+      responses:
+        "200":
+          description: Updated quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+    delete:
+      operationId: deleteQuote
+      tags: [sales]
+      summary: Delete a draft quote
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/QuoteId"
+      responses:
+        "204":
+          description: Deleted
+  /orgs/{orgId}/quotes/{quoteId}/pdf:
+    get:
+      operationId: getQuotePdf
+      tags: [sales]
+      summary: Download the quote as a PDF
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/QuoteId"
+      responses:
+        "200":
+          description: PDF document
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+  /orgs/{orgId}/quotes/{quoteId}/send:
+    post:
+      operationId: sendQuote
+      tags: [sales]
+      summary: Generate the quote PDF and email it to the recipient
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/QuoteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteSendRequest"
+      responses:
+        "200":
+          description: Sent quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "502":
+          description: Email delivery failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /orgs/{orgId}/quotes/{quoteId}/accept:
+    post:
+      operationId: acceptQuote
+      tags: [sales]
+      summary: Mark a quote as accepted
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/QuoteId"
+      responses:
+        "200":
+          description: Accepted quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+  /orgs/{orgId}/territories:
+    get:
+      operationId: listTerritories
+      tags: [sales]
+      summary: List territories
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Territories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Territory"
+    post:
+      operationId: createTerritory
+      tags: [sales]
+      summary: Create a territory
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TerritoryCreate"
+      responses:
+        "201":
+          description: Created territory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Territory"
+  /orgs/{orgId}/territories/{territoryId}:
+    patch:
+      operationId: updateTerritory
+      tags: [sales]
+      summary: Update a territory
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/TerritoryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TerritoryCreate"
+      responses:
+        "200":
+          description: Updated territory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Territory"
+    delete:
+      operationId: deleteTerritory
+      tags: [sales]
+      summary: Deactivate a territory
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/TerritoryId"
+      responses:
+        "204":
+          description: Deleted
+  /orgs/{orgId}/territories/coverage:
+    get:
+      operationId: getTerritoryCoverage
+      tags: [sales]
+      summary: Coverage matrix - territory, owner, account count, quota, achievement
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Coverage rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TerritoryCoverageRow"
+  /orgs/{orgId}/forecast:
+    get:
+      operationId: getForecast
+      tags: [sales]
+      summary: Committed / best-case / pipeline totals by month
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - name: months
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 24 }
+        - name: ownerUserId
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Forecast
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Forecast"
   /orgs/{orgId}/workflows:
     get:
       operationId: listWorkflows
@@ -771,6 +1343,36 @@ components:
         type: string
     SegmentId:
       name: segmentId
+      in: path
+      required: true
+      schema:
+        type: string
+    OpportunityId:
+      name: opportunityId
+      in: path
+      required: true
+      schema:
+        type: string
+    LeadId:
+      name: leadId
+      in: path
+      required: true
+      schema:
+        type: string
+    RuleId:
+      name: ruleId
+      in: path
+      required: true
+      schema:
+        type: string
+    QuoteId:
+      name: quoteId
+      in: path
+      required: true
+      schema:
+        type: string
+    TerritoryId:
+      name: territoryId
       in: path
       required: true
       schema:
@@ -1251,3 +1853,340 @@ components:
       required: [error]
       properties:
         error: { type: string }
+    PipelineStage:
+      type: object
+      required: [key, name, probability, forecastCategory, order]
+      properties:
+        key: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1 }
+        probability: { type: integer, minimum: 0, maximum: 100 }
+        forecastCategory:
+          type: string
+          enum: [pipeline, best_case, committed, closed_won, closed_lost]
+        order: { type: integer }
+    Pipeline:
+      type: object
+      required: [id, name, isDefault, stages]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        isDefault: { type: boolean }
+        stages:
+          type: array
+          items:
+            $ref: "#/components/schemas/PipelineStage"
+        createdAt: { type: ["string", "null"] }
+    PipelineCreate:
+      type: object
+      required: [name, stages]
+      properties:
+        name: { type: string, minLength: 1 }
+        stages:
+          type: array
+          minItems: 2
+          items:
+            $ref: "#/components/schemas/PipelineStage"
+    OpportunityCreate:
+      type: object
+      required: [accountId, name]
+      properties:
+        accountId: { type: string }
+        name: { type: string, minLength: 1 }
+        pipelineId: { type: ["string", "null"] }
+        stage: { type: ["string", "null"] }
+        probability: { type: ["integer", "null"], minimum: 0, maximum: 100 }
+        value: { type: ["string", "null"] }
+        expectedCloseDate: { type: ["string", "null"] }
+        nextAction: { type: ["string", "null"] }
+    OpportunityUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        pipelineId: { type: ["string", "null"] }
+        stage: { type: string, minLength: 1 }
+        probability: { type: ["integer", "null"], minimum: 0, maximum: 100 }
+        value: { type: ["string", "null"] }
+        expectedCloseDate: { type: ["string", "null"] }
+        forecastCategory: { type: ["string", "null"] }
+        lossReason: { type: ["string", "null"] }
+        nextAction: { type: ["string", "null"] }
+        ownerUserId: { type: ["string", "null"] }
+    StageHistoryEntry:
+      type: object
+      required: [id, toStage, createdAt]
+      properties:
+        id: { type: string }
+        fromStage: { type: ["string", "null"] }
+        toStage: { type: string }
+        changedByName: { type: ["string", "null"] }
+        createdAt: { type: string }
+    OpportunityDetail:
+      type: object
+      required: [id, accountId, name, stage, stageHistory]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        accountName: { type: ["string", "null"] }
+        name: { type: string }
+        pipelineId: { type: ["string", "null"] }
+        stage: { type: string }
+        probability: { type: ["number", "null"] }
+        value: { type: ["string", "null"] }
+        expectedCloseDate: { type: ["string", "null"] }
+        actualCloseDate: { type: ["string", "null"] }
+        forecastCategory: { type: ["string", "null"] }
+        lossReason: { type: ["string", "null"] }
+        nextAction: { type: ["string", "null"] }
+        ownerUserId: { type: ["string", "null"] }
+        ownerName: { type: ["string", "null"] }
+        stageHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/StageHistoryEntry"
+        createdAt: { type: ["string", "null"] }
+        updatedAt: { type: ["string", "null"] }
+    Lead:
+      type: object
+      required: [id, firstName, lastName, status, score]
+      properties:
+        id: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        company: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        industry: { type: ["string", "null"] }
+        companySize: { type: ["integer", "null"] }
+        annualRevenue: { type: ["string", "null"] }
+        intentScore: { type: ["integer", "null"] }
+        country: { type: ["string", "null"] }
+        state: { type: ["string", "null"] }
+        productInterest: { type: ["string", "null"] }
+        source: { type: ["string", "null"] }
+        status:
+          type: string
+          enum: [new, working, qualified, disqualified]
+        score: { type: integer }
+        assignedToUserId: { type: ["string", "null"] }
+        assignedToName: { type: ["string", "null"] }
+        territoryId: { type: ["string", "null"] }
+        territoryName: { type: ["string", "null"] }
+        convertedOpportunityId: { type: ["string", "null"] }
+        createdAt: { type: ["string", "null"] }
+    LeadCreate:
+      type: object
+      required: [firstName, lastName]
+      properties:
+        firstName: { type: string, minLength: 1 }
+        lastName: { type: string, minLength: 1 }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        company: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        industry: { type: ["string", "null"] }
+        companySize: { type: ["integer", "null"] }
+        annualRevenue: { type: ["string", "null"] }
+        intentScore: { type: ["integer", "null"], minimum: 0, maximum: 100 }
+        country: { type: ["string", "null"] }
+        state: { type: ["string", "null"] }
+        productInterest: { type: ["string", "null"] }
+        source: { type: ["string", "null"] }
+    LeadUpdate:
+      type: object
+      properties:
+        firstName: { type: string, minLength: 1 }
+        lastName: { type: string, minLength: 1 }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        company: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        industry: { type: ["string", "null"] }
+        companySize: { type: ["integer", "null"] }
+        annualRevenue: { type: ["string", "null"] }
+        intentScore: { type: ["integer", "null"], minimum: 0, maximum: 100 }
+        country: { type: ["string", "null"] }
+        state: { type: ["string", "null"] }
+        productInterest: { type: ["string", "null"] }
+        source: { type: ["string", "null"] }
+        status:
+          type: string
+          enum: [new, working, qualified, disqualified]
+        score: { type: ["integer", "null"], minimum: 0, maximum: 100 }
+        assignedToUserId: { type: ["string", "null"] }
+        territoryId: { type: ["string", "null"] }
+    QualifyLeadRequest:
+      type: object
+      properties:
+        opportunityName: { type: ["string", "null"] }
+        value: { type: ["string", "null"] }
+        expectedCloseDate: { type: ["string", "null"] }
+        accountId: { type: ["string", "null"] }
+    RescoreResult:
+      type: object
+      required: [leadsRescored]
+      properties:
+        leadsRescored: { type: integer }
+    LeadScoringRule:
+      type: object
+      required: [id, name, conditions, actionType, points, priority, isActive]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        conditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SegmentCondition"
+        actionType:
+          type: string
+          enum: [add, set]
+        points: { type: integer }
+        priority: { type: integer }
+        isActive: { type: boolean }
+        createdAt: { type: ["string", "null"] }
+    LeadScoringRuleCreate:
+      type: object
+      required: [name, conditions, actionType, points]
+      properties:
+        name: { type: string, minLength: 1 }
+        conditions:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/SegmentCondition"
+        actionType:
+          type: string
+          enum: [add, set]
+        points: { type: integer, minimum: -100, maximum: 100 }
+        priority: { type: integer }
+        isActive: { type: boolean }
+    QuoteLineItem:
+      type: object
+      required: [name, quantity, unitPrice]
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: ["string", "null"] }
+        quantity: { type: number, minimum: 0 }
+        unitPrice: { type: number, minimum: 0 }
+        discountPercent: { type: ["number", "null"], minimum: 0, maximum: 100 }
+    Quote:
+      type: object
+      required: [id, opportunityId, accountId, quoteNumber, status, lineItems, subtotal, total]
+      properties:
+        id: { type: string }
+        opportunityId: { type: string }
+        opportunityName: { type: ["string", "null"] }
+        accountId: { type: string }
+        accountName: { type: ["string", "null"] }
+        quoteNumber: { type: string }
+        status:
+          type: string
+          enum: [draft, sent, accepted, rejected, expired]
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteLineItem"
+        discountPercent: { type: ["number", "null"] }
+        subtotal: { type: number }
+        total: { type: number }
+        validUntil: { type: ["string", "null"] }
+        recipientEmail: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        sentAt: { type: ["string", "null"] }
+        acceptedAt: { type: ["string", "null"] }
+        createdAt: { type: ["string", "null"] }
+    QuoteCreate:
+      type: object
+      required: [opportunityId]
+      properties:
+        opportunityId: { type: string }
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteLineItem"
+        discountPercent: { type: ["number", "null"], minimum: 0, maximum: 100 }
+        validUntil: { type: ["string", "null"] }
+        recipientEmail: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+    QuoteUpdate:
+      type: object
+      properties:
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteLineItem"
+        discountPercent: { type: ["number", "null"], minimum: 0, maximum: 100 }
+        validUntil: { type: ["string", "null"] }
+        recipientEmail: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+    QuoteSendRequest:
+      type: object
+      properties:
+        recipientEmail: { type: ["string", "null"] }
+        message: { type: ["string", "null"] }
+    Territory:
+      type: object
+      required: [id, name, countries, states, products]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        ownerUserId: { type: ["string", "null"] }
+        ownerName: { type: ["string", "null"] }
+        countries:
+          type: array
+          items: { type: string }
+        states:
+          type: array
+          items: { type: string }
+        products:
+          type: array
+          items: { type: string }
+        quota: { type: ["string", "null"] }
+        createdAt: { type: ["string", "null"] }
+    TerritoryCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        ownerUserId: { type: ["string", "null"] }
+        countries:
+          type: array
+          items: { type: string }
+        states:
+          type: array
+          items: { type: string }
+        products:
+          type: array
+          items: { type: string }
+        quota: { type: ["string", "null"] }
+    TerritoryCoverageRow:
+      type: object
+      required: [territoryId, territoryName, accountCount, openPipelineValue, closedWonValue]
+      properties:
+        territoryId: { type: string }
+        territoryName: { type: string }
+        ownerName: { type: ["string", "null"] }
+        accountCount: { type: integer }
+        quota: { type: ["number", "null"] }
+        openPipelineValue: { type: number }
+        closedWonValue: { type: number }
+        achievementPercent: { type: ["number", "null"] }
+    ForecastMonth:
+      type: object
+      required: [month, committed, bestCase, pipeline, closedWon]
+      properties:
+        month: { type: string }
+        committed: { type: number }
+        bestCase: { type: number }
+        pipeline: { type: number }
+        closedWon: { type: number }
+    Forecast:
+      type: object
+      required: [months, totals]
+      properties:
+        months:
+          type: array
+          items:
+            $ref: "#/components/schemas/ForecastMonth"
+        totals:
+          $ref: "#/components/schemas/ForecastMonth"

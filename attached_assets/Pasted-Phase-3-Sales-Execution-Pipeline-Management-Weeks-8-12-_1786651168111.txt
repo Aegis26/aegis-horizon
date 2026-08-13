@@ -1,0 +1,39 @@
+Phase 3 — Sales Execution & Pipeline Management (Weeks 8–12)
+Goal: Manage the full deal lifecycle from lead to close.
+Deliverables: Opportunity pipeline (Kanban + List views), Lead scoring (rules-based), Lead routing + assignment, Quoting, Territory management, Sales forecasting.
+Acceptance Criteria:
+Admin drags opportunity from "Prospecting" to "Proposal" and stage change is logged.
+Lead scoring rule: "if company size > 10 AND intent score > 75, set score = 100"
+New lead auto-assigns to territory owner based on geography or product.
+Sales rep generates a quote from an opportunity in 2 clicks.
+Forecast view shows committed, best-case, and pipeline by month.
+Territory coverage map shows which accounts are assigned to whom.
+Core Routes
+Opportunities
+POST /api/opportunities — Create
+GET /api/opportunities — List with pipeline filter
+GET /api/opportunities/:id — Detail
+PATCH /api/opportunities/:id — Update (including stage change)
+POST /api/opportunities/:id/convert-to-customer — Mark as closed-won, create customer
+Leads
+POST /api/leads — Create
+GET /api/leads — List with score display
+PATCH /api/leads/:id — Update score, status, assignment
+POST /api/leads/:id/qualify — Convert to opportunity
+Quotes
+POST /api/quotes — Create from opportunity
+GET /api/quotes/:id — Detail
+PATCH /api/quotes/:id — Update line items, discounts
+POST /api/quotes/:id/send — Generate PDF, send via email
+POST /api/quotes/:id/accept — Mark as accepted
+Forecasting
+GET /api/forecasts — By user, territory, product; with probability adjustments
+Lead Scoring Rules Engine
+Create /src/services/leadScoring.ts:
+Evaluate rules like: "if revenue > $1M AND industry = 'tech', score += 25"
+Rules are admin-configurable via UI
+Predictive scoring: ML model trained on closed deals (Phase 5)
+Critical Decisions
+Pipelines are customizable per org. Stages can be "Prospecting, Qualified, Proposal, Negotiation, Closed Won, Closed Lost" or entirely custom.
+Lead-to-opportunity conversion is explicit, not automatic. Rep decides when a lead is qualified.
+Probability is user-configurable per opportunity. System suggests it based on stage + history, rep can override.

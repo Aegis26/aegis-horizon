@@ -681,45 +681,6 @@ export interface CalendarEvent {
   meetingUrl?: string | null;
 }
 
-export interface CallRecording {
-  id: string;
-  orgId: string;
-  accountId: string;
-  /** @nullable */
-  contactId?: string | null;
-  callSid: string;
-  status: string;
-  toNumber: string;
-  /** @nullable */
-  recordingObjectPath?: string | null;
-  /** @nullable */
-  transcript?: string | null;
-  /** @nullable */
-  summary?: string | null;
-  /** @nullable */
-  sentiment?: string | null;
-  /** @nullable */
-  keywords?: string[] | null;
-  /** @nullable */
-  objections?: string[] | null;
-  /** @nullable */
-  leaning?: string | null;
-}
-
-export interface CallInput {
-  accountId: string;
-  contactId?: string;
-  /** @minLength 7 */
-  to: string;
-}
-
-export interface CallResult {
-  callId: string;
-  callSid: string;
-  activityId: string;
-  status: string;
-}
-
 export type ActivityCreateType = typeof ActivityCreateType[keyof typeof ActivityCreateType];
 
 

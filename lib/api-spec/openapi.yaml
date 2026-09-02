@@ -867,69 +867,6 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/CalendarEvent" }
-  /orgs/{orgId}/accounts/{accountId}/calls:
-    get:
-      operationId: listCallRecordings
-      tags: [communications]
-      parameters:
-        - $ref: "#/components/parameters/OrgId"
-        - $ref: "#/components/parameters/AccountId"
-      responses:
-        "200":
-          description: Call recordings for an account
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/CallRecording" }
-    post:
-      operationId: initiateCrmCall
-      tags: [communications]
-      parameters:
-        - $ref: "#/components/parameters/OrgId"
-        - $ref: "#/components/parameters/AccountId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CallInput"
-      responses:
-        "201":
-          description: Call initiated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CallResult"
-        "503":
-          description: Twilio or AssemblyAI configuration is absent
-  /orgs/{orgId}/calls/{callId}:
-    get:
-      operationId: getCallRecording
-      tags: [communications]
-      parameters:
-        - $ref: "#/components/parameters/OrgId"
-        - name: callId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        "200":
-          description: Call transcript and analysis
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CallRecording"
-  /calls/webhook:
-    post:
-      operationId: twilioRecordingWebhook
-      tags: [communications]
-      summary: Signature-validated Twilio recording callback
-      responses:
-        "202":
-          description: Recording accepted for private storage and transcription
-        "403":
-          description: Invalid Twilio signature
   /storage/uploads/request-url:
     post:
       tags: [storage]
@@ -2222,39 +2159,6 @@ components:
         startsAt: { type: string }
         endsAt: { type: ["string", "null"] }
         meetingUrl: { type: ["string", "null"] }
-    CallRecording:
-      type: object
-      required: [id, orgId, accountId, callSid, status, toNumber]
-      properties:
-        id: { type: string, format: uuid }
-        orgId: { type: string, format: uuid }
-        accountId: { type: string, format: uuid }
-        contactId: { type: ["string", "null"], format: uuid }
-        callSid: { type: string }
-        status: { type: string }
-        toNumber: { type: string }
-        recordingObjectPath: { type: ["string", "null"] }
-        transcript: { type: ["string", "null"] }
-        summary: { type: ["string", "null"] }
-        sentiment: { type: ["string", "null"] }
-        keywords: { type: ["array", "null"], items: { type: string } }
-        objections: { type: ["array", "null"], items: { type: string } }
-        leaning: { type: ["string", "null"] }
-    CallInput:
-      type: object
-      required: [accountId, to]
-      properties:
-        accountId: { type: string, format: uuid }
-        contactId: { type: string, format: uuid }
-        to: { type: string, minLength: 7 }
-    CallResult:
-      type: object
-      required: [callId, callSid, activityId, status]
-      properties:
-        callId: { type: string, format: uuid }
-        callSid: { type: string }
-        activityId: { type: string, format: uuid }
-        status: { type: string }
     ActivityCreate:
       type: object
       required: [type]

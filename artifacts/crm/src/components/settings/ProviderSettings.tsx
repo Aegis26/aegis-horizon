@@ -229,7 +229,7 @@ export function ProviderSettings() {
             Communication AI
           </CardTitle>
           <CardDescription>
-            Enable intelligence features for emails and call recordings.
+            Enable intelligence features for emails.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -237,7 +237,7 @@ export function ProviderSettings() {
             <div className="space-y-1 mr-4">
               <Label htmlFor="ai-toggle" className="font-semibold text-base">Analyze communications with AI</Label>
               <p className="text-sm text-muted-foreground">
-                When enabled, customer email snippets and call transcripts are sent to Anthropic for processing to generate summaries, sentiment analysis, and keyword extraction.
+                When enabled, customer email snippets are sent to Anthropic for processing to generate summaries, sentiment analysis, and keyword extraction.
               </p>
             </div>
             <Switch

@@ -5,7 +5,6 @@ import {
   useListAccounts, getListAccountsQueryKey,
   useListEmailThreads, getListEmailThreadsQueryKey,
   useListCalendarEvents, getListCalendarEventsQueryKey,
-  useListCallRecordings, getListCallRecordingsQueryKey,
   useSendCrmEmail
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -13,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Mail, Calendar, Phone, Search, Building2, Send, Clock, UserCircle, MessageSquare } from "lucide-react";
+import { Mail, Calendar, Search, Building2, Send, Clock, UserCircle, MessageSquare } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -125,17 +124,12 @@ export function Workspace({ accountId, orgId }: { accountId: string, orgId: stri
     query: { enabled: !!orgId && !!accountId, queryKey: getListCalendarEventsQueryKey(orgId, accountId) }
   });
 
-  const { data: calls, error: callsError } = useListCallRecordings(orgId, accountId, {
-    query: { enabled: !!orgId && !!accountId, queryKey: getListCallRecordingsQueryKey(orgId, accountId) }
-  });
-
   return (
     <Tabs defaultValue="emails" className="flex flex-col h-full">
       <div className="px-6 py-3 border-b border-primary/10 bg-card/80 shrink-0">
         <TabsList className="bg-background/50 border border-primary/20">
           <TabsTrigger value="emails" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-display"><Mail className="h-4 w-4" /> Emails</TabsTrigger>
           <TabsTrigger value="calendar" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-display"><Calendar className="h-4 w-4" /> Calendar</TabsTrigger>
-          <TabsTrigger value="calls" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-display"><Phone className="h-4 w-4" /> Calls</TabsTrigger>
           <TabsTrigger value="compose" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-display"><Send className="h-4 w-4" /> Send Email</TabsTrigger>
         </TabsList>
       </div>
@@ -218,48 +212,6 @@ export function Workspace({ accountId, orgId }: { accountId: string, orgId: stri
           )}
         </TabsContent>
 
-        <TabsContent value="calls" className="mt-0 space-y-4 outline-none">
-           {callsError ? (
-            <div className="p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-md">
-              <h4 className="font-semibold mb-1">Provider Configuration Error</h4>
-              <p className="text-sm opacity-90">{(callsError as any)?.message || "Calls provider is unconfigured or failed."}</p>
-            </div>
-          ) : (!calls || calls.length === 0) ? (
-             <div className="text-center p-12 text-muted-foreground border border-dashed border-primary/20 rounded-xl bg-card/30">No call recordings found.</div>
-          ) : (
-            calls.map(call => (
-              <Card key={call.id} className="border-primary/10 bg-card/80 hover:border-primary/30 transition-all shadow-sm">
-                <CardContent className="p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h4 className="font-semibold font-mono">{call.toNumber}</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5 capitalize bg-primary/10 border border-primary/20 px-2 py-0.5 rounded inline-block">Status: {call.status}</p>
-                    </div>
-                    {call.sentiment && (
-                       <div className="text-xs font-medium px-2 py-1 rounded bg-background border border-primary/10">Sentiment: <span className="text-primary">{call.sentiment}</span></div>
-                    )}
-                  </div>
-
-                  {call.summary && (
-                    <div className="mb-3 text-sm bg-background p-3 rounded border border-primary/10">
-                      <strong className="text-xs uppercase text-primary tracking-wider mb-1 block">AI Summary</strong>
-                      {call.summary}
-                    </div>
-                  )}
-
-                  {call.transcript && (
-                    <details className="text-sm group mt-2">
-                      <summary className="cursor-pointer text-xs font-medium text-primary hover:underline outline-none">View Transcript</summary>
-                      <div className="mt-2 p-3 bg-muted/50 rounded text-muted-foreground whitespace-pre-wrap max-h-60 overflow-y-auto border border-border">
-                        {call.transcript}
-                      </div>
-                    </details>
-                  )}
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </TabsContent>
 
         <TabsContent value="compose" className="mt-0 outline-none h-full max-w-3xl">
           <ComposeEmail orgId={orgId} accountId={accountId} />

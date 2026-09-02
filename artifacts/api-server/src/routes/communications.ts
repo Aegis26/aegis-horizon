@@ -1,12 +1,11 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
-import { Router, type IRouter, type Request, type Response } from "express";
+import { randomBytes } from "crypto";
+import { Router, type IRouter, type Request } from "express";
 import { and, desc, eq, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import {
   accounts,
   activities,
   calendarEvents,
-  callRecordings,
   communicationSettings,
   contacts,
   db,
@@ -20,20 +19,16 @@ import {
 } from "@workspace/db";
 import {
   CreateInternalNoteBody,
-  InitiateCrmCallBody,
   SendCrmEmailBody,
   UpdateInternalNoteBody,
 } from "@workspace/api-zod";
 import { z } from "zod";
 import { attachOrg, attachUser, requireFeature, requireRole } from "../middlewares/auth";
 import { sendEmail } from "../lib/email";
-import { ObjectStorageService } from "../lib/objectStorage";
-import { ObjectAccessGroupType, ObjectPermission, setObjectAclPolicy } from "../lib/objectAcl";
 import { analyzeConversation } from "../services/conversationIntelligence";
 
 const router: IRouter = Router();
 const gate = [attachUser, attachOrg, requireFeature("crm")] as const;
-const storage = new ObjectStorageService();
 const providers = ["gmail", "outlook", "google_calendar", "slack"] as const;
 type Provider = (typeof providers)[number];
 const providerParam = z.enum(providers);
@@ -162,12 +157,6 @@ function strings(value: unknown): string[] {
 
 function emailFromHeader(value: string): string {
   return (value.match(/<([^>]+)>/)?.[1] ?? value).trim().toLowerCase();
-}
-
-function externalBase(req: Request): string {
-  const protocol = String(req.get("x-forwarded-proto") ?? req.protocol).split(",")[0].trim();
-  const host = String(req.get("x-forwarded-host") ?? req.get("host")).split(",")[0].trim();
-  return `${protocol}://${host}`;
 }
 
 async function contactByEmails(orgId: string, emails: string[]) {
@@ -440,21 +429,6 @@ router.get("/orgs/:orgId/accounts/:accountId/calendar-events", ...gate, async (r
     eq(calendarEvents.orgId, req.currentOrg!.id), eq(calendarEvents.accountId, accountId.data),
   )).orderBy(calendarEvents.startsAt).limit(250));
 });
-router.get("/orgs/:orgId/accounts/:accountId/calls", ...gate, async (req, res): Promise<void> => {
-  const accountId = z.string().uuid().safeParse(req.params.accountId);
-  if (!accountId.success) { res.status(400).json({ error: "Invalid accountId" }); return; }
-  res.json(await db.select().from(callRecordings).where(and(
-    eq(callRecordings.orgId, req.currentOrg!.id), eq(callRecordings.accountId, accountId.data),
-  )).orderBy(desc(callRecordings.createdAt)).limit(100));
-});
-router.get("/orgs/:orgId/calls/:callId", ...gate, async (req, res): Promise<void> => {
-  const [call] = await db.select().from(callRecordings).where(and(
-    eq(callRecordings.orgId, req.currentOrg!.id), eq(callRecordings.id, req.params.callId as string),
-  ));
-  if (!call) { res.status(404).json({ error: "Call not found" }); return; }
-  res.json(call);
-});
-
 async function validateMentions(orgId: string, ids: string[]) {
   if (!ids.length) return true;
   const rows = await db.select({ userId: orgUsers.userId }).from(orgUsers).where(and(eq(orgUsers.orgId, orgId), inArray(orgUsers.userId, ids)));
@@ -575,115 +549,5 @@ router.post("/orgs/:orgId/emails/send", ...gate, async (req, res): Promise<void>
   }).returning();
   res.status(201).json({ id: sent.id, activityId: activity.id, threadId: activity.threadId });
 });
-
-function callConfig(res: Response) {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_PHONE_NUMBER;
-  const assembly = process.env.ASSEMBLYAI_API_KEY;
-  if (!accountSid || !authToken || !from || !assembly) {
-    res.status(503).json({ error: "Calls are not configured. TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, and ASSEMBLYAI_API_KEY are required." });
-    return null;
-  }
-  return { accountSid, authToken, from, assembly };
-}
-router.post("/orgs/:orgId/accounts/:accountId/calls", ...gate, async (req, res): Promise<void> => {
-  const config = callConfig(res); if (!config) return;
-  const parsed = InitiateCrmCallBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message }); return; }
-  if (parsed.data.accountId !== req.params.accountId) { res.status(400).json({ error: "Body accountId must match path accountId" }); return; }
-  const orgId = req.currentOrg!.id;
-  const [account] = await db.select().from(accounts).where(and(eq(accounts.id, parsed.data.accountId), eq(accounts.orgId, orgId)));
-  if (!account) { res.status(400).json({ error: "accountId must belong to this organization" }); return; }
-  if (parsed.data.contactId) {
-    const [contact] = await db.select({ id: contacts.id }).from(contacts).where(and(
-      eq(contacts.id, parsed.data.contactId), eq(contacts.orgId, orgId), eq(contacts.accountId, account.id),
-    ));
-    if (!contact) { res.status(400).json({ error: "contactId must belong to this account" }); return; }
-  }
-  const token = randomBytes(32).toString("hex");
-  const base = externalBase(req);
-  const callback = `${base}/api/calls/webhook?correlation=${token}`;
-  const form = new URLSearchParams({ To: parsed.data.to, From: config.from, Url: `${base}/api/calls/twiml`, Record: "true", RecordingStatusCallback: callback });
-  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}/Calls.json`, {
-    method: "POST", headers: { authorization: `Basic ${Buffer.from(`${config.accountSid}:${config.authToken}`).toString("base64")}`, "content-type": "application/x-www-form-urlencoded" }, body: form,
-  });
-  if (!response.ok) { res.status(502).json({ error: `Twilio returned ${response.status}` }); return; }
-  const twilio = await response.json() as { sid: string; status?: string };
-  const [call] = await db.insert(callRecordings).values({
-    orgId, accountId: account.id, contactId: parsed.data.contactId, initiatedByUserId: req.currentUser!.id,
-    callSid: twilio.sid, status: twilio.status ?? "initiated", fromNumber: config.from, toNumber: parsed.data.to,
-    correlationTokenHash: createHash("sha256").update(token).digest("hex"),
-  }).returning();
-  const [activity] = await db.insert(activities).values({
-    orgId, accountId: account.id, contactId: parsed.data.contactId, callRecordingId: call.id,
-    type: "call", direction: "outbound", subject: `Call to ${parsed.data.to}`,
-    externalMessageId: `call:twilio:${call.callSid}`, createdByUserId: req.currentUser!.id,
-  }).onConflictDoNothing().returning();
-  res.status(201).json({ callId: call.id, callSid: call.callSid, activityId: activity?.id ?? null, status: call.status });
-});
-router.post("/calls/twiml", (_req, res) => res.type("text/xml").send("<Response><Say>This call is being recorded.</Say><Pause length=\"3600\" /></Response>"));
-
-function validTwilioSignature(req: Request, authToken: string) {
-  const supplied = req.get("x-twilio-signature");
-  if (!supplied) return false;
-  const url = `${externalBase(req)}${req.originalUrl}`;
-  const fields = Object.entries(req.body as Record<string, string>).sort(([a], [b]) => a.localeCompare(b));
-  const expected = createHmac("sha1", authToken).update(url + fields.map(([k, v]) => `${k}${v}`).join("")).digest("base64");
-  const a = Buffer.from(supplied); const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-router.post("/calls/webhook", async (req, res): Promise<void> => {
-  const config = callConfig(res); if (!config) return;
-  if (!validTwilioSignature(req, config.authToken)) { res.status(403).json({ error: "Invalid Twilio signature" }); return; }
-  const token = String(req.query.correlation ?? "");
-  const [call] = await db.select().from(callRecordings).where(eq(callRecordings.correlationTokenHash, createHash("sha256").update(token).digest("hex")));
-  if (!call || call.callSid !== String(req.body.CallSid ?? "")) { res.status(404).json({ error: "Unknown call correlation" }); return; }
-  const [claimed] = await db.update(callRecordings).set({ status: "processing" }).where(and(
-    eq(callRecordings.id, call.id), eq(callRecordings.orgId, call.orgId),
-    or(eq(callRecordings.status, "initiated"), eq(callRecordings.status, "queued"), eq(callRecordings.status, "ringing"), eq(callRecordings.status, "in-progress"), eq(callRecordings.status, "completed")),
-  )).returning();
-  if (!claimed) { res.status(202).json({ accepted: true, duplicate: true }); return; }
-  res.status(202).json({ accepted: true });
-  void processRecording(req, claimed, config, String(req.body.RecordingUrl ?? ""), String(req.body.RecordingSid ?? ""));
-});
-
-async function processRecording(req: Request, call: typeof callRecordings.$inferSelect, config: NonNullable<ReturnType<typeof callConfig>>, recordingUrl: string, recordingSid: string) {
-  try {
-    const audioResponse = await fetch(`${recordingUrl}.mp3`, { headers: { authorization: `Basic ${Buffer.from(`${config.accountSid}:${config.authToken}`).toString("base64")}` } });
-    if (!audioResponse.ok) throw new Error(`Recording download returned ${audioResponse.status}`);
-    const audio = Buffer.from(await audioResponse.arrayBuffer());
-    const saved = await storage.savePrivateObject(audio, "audio/mpeg", "call-recordings");
-    await setObjectAclPolicy(saved.file, { owner: "", visibility: "private", aclRules: [{ group: { type: ObjectAccessGroupType.ORG_MEMBER, id: call.orgId }, permission: ObjectPermission.READ }] });
-    const upload = await fetch("https://api.assemblyai.com/v2/upload", {
-      method: "POST", headers: { authorization: config.assembly, "content-type": "application/octet-stream" }, body: audio,
-    });
-    if (!upload.ok) throw new Error(`AssemblyAI upload returned ${upload.status}`);
-    const { upload_url: assemblyAudioUrl } = await upload.json() as { upload_url: string };
-    const submit = await fetch("https://api.assemblyai.com/v2/transcript", { method: "POST", headers: { authorization: config.assembly, "content-type": "application/json" }, body: JSON.stringify({ audio_url: assemblyAudioUrl }) });
-    if (!submit.ok) throw new Error(`AssemblyAI returned ${submit.status}`);
-    const { id } = await submit.json() as { id: string };
-    let transcript = "";
-    for (let i = 0; i < 60; i += 1) {
-      await sleep(3000);
-      const poll = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, { headers: { authorization: config.assembly } });
-      const status = await poll.json() as { status: string; text?: string; error?: string };
-      if (status.status === "completed") { transcript = status.text ?? ""; break; }
-      if (status.status === "error") throw new Error(status.error ?? "AssemblyAI transcription failed");
-    }
-    if (!transcript) throw new Error("AssemblyAI transcription timed out");
-    const analysis = (await aiEnabled(call.orgId)) ? await analyzeConversation(transcript) : null;
-    await db.update(callRecordings).set({
-      recordingSid, recordingObjectPath: saved.objectPath, transcript, status: "transcribed",
-      summary: analysis?.summary, sentiment: analysis?.sentiment, keywords: analysis?.keywords,
-      objections: analysis?.objections, leaning: analysis?.leaning,
-    }).where(and(eq(callRecordings.id, call.id), eq(callRecordings.orgId, call.orgId)));
-    await db.update(activities).set({ callRecordingUrl: saved.objectPath, callTranscript: transcript, body: analysis?.summary ?? transcript, sentiment: analysis?.sentiment, keywords: analysis?.keywords ?? [] })
-      .where(and(eq(activities.orgId, call.orgId), eq(activities.callRecordingId, call.id)));
-  } catch (error) {
-    req.log.error({ err: error, callId: call.id }, "Call recording processing failed");
-    await db.update(callRecordings).set({ status: "failed" }).where(and(eq(callRecordings.id, call.id), eq(callRecordings.orgId, call.orgId)));
-  }
-}
 
 export default router;

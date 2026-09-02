@@ -3,3 +3,4 @@
 - [api-server esbuild externals](api-server-esbuild-externals.md) — pdfkit/fontkit must stay external in the api-server bundle or the build breaks on @swc/helpers.
 - [Tenant-scoped reference validation](tenant-reference-validation.md) — every user/territory/pipeline ID accepted in a request body must be validated against the current org, and relation lookups in serializers must be org-scoped too.
 - [Workspace connector binding](workspace-connector-binding.md) — Replit app connectors are deployment-global; bind one org by verified provider identity and recheck before every proxy call.
+- [Manual call scope](manual-call-scope.md) — calls remain manual account activities; automated recording and transcription are deferred unless explicitly requested later.

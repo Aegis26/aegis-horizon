@@ -7,6 +7,7 @@ import {
   orgUsers,
   users,
   featureEntitlements,
+  orgSecurityPolicies,
   usageLogs,
   type Organization,
   type OrgUser,
@@ -14,6 +15,7 @@ import {
 } from "@workspace/db";
 import { featuresForPlan } from "../lib/catalog";
 import { seedDemoData } from "../lib/seedDemoData";
+import { getClientIp, isIpAllowed } from "../lib/clientIp";
 
 declare global {
   namespace Express {
@@ -158,6 +160,18 @@ export async function attachOrg(
     .where(eq(organizations.id, orgId));
   if (!org) {
     res.status(404).json({ error: "Organization not found" });
+    return;
+  }
+
+  const [securityPolicy] = await db
+    .select()
+    .from(orgSecurityPolicies)
+    .where(eq(orgSecurityPolicies.orgId, org.id));
+  if (
+    securityPolicy?.ipAllowlistEnabled &&
+    !isIpAllowed(getClientIp(req), securityPolicy.allowedCidrs)
+  ) {
+    res.status(403).json({ error: "Access denied by organization IP policy" });
     return;
   }
 

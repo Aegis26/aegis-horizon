@@ -1856,6 +1856,882 @@ export interface Forecast {
   totals: ForecastMonth;
 }
 
+export type WeightedForecastGroupBy = typeof WeightedForecastGroupBy[keyof typeof WeightedForecastGroupBy];
+
+
+export const WeightedForecastGroupBy = {
+  weekly: 'weekly',
+  monthly: 'monthly',
+} as const;
+
+export type WeightedForecastPeriodsItem = {
+  periodStart: string;
+  weightedRevenue: number;
+  opportunityCount: number;
+};
+
+export interface WeightedForecast {
+  horizonDays: 90;
+  groupBy: WeightedForecastGroupBy;
+  periods: WeightedForecastPeriodsItem[];
+}
+
+export type LeadBatchInputLeadsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  firstName: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  lastName: string;
+  /**
+     * @maxLength 320
+     * @nullable
+     */
+  email?: string | null;
+  /**
+     * @maxLength 64
+     * @nullable
+     */
+  phone?: string | null;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  company?: string | null;
+  /**
+     * @maxLength 300
+     * @nullable
+     */
+  title?: string | null;
+  /**
+     * @maxLength 200
+     * @nullable
+     */
+  industry?: string | null;
+  /**
+     * @maxLength 200
+     * @nullable
+     */
+  source?: string | null;
+  /**
+     * @maxLength 100
+     * @nullable
+     */
+  country?: string | null;
+  /**
+     * @maxLength 100
+     * @nullable
+     */
+  state?: string | null;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  productInterest?: string | null;
+};
+
+export interface LeadBatchInput {
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  leads: LeadBatchInputLeadsItem[];
+}
+
+export interface LeadBatchResult {
+  count: number;
+  leadIds: string[];
+}
+
+export interface Phase6Record {
+  id: string;
+  orgId?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+ }
+
+export type ReportInputEntityType = typeof ReportInputEntityType[keyof typeof ReportInputEntityType];
+
+
+export const ReportInputEntityType = {
+  accounts: 'accounts',
+  leads: 'leads',
+  opportunities: 'opportunities',
+} as const;
+
+export type ReportInputDefinitionConditionsItemOperator = typeof ReportInputDefinitionConditionsItemOperator[keyof typeof ReportInputDefinitionConditionsItemOperator];
+
+
+export const ReportInputDefinitionConditionsItemOperator = {
+  equals: 'equals',
+  contains: 'contains',
+  gt: 'gt',
+  gte: 'gte',
+  lt: 'lt',
+  lte: 'lte',
+  is_empty: 'is_empty',
+  is_not_empty: 'is_not_empty',
+} as const;
+
+export type ReportInputDefinitionConditionsItem = {
+  /** Allowlisted field for the selected entity; opportunity fields include value and daysSinceLastTouch. */
+  field: string;
+  operator: ReportInputDefinitionConditionsItemOperator;
+  /** Use a number with gt, gte, lt, or lte for numeric opportunity fields such as value and daysSinceLastTouch. */
+  value?: string | number;
+};
+
+export type ReportInputDefinitionSortDirection = typeof ReportInputDefinitionSortDirection[keyof typeof ReportInputDefinitionSortDirection];
+
+
+export const ReportInputDefinitionSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
+
+export type ReportInputDefinitionSort = {
+  /** Allowlisted field for the selected entity; opportunity fields include daysSinceLastTouch. */
+  field: string;
+  direction: ReportInputDefinitionSortDirection;
+};
+
+export type ReportInputDefinition = {
+  /**
+     * @minItems 1
+     * @maxItems 20
+     */
+  fields: string[];
+  /** @maxItems 20 */
+  conditions?: ReportInputDefinitionConditionsItem[];
+  sort?: ReportInputDefinitionSort;
+  /**
+     * @minimum 1
+     * @maximum 1000
+     */
+  limit?: number;
+};
+
+export interface ReportInput {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name: string;
+  /** @maxLength 1000 */
+  description?: string;
+  entityType: ReportInputEntityType;
+  definition: ReportInputDefinition;
+}
+
+export type ReportPatchEntityType = typeof ReportPatchEntityType[keyof typeof ReportPatchEntityType];
+
+
+export const ReportPatchEntityType = {
+  accounts: 'accounts',
+  leads: 'leads',
+  opportunities: 'opportunities',
+} as const;
+
+export type ReportPatchDefinitionConditionsItemOperator = typeof ReportPatchDefinitionConditionsItemOperator[keyof typeof ReportPatchDefinitionConditionsItemOperator];
+
+
+export const ReportPatchDefinitionConditionsItemOperator = {
+  equals: 'equals',
+  contains: 'contains',
+  gt: 'gt',
+  gte: 'gte',
+  lt: 'lt',
+  lte: 'lte',
+  is_empty: 'is_empty',
+  is_not_empty: 'is_not_empty',
+} as const;
+
+export type ReportPatchDefinitionConditionsItem = {
+  /** Allowlisted field for the selected entity; opportunity fields include value and daysSinceLastTouch. */
+  field: string;
+  operator: ReportPatchDefinitionConditionsItemOperator;
+  /** Use a number with gt, gte, lt, or lte for numeric opportunity fields such as value and daysSinceLastTouch. */
+  value?: string | number;
+};
+
+export type ReportPatchDefinitionSortDirection = typeof ReportPatchDefinitionSortDirection[keyof typeof ReportPatchDefinitionSortDirection];
+
+
+export const ReportPatchDefinitionSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
+
+export type ReportPatchDefinitionSort = {
+  /** Allowlisted field for the selected entity; opportunity fields include daysSinceLastTouch. */
+  field: string;
+  direction: ReportPatchDefinitionSortDirection;
+};
+
+export type ReportPatchDefinition = {
+  /**
+     * @minItems 1
+     * @maxItems 20
+     */
+  fields: string[];
+  /** @maxItems 20 */
+  conditions?: ReportPatchDefinitionConditionsItem[];
+  sort?: ReportPatchDefinitionSort;
+  /**
+     * @minimum 1
+     * @maximum 1000
+     */
+  limit?: number;
+};
+
+export interface ReportPatch {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name?: string;
+  /** @maxLength 1000 */
+  description?: string;
+  entityType?: ReportPatchEntityType;
+  definition?: ReportPatchDefinition;
+}
+
+export type CustomReportEntityType = typeof CustomReportEntityType[keyof typeof CustomReportEntityType];
+
+
+export const CustomReportEntityType = {
+  accounts: 'accounts',
+  leads: 'leads',
+  opportunities: 'opportunities',
+} as const;
+
+export type CustomReportDefinition = { [key: string]: unknown };
+
+export interface CustomReport {
+  id: string;
+  orgId: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  entityType: CustomReportEntityType;
+  definition: CustomReportDefinition;
+  /** @nullable */
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ReportRunStatus = typeof ReportRunStatus[keyof typeof ReportRunStatus];
+
+
+export const ReportRunStatus = {
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export type ReportRunParameters = { [key: string]: unknown };
+
+export interface ReportRun {
+  id: string;
+  orgId: string;
+  reportId: string;
+  status: ReportRunStatus;
+  rowCount: number;
+  parameters: ReportRunParameters;
+  /** @nullable */
+  errorMessage: string | null;
+  /** @nullable */
+  startedByUserId: string | null;
+  startedAt: string;
+  /** @nullable */
+  completedAt: string | null;
+}
+
+export type ReportPreviewRowsItem = { [key: string]: unknown };
+
+export interface ReportPreview {
+  rows: ReportPreviewRowsItem[];
+}
+
+export type ReportRunResultRowsItem = { [key: string]: unknown };
+
+export interface ReportRunResult {
+  run: ReportRun;
+  rows: ReportRunResultRowsItem[];
+}
+
+export type ReportExportInputFormat = typeof ReportExportInputFormat[keyof typeof ReportExportInputFormat];
+
+
+export const ReportExportInputFormat = {
+  csv: 'csv',
+  pdf: 'pdf',
+  xlsx: 'xlsx',
+} as const;
+
+export interface ReportExportInput {
+  format: ReportExportInputFormat;
+}
+
+export type ReportExportFormat = typeof ReportExportFormat[keyof typeof ReportExportFormat];
+
+
+export const ReportExportFormat = {
+  csv: 'csv',
+  pdf: 'pdf',
+  xlsx: 'xlsx',
+} as const;
+
+export interface ReportExport {
+  id: string;
+  orgId: string;
+  /** @nullable */
+  reportId: string | null;
+  format: ReportExportFormat;
+  status: string;
+  /** @nullable */
+  objectPath: string | null;
+  /** @nullable */
+  contentType: string | null;
+  /** @nullable */
+  fileName: string | null;
+  /** @nullable */
+  sizeBytes: number | null;
+  /** @nullable */
+  rowCount: number | null;
+  /** @nullable */
+  requestedByUserId: string | null;
+  /** @nullable */
+  errorMessage: string | null;
+  /** @nullable */
+  expiresAt: string | null;
+  /** @nullable */
+  completedAt: string | null;
+  createdAt: string;
+  downloadUrl: string;
+}
+
+export type ReportScheduleInputFrequency = typeof ReportScheduleInputFrequency[keyof typeof ReportScheduleInputFrequency];
+
+
+export const ReportScheduleInputFrequency = {
+  daily: 'daily',
+  weekly: 'weekly',
+  monthly: 'monthly',
+} as const;
+
+export type ReportScheduleInputFormat = typeof ReportScheduleInputFormat[keyof typeof ReportScheduleInputFormat];
+
+
+export const ReportScheduleInputFormat = {
+  csv: 'csv',
+  pdf: 'pdf',
+  xlsx: 'xlsx',
+} as const;
+
+export interface ReportScheduleInput {
+  frequency: ReportScheduleInputFrequency;
+  format: ReportScheduleInputFormat;
+  /**
+     * @minItems 1
+     * @maxItems 20
+     */
+  recipientEmails: string[];
+  enabled?: boolean;
+}
+
+export type ReportSchedulePatchFrequency = typeof ReportSchedulePatchFrequency[keyof typeof ReportSchedulePatchFrequency];
+
+
+export const ReportSchedulePatchFrequency = {
+  daily: 'daily',
+  weekly: 'weekly',
+  monthly: 'monthly',
+} as const;
+
+export type ReportSchedulePatchFormat = typeof ReportSchedulePatchFormat[keyof typeof ReportSchedulePatchFormat];
+
+
+export const ReportSchedulePatchFormat = {
+  csv: 'csv',
+  pdf: 'pdf',
+  xlsx: 'xlsx',
+} as const;
+
+export interface ReportSchedulePatch {
+  frequency?: ReportSchedulePatchFrequency;
+  format?: ReportSchedulePatchFormat;
+  /**
+     * @minItems 1
+     * @maxItems 20
+     */
+  recipientEmails?: string[];
+  enabled?: boolean;
+}
+
+export type ReportScheduleFormat = typeof ReportScheduleFormat[keyof typeof ReportScheduleFormat];
+
+
+export const ReportScheduleFormat = {
+  csv: 'csv',
+  pdf: 'pdf',
+  xlsx: 'xlsx',
+} as const;
+
+export interface ReportSchedule {
+  id: string;
+  orgId: string;
+  reportId: string;
+  cronExpression: string;
+  timezone: string;
+  format: ReportScheduleFormat;
+  recipientEmails: string[];
+  enabled: boolean;
+  /** @nullable */
+  nextRunAt: string | null;
+  /** @nullable */
+  lastRunAt: string | null;
+  /** @nullable */
+  claimedAt: string | null;
+  /** @nullable */
+  claimToken: string | null;
+  /** @nullable */
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DocumentUploadInputContentType = typeof DocumentUploadInputContentType[keyof typeof DocumentUploadInputContentType];
+
+
+export const DocumentUploadInputContentType = {
+  'application/pdf': 'application/pdf',
+  'application/msword': 'application/msword',
+  'application/vndopenxmlformats-officedocumentwordprocessingmldocument': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain': 'text/plain',
+} as const;
+
+export interface DocumentUploadInput {
+  /** @pattern ^/objects/uploads/[a-z0-9-]+$ */
+  objectPath: string;
+  /**
+     * @minLength 1
+     * @maxLength 255
+     */
+  fileName: string;
+  contentType: DocumentUploadInputContentType;
+  /**
+     * @minimum 1
+     * @maximum 26214400
+     */
+  sizeBytes: number;
+}
+
+export interface SignatureField {
+  /** @pattern ^[a-z][a-z0-9_]{0,63}$ */
+  key: string;
+  /** @minimum 1 */
+  page: number;
+  required: boolean;
+}
+
+export interface DocumentCreateInput {
+  /**
+     * @minLength 1
+     * @maxLength 255
+     */
+  name: string;
+  /** @maxLength 2000 */
+  description?: string;
+  accountId?: string;
+  opportunityId?: string;
+  /** @maxItems 50 */
+  signatureFields?: SignatureField[];
+  upload: DocumentUploadInput;
+}
+
+export interface Document {
+  id: string;
+  orgId: string;
+  /** @nullable */
+  accountId: string | null;
+  /** @nullable */
+  opportunityId: string | null;
+  name: string;
+  /** @nullable */
+  description: string | null;
+  signatureFields: SignatureField[];
+  currentVersion: number;
+  status: string;
+  /** @nullable */
+  createdByUserId: string | null;
+  /** @nullable */
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocumentVersion {
+  id: string;
+  orgId: string;
+  documentId: string;
+  version: number;
+  objectPath: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  /** @nullable */
+  sha256: string | null;
+  source: string;
+  /** @nullable */
+  createdByUserId: string | null;
+  createdAt: string;
+}
+
+export type DocumentDetail = Document & {
+  versions: DocumentVersion[];
+};
+
+export type SignatureRequestCreateInputSignersItem = {
+  /** @minLength 1 */
+  name: string;
+  email: string;
+  /** @minimum 0 */
+  signingOrder?: number;
+};
+
+export interface SignatureRequestCreateInput {
+  /**
+     * @minItems 1
+     * @maxItems 20
+     */
+  signers: SignatureRequestCreateInputSignersItem[];
+  expiresAt?: string;
+  /** @maxLength 2000 */
+  message?: string;
+}
+
+export type SignatureRequestCreatedRequest = { [key: string]: unknown };
+
+export type SignatureRequestCreatedSigningLinksItem = {
+  email: string;
+  signingUrl: string;
+};
+
+export interface SignatureRequestCreated {
+  request: SignatureRequestCreatedRequest;
+  signingLinks: SignatureRequestCreatedSigningLinksItem[];
+}
+
+export type PublicSignatureRequestSigner = {
+  name: string;
+  email: string;
+};
+
+export type PublicSignatureRequestRequest = {
+  id: string;
+  /** @nullable */
+  message: string | null;
+  /** @nullable */
+  expiresAt: string | null;
+};
+
+export interface PublicSignatureRequest {
+  signer: PublicSignatureRequestSigner;
+  request: PublicSignatureRequestRequest;
+}
+
+export interface PublicSignatureCompleteInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  typedSignature: string;
+  consent: true;
+}
+
+export type PublicSignatureCompleteResult = {
+  status: 'pending';
+  remainingSigners: number;
+} | {
+  status: 'signed';
+  signedDocumentVersionId: string;
+};
+
+export type ApiTokenCreateInputPermissionsItem = typeof ApiTokenCreateInputPermissionsItem[keyof typeof ApiTokenCreateInputPermissionsItem];
+
+
+export const ApiTokenCreateInputPermissionsItem = {
+  'leads:write': 'leads:write',
+} as const;
+
+export interface ApiTokenCreateInput {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  /** @minItems 1 */
+  permissions: ApiTokenCreateInputPermissionsItem[];
+  /**
+     * @minimum 1
+     * @maximum 10000
+     */
+  rateLimitPerMinute?: number;
+  expiresAt?: string;
+}
+
+export type ApiTokenPermissionsItem = typeof ApiTokenPermissionsItem[keyof typeof ApiTokenPermissionsItem];
+
+
+export const ApiTokenPermissionsItem = {
+  'leads:write': 'leads:write',
+} as const;
+
+export interface ApiToken {
+  id: string;
+  orgId: string;
+  name: string;
+  tokenPrefix: string;
+  permissions: ApiTokenPermissionsItem[];
+  rateLimitPerMinute: number;
+  /** @nullable */
+  expiresAt: string | null;
+  /** @nullable */
+  lastUsedAt: string | null;
+  /** @nullable */
+  revokedAt: string | null;
+  /** @nullable */
+  createdByUserId: string | null;
+  createdAt: string;
+}
+
+export type ApiTokenCreated = ApiToken & {
+  /** @pattern ^aegis_ */
+  token: string;
+};
+
+export type SecurityPolicyPatchClerkMfaStatus = typeof SecurityPolicyPatchClerkMfaStatus[keyof typeof SecurityPolicyPatchClerkMfaStatus];
+
+
+export const SecurityPolicyPatchClerkMfaStatus = {
+  not_configured: 'not_configured',
+  configured: 'configured',
+} as const;
+
+export type SecurityPolicyPatchClerkSsoStatus = typeof SecurityPolicyPatchClerkSsoStatus[keyof typeof SecurityPolicyPatchClerkSsoStatus];
+
+
+export const SecurityPolicyPatchClerkSsoStatus = {
+  not_configured: 'not_configured',
+  configured: 'configured',
+} as const;
+
+export interface SecurityPolicyPatch {
+  mfaRequired?: boolean;
+  ssoRequired?: boolean;
+  ipAllowlistEnabled?: boolean;
+  /**
+     * @maxItems 100
+     * @items.pattern ^[0-9a-fA-F:.]+(?:/(?:[0-9]|[12][0-9]|3[0-2]|1[01][0-9]|12[0-8]))?$
+     */
+  allowedCidrs?: string[];
+  clerkMfaStatus?: SecurityPolicyPatchClerkMfaStatus;
+  clerkSsoStatus?: SecurityPolicyPatchClerkSsoStatus;
+}
+
+export type SecurityPolicyClerkMfaStatus = typeof SecurityPolicyClerkMfaStatus[keyof typeof SecurityPolicyClerkMfaStatus];
+
+
+export const SecurityPolicyClerkMfaStatus = {
+  not_configured: 'not_configured',
+  configured: 'configured',
+} as const;
+
+export type SecurityPolicyClerkSsoStatus = typeof SecurityPolicyClerkSsoStatus[keyof typeof SecurityPolicyClerkSsoStatus];
+
+
+export const SecurityPolicyClerkSsoStatus = {
+  not_configured: 'not_configured',
+  configured: 'configured',
+} as const;
+
+export interface SecurityPolicy {
+  id?: string;
+  orgId: string;
+  mfaRequired: boolean;
+  clerkMfaStatus: SecurityPolicyClerkMfaStatus;
+  ssoRequired: boolean;
+  clerkSsoStatus: SecurityPolicyClerkSsoStatus;
+  /** @nullable */
+  clerkDashboardConfiguredAt?: string | null;
+  ipAllowlistEnabled: boolean;
+  allowedCidrs: string[];
+  /** @nullable */
+  updatedByUserId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type WebhookInputEventsItem = typeof WebhookInputEventsItem[keyof typeof WebhookInputEventsItem];
+
+
+export const WebhookInputEventsItem = {
+  leadcreated: 'lead.created',
+  leadupdated: 'lead.updated',
+  opportunitycreated: 'opportunity.created',
+  opportunityupdated: 'opportunity.updated',
+} as const;
+
+export interface WebhookInput {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  /** @maxLength 2048 */
+  url: string;
+  /**
+     * @minItems 1
+     * @maxItems 4
+     */
+  events: WebhookInputEventsItem[];
+  enabled?: boolean;
+}
+
+export type WebhookPatchEventsItem = typeof WebhookPatchEventsItem[keyof typeof WebhookPatchEventsItem];
+
+
+export const WebhookPatchEventsItem = {
+  leadcreated: 'lead.created',
+  leadupdated: 'lead.updated',
+  opportunitycreated: 'opportunity.created',
+  opportunityupdated: 'opportunity.updated',
+} as const;
+
+export interface WebhookPatch {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name?: string;
+  /** @maxLength 2048 */
+  url?: string;
+  /**
+     * @minItems 1
+     * @maxItems 4
+     */
+  events?: WebhookPatchEventsItem[];
+  enabled?: boolean;
+}
+
+export interface Webhook {
+  id: string;
+  orgId: string;
+  name: string;
+  url: string;
+  events: string[];
+  enabled: boolean;
+  /** @nullable */
+  lastDeliveredAt: string | null;
+  /** @nullable */
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WebhookCreated = Webhook & {
+  secret: string;
+};
+
+export interface WebhookTestResult { [key: string]: unknown }
+
+export type WebhookDeliveryPayload = { [key: string]: unknown };
+
+export interface WebhookDelivery {
+  id: string;
+  orgId: string;
+  webhookId: string;
+  eventId: string;
+  eventType: string;
+  payload: WebhookDeliveryPayload;
+  status: string;
+  attemptCount: number;
+  nextAttemptAt: string;
+  /** @nullable */
+  claimedAt: string | null;
+  /** @nullable */
+  responseStatus: number | null;
+  /** @nullable */
+  responseBody: string | null;
+  /** @nullable */
+  lastError: string | null;
+  /** @nullable */
+  deliveredAt: string | null;
+  createdAt: string;
+}
+
+export type AuditEventMetadata = { [key: string]: unknown };
+
+export interface AuditEvent {
+  id: string;
+  orgId: string;
+  /** @nullable */
+  actorUserId: string | null;
+  /** @nullable */
+  actorApiTokenId: string | null;
+  action: string;
+  entityType: string;
+  /** @nullable */
+  entityId: string | null;
+  /** @nullable */
+  ipAddress: string | null;
+  /** @nullable */
+  userAgent: string | null;
+  /** @nullable */
+  requestId: string | null;
+  metadata: AuditEventMetadata;
+  createdAt: string;
+}
+
+export type IndustryTemplateKey = typeof IndustryTemplateKey[keyof typeof IndustryTemplateKey];
+
+
+export const IndustryTemplateKey = {
+  k12: 'k12',
+  construction: 'construction',
+  healthcare: 'healthcare',
+} as const;
+
+export interface IndustryTemplate {
+  key: IndustryTemplateKey;
+  pipeline: string;
+  roles: string[];
+  fields: string[];
+  version: 1;
+}
+
+export type IndustryTemplateApplicationKey = typeof IndustryTemplateApplicationKey[keyof typeof IndustryTemplateApplicationKey];
+
+
+export const IndustryTemplateApplicationKey = {
+  k12: 'k12',
+  construction: 'construction',
+  healthcare: 'healthcare',
+} as const;
+
+export interface IndustryTemplateApplication {
+  key: IndustryTemplateApplicationKey;
+  applied: boolean;
+}
+
 export type ListAccountsParams = {
 /**
  * Search by name, industry, location, or custom field values
@@ -1901,4 +2777,16 @@ export type DraftCopilotEmail200 = {
   editable: boolean;
   sent: boolean;
 };
+
+export type GetWeightedRevenueForecastParams = {
+groupBy?: GetWeightedRevenueForecastGroupBy;
+};
+
+export type GetWeightedRevenueForecastGroupBy = typeof GetWeightedRevenueForecastGroupBy[keyof typeof GetWeightedRevenueForecastGroupBy];
+
+
+export const GetWeightedRevenueForecastGroupBy = {
+  weekly: 'weekly',
+  monthly: 'monthly',
+} as const;
 

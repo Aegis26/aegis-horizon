@@ -8,6 +8,7 @@ export {
   ListLeadsParams,
   ListQuotesParams,
   GetForecastParams,
+  GetWeightedRevenueForecastParams,
 } from "./generated/api";
 export type {
   ListAccountsParams as ListAccountsParamsType,
@@ -15,4 +16,5 @@ export type {
   ListLeadsParams as ListLeadsParamsType,
   ListQuotesParams as ListQuotesParamsType,
   GetForecastParams as GetForecastParamsType,
+  GetWeightedRevenueForecastParams as GetWeightedRevenueForecastParamsType,
 } from "./generated/types";

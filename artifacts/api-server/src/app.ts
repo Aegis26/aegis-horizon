@@ -13,6 +13,10 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Replit terminates requests at one controlled edge proxy. A hop-count policy
+// prevents clients from selecting an arbitrary left-most X-Forwarded-For value.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,

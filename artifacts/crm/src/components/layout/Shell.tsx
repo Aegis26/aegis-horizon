@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   Building2, 
@@ -12,16 +12,21 @@ import {
   MessageSquare,
   TrendingUp,
   Workflow, 
+  BarChart3,
+  FolderKanban,
   CreditCard,
   Settings,
   ChevronDown,
-  Menu
+   Menu,
+   CloudOff
 } from "lucide-react";
 import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { CommandCenter } from "@/components/ai/CommandCenter";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useOfflineLeads } from "@/hooks/use-offline-leads";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -34,15 +39,19 @@ const NAV_ITEMS = [
   { href: "/territories", label: "Territories", icon: Map, feature: "sales" },
   { href: "/forecast", label: "Forecast", icon: TrendingUp, feature: "sales" },
   { href: "/automation", label: "Automation", icon: Workflow, feature: "automation" },
+  { href: "/reports", label: "Reports", icon: BarChart3, feature: "crm" },
+  { href: "/documents", label: "Documents", icon: FolderKanban, feature: "crm" },
   { href: "/billing", label: "Billing & Features", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Shell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const { data: me } = useGetMe({ query: { queryKey: getGetMeQueryKey() }});
   const { selectedOrgId, setSelectedOrgId } = useOrgStore();
+  const { online, pendingLeads } = useOfflineLeads();
 
   const orgs = me?.orgs || [];
 
@@ -56,7 +65,8 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const currentOrg = orgs.find(o => o.org.id === selectedOrgId)?.org || orgs[0]?.org;
 
-  if (!me || !currentOrg) {
+  const offlineWorkspaceAvailable = !online && Boolean(selectedOrgId);
+  if ((!me || !currentOrg) && !offlineWorkspaceAvailable) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse flex flex-col items-center gap-4">
@@ -67,7 +77,7 @@ export function Shell({ children }: { children: ReactNode }) {
     );
   }
 
-  const enabledFeatures = currentOrg.enabledFeatures || [];
+  const enabledFeatures = currentOrg?.enabledFeatures || ["crm", "sales", "automation"];
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
@@ -81,7 +91,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
         
         {/* Org Switcher placeholder - simple version */}
-        {orgs.length > 1 && (
+            {orgs.length > 1 && (
           <div className="p-4 border-b">
             <select 
               className="w-full bg-transparent border rounded p-1 text-sm"
@@ -118,12 +128,12 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3">
             <Avatar className="h-9 w-9 border border-primary/20 shadow-sm">
               <AvatarFallback className="bg-primary/10 text-primary text-xs font-display font-bold">
-                {me.user.fullName?.substring(0, 2).toUpperCase() || me.user.email.substring(0, 2).toUpperCase()}
+                {me?.user.fullName?.substring(0, 2).toUpperCase() || me?.user.email.substring(0, 2).toUpperCase() || "AH"}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-medium truncate font-sans text-foreground">{me.user.fullName || "User"}</p>
-              <p className="text-xs text-muted-foreground truncate">{me.user.email}</p>
+              <p className="text-sm font-medium truncate font-sans text-foreground">{me?.user.fullName || (online ? "User" : "Offline workspace")}</p>
+              <p className="text-xs text-muted-foreground truncate">{me?.user.email || "Changes remain on this device"}</p>
             </div>
           </div>
         </div>
@@ -134,10 +144,42 @@ export function Shell({ children }: { children: ReactNode }) {
         {/* Mobile Header */}
         <header className="md:hidden h-14 border-b border-primary/10 flex items-center px-4 bg-background/50 backdrop-blur-sm sticky top-0 z-40">
           <div className="font-bold flex-1 font-display">Aegis Horizon</div>
-          <Button variant="ghost" size="icon">
+          {!online && <CloudOff className="mr-2 h-4 w-4 text-amber-400" aria-label="Offline" />}
+          {pendingLeads.length > 0 && (
+            <span className="mr-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">
+              {pendingLeads.length}
+            </span>
+          )}
+          <Button variant="ghost" size="icon" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation">
             <Menu className="h-5 w-5" />
           </Button>
         </header>
+        <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+          <SheetContent side="left" className="w-[min(86vw,20rem)] overflow-y-auto border-primary/20 bg-sidebar p-4">
+            <SheetHeader className="border-b border-primary/10 pb-4 text-left">
+              <SheetTitle className="flex items-center gap-2 font-display text-primary">
+                <img src={`${basePath}/logo-icon.png`} alt="" className="h-8 w-8 object-contain" />
+                Aegis Horizon
+              </SheetTitle>
+            </SheetHeader>
+            <nav className="mt-4 space-y-1">
+              {NAV_ITEMS.map((item) => {
+                if (item.feature && !enabledFeatures.includes(item.feature)) return null;
+                const active = location.startsWith(item.href);
+                return (
+                  <Link key={item.href} href={item.href} onClick={() => setMobileNavOpen(false)}>
+                    <div className={`flex min-h-11 items-center gap-3 rounded-md px-4 py-3 text-sm font-medium ${
+                      active ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-primary/10 hover:text-foreground"
+                    }`}>
+                      <item.icon className="h-5 w-5 shrink-0" />
+                      <span>{item.label}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </nav>
+          </SheetContent>
+        </Sheet>
         
         <div className="flex-1 overflow-y-auto pb-12">
           {children}

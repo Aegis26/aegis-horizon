@@ -1,6 +1,8 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startWorkflowScheduler } from "./services/workflow";
+import { startReportScheduler } from "./services/reportScheduler";
+import { startWebhookScheduler } from "./services/webhooks";
 
 const rawPort = process.env["PORT"];
 
@@ -17,6 +19,8 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 startWorkflowScheduler();
+startReportScheduler();
+startWebhookScheduler();
 
 app.listen(port, (err) => {
   if (err) {

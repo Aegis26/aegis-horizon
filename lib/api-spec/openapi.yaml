@@ -1800,6 +1800,85 @@ paths:
       tags: [commands]
       parameters: [{ $ref: "#/components/parameters/OrgId" }]
       responses: { "200": { description: Current user command history, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/CommandHistoryEntry" } } } } } }
+  /orgs/{orgId}/forecast/weighted:
+    get:
+      operationId: getWeightedRevenueForecast
+      tags: [dashboard]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: groupBy, in: query, schema: { type: string, enum: [weekly, monthly], default: weekly } }
+      responses:
+        "200": { description: Probability-weighted next-90-day forecast, content: { application/json: { schema: { $ref: "#/components/schemas/WeightedForecast" } } } }
+  /orgs/{orgId}/leads/batch:
+    post:
+      operationId: createLeadsBatch
+      tags: [sales]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LeadBatchInput" } } } }
+      responses: { "201": { description: Atomically created leads, content: { application/json: { schema: { $ref: "#/components/schemas/LeadBatchResult" } } } } }
+  /orgs/{orgId}/reports:
+    get: { operationId: listCustomReports, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }], responses: { "200": { description: Reports, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/CustomReport" } } } } } } }
+    post: { operationId: createCustomReport, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReportInput" } } } }, responses: { "201": { description: Created report, content: { application/json: { schema: { $ref: "#/components/schemas/CustomReport" } } } } } }
+  /orgs/{orgId}/reports/{reportId}:
+    get: { operationId: getCustomReport, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "200": { description: Report, content: { application/json: { schema: { $ref: "#/components/schemas/CustomReport" } } } } } }
+    patch: { operationId: updateCustomReport, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReportPatch" } } } }, responses: { "200": { description: Updated report, content: { application/json: { schema: { $ref: "#/components/schemas/CustomReport" } } } } } }
+    delete: { operationId: deleteCustomReport, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "204": { description: Deleted } } }
+  /orgs/{orgId}/reports/{reportId}/preview:
+    post: { operationId: previewCustomReport, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "200": { description: Preview, content: { application/json: { schema: { $ref: "#/components/schemas/ReportPreview" } } } } } }
+  /orgs/{orgId}/reports/{reportId}/run:
+    post: { operationId: runCustomReport, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "200": { description: Run, content: { application/json: { schema: { $ref: "#/components/schemas/ReportRunResult" } } } } } }
+  /orgs/{orgId}/reports/{reportId}/runs:
+    get: { operationId: listCustomReportRuns, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "200": { description: Runs, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ReportRun" } } } } } } }
+  /orgs/{orgId}/reports/{reportId}/exports:
+    post: { operationId: createCustomReportExport, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReportExportInput" } } } }, responses: { "201": { description: Export, content: { application/json: { schema: { $ref: "#/components/schemas/ReportExport" } } } } } }
+  /orgs/{orgId}/reports/exports/{exportId}/download:
+    get: { operationId: downloadCustomReportExport, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: exportId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "302": { description: Authenticated object download } } }
+  /orgs/{orgId}/reports/{reportId}/schedules:
+    get: { operationId: listReportSchedules, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "200": { description: Schedules, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ReportSchedule" } } } } } } }
+    post: { operationId: createReportSchedule, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReportScheduleInput" } } } }, responses: { "201": { description: Schedule, content: { application/json: { schema: { $ref: "#/components/schemas/ReportSchedule" } } } } } }
+  /orgs/{orgId}/reports/{reportId}/schedules/{scheduleId}:
+    patch: { operationId: updateReportSchedule, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }, { name: scheduleId, in: path, required: true, schema: { type: string, format: uuid } }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReportSchedulePatch" } } } }, responses: { "200": { description: Updated schedule, content: { application/json: { schema: { $ref: "#/components/schemas/ReportSchedule" } } } } } }
+    delete: { operationId: deleteReportSchedule, tags: [dashboard], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }, { name: scheduleId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "204": { description: Deleted schedule } } }
+  /orgs/{orgId}/documents:
+    get: { operationId: listDocuments, tags: [storage], parameters: [{ $ref: "#/components/parameters/OrgId" }], responses: { "200": { description: Documents, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Document" } } } } } } }
+    post: { operationId: createDocument, tags: [storage], parameters: [{ $ref: "#/components/parameters/OrgId" }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/DocumentCreateInput" } } } }, responses: { "201": { description: Created document, content: { application/json: { schema: { $ref: "#/components/schemas/Document" } } } } } }
+  /orgs/{orgId}/documents/{documentId}:
+    get: { operationId: getDocument, tags: [storage], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: documentId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "200": { description: Document and immutable versions, content: { application/json: { schema: { $ref: "#/components/schemas/DocumentDetail" } } } } } }
+  /orgs/{orgId}/documents/{documentId}/download:
+    get: { operationId: downloadDocument, tags: [storage], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: documentId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "302": { description: Authenticated download } } }
+  /orgs/{orgId}/documents/{documentId}/versions:
+    post: { operationId: createDocumentVersion, tags: [storage], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: documentId, in: path, required: true, schema: { type: string, format: uuid } }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/DocumentUploadInput" } } } }, responses: { "201": { description: Immutable version, content: { application/json: { schema: { $ref: "#/components/schemas/DocumentVersion" } } } } } }
+  /orgs/{orgId}/documents/{documentId}/signature-requests:
+    post: { operationId: createSignatureRequest, tags: [storage], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: documentId, in: path, required: true, schema: { type: string, format: uuid } }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SignatureRequestCreateInput" } } } }, responses: { "201": { description: Signature requests created, content: { application/json: { schema: { $ref: "#/components/schemas/SignatureRequestCreated" } } } } } }
+  /signatures/{token}:
+    get: { operationId: getPublicSignatureRequest, tags: [storage], parameters: [{ name: token, in: path, required: true, schema: { type: string } }], responses: { "200": { description: Public signing view, content: { application/json: { schema: { $ref: "#/components/schemas/PublicSignatureRequest" } } } } } }
+  /signatures/{token}/complete:
+    post: { operationId: completePublicSignatureRequest, tags: [storage], parameters: [{ name: token, in: path, required: true, schema: { type: string } }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PublicSignatureCompleteInput" } } } }, responses: { "200": { description: Signature accepted, content: { application/json: { schema: { $ref: "#/components/schemas/PublicSignatureCompleteResult" } } } } } }
+  /orgs/{orgId}/api-tokens:
+    get: { operationId: listApiTokens, tags: [auth], parameters: [{ $ref: "#/components/parameters/OrgId" }], responses: { "200": { description: Tokens, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ApiToken" } } } } } } }
+    post: { operationId: createApiToken, tags: [auth], parameters: [{ $ref: "#/components/parameters/OrgId" }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ApiTokenCreateInput" } } } }, responses: { "201": { description: Created token; plaintext returned once, content: { application/json: { schema: { $ref: "#/components/schemas/ApiTokenCreated" } } } } } }
+  /orgs/{orgId}/api-tokens/{tokenId}:
+    delete: { operationId: revokeApiToken, tags: [auth], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: tokenId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "204": { description: Revoked } } }
+  /orgs/{orgId}/security-policy:
+    get: { operationId: getOrgSecurityPolicy, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }], responses: { "200": { description: Policy, content: { application/json: { schema: { $ref: "#/components/schemas/SecurityPolicy" } } } } } }
+    put: { operationId: updateOrgSecurityPolicy, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SecurityPolicyPatch" } } } }, responses: { "200": { description: Updated policy, content: { application/json: { schema: { $ref: "#/components/schemas/SecurityPolicy" } } } } } }
+  /orgs/{orgId}/webhooks:
+    get: { operationId: listWebhooks, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }], responses: { "200": { description: Webhooks, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Webhook" } } } } } } }
+    post: { operationId: createWebhook, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookInput" } } } }, responses: { "201": { description: Webhook and one-time secret, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookCreated" } } } } } }
+  /orgs/{orgId}/webhooks/{webhookId}:
+    patch: { operationId: updateWebhook, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: webhookId, in: path, required: true, schema: { type: string, format: uuid } }], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookPatch" } } } }, responses: { "200": { description: Updated webhook, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } } } }
+    delete: { operationId: deleteWebhook, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: webhookId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "204": { description: Deleted webhook } } }
+  /orgs/{orgId}/webhooks/{webhookId}/test:
+    post: { operationId: testWebhookDelivery, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: webhookId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "200": { description: Delivery result, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookTestResult" } } } } } }
+  /orgs/{orgId}/webhooks/{webhookId}/deliveries:
+    get: { operationId: listWebhookDeliveries, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: webhookId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { "200": { description: Delivery history, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/WebhookDelivery" } } } } } } }
+  /orgs/{orgId}/audit-events:
+    get: { operationId: listAuditEvents, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }], responses: { "200": { description: Audit events, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/AuditEvent" } } } } } } }
+  /orgs/{orgId}/industry-templates:
+    get: { operationId: listIndustryTemplates, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }], responses: { "200": { description: Available templates, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/IndustryTemplate" } } } } } } }
+  /orgs/{orgId}/industry-templates/{templateKey}/apply:
+    post: { operationId: applyIndustryTemplate, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: templateKey, in: path, required: true, schema: { type: string, enum: [k12, construction, healthcare] } }], responses: { "200": { description: Idempotently applied template, content: { application/json: { schema: { $ref: "#/components/schemas/IndustryTemplateApplication" } } } } } }
 components:
   parameters:
     OrgId:
@@ -3145,3 +3224,453 @@ components:
             $ref: "#/components/schemas/ForecastMonth"
         totals:
           $ref: "#/components/schemas/ForecastMonth"
+    WeightedForecast:
+      type: object
+      required: [horizonDays, groupBy, periods]
+      properties:
+        horizonDays: { type: integer, const: 90 }
+        groupBy: { type: string, enum: [weekly, monthly] }
+        periods:
+          type: array
+          items:
+            type: object
+            required: [periodStart, weightedRevenue, opportunityCount]
+            properties:
+              periodStart: { type: string, format: date }
+              weightedRevenue: { type: number }
+              opportunityCount: { type: integer }
+    LeadBatchInput:
+      type: object
+      required: [leads]
+      additionalProperties: false
+      properties:
+        leads:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            required: [firstName, lastName]
+            additionalProperties: false
+            properties:
+              firstName: { type: string, minLength: 1, maxLength: 200 }
+              lastName: { type: string, minLength: 1, maxLength: 200 }
+              email: { type: [string, "null"], format: email, maxLength: 320 }
+              phone: { type: [string, "null"], maxLength: 64 }
+              company: { type: [string, "null"], maxLength: 500 }
+              title: { type: [string, "null"], maxLength: 300 }
+              industry: { type: [string, "null"], maxLength: 200 }
+              source: { type: [string, "null"], maxLength: 200 }
+              country: { type: [string, "null"], maxLength: 100 }
+              state: { type: [string, "null"], maxLength: 100 }
+              productInterest: { type: [string, "null"], maxLength: 500 }
+    LeadBatchResult:
+      type: object
+      required: [count, leadIds]
+      properties:
+        count: { type: integer }
+        leadIds: { type: array, items: { type: string, format: uuid } }
+    Phase6Record:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      additionalProperties: true
+    ReportInput:
+      type: object
+      required: [name, entityType, definition]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+        entityType: { type: string, enum: [accounts, leads, opportunities] }
+        definition:
+          type: object
+          required: [fields]
+          additionalProperties: false
+          properties:
+            fields: { type: array, minItems: 1, maxItems: 20, items: { type: string, description: "Allowlisted for the selected entity. Opportunities: id, name, stage, probability, value, forecastCategory, expectedCloseDate, daysSinceLastTouch. daysSinceLastTouch is the whole-day age of the latest org-scoped linked activity, or of opportunity creation when no activity exists." } }
+            conditions: { type: array, maxItems: 20, items: { type: object, additionalProperties: false, required: [field, operator], properties: { field: { type: string, description: "Allowlisted field for the selected entity; opportunity fields include value and daysSinceLastTouch." }, operator: { type: string, enum: [equals, contains, gt, gte, lt, lte, is_empty, is_not_empty] }, value: { oneOf: [{ type: string }, { type: number }], description: "Use a number with gt, gte, lt, or lte for numeric opportunity fields such as value and daysSinceLastTouch." } } } }
+            sort: { type: object, additionalProperties: false, required: [field, direction], properties: { field: { type: string, description: "Allowlisted field for the selected entity; opportunity fields include daysSinceLastTouch." }, direction: { type: string, enum: [asc, desc] } } }
+            limit: { type: integer, minimum: 1, maximum: 1000 }
+    ReportPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+        entityType: { type: string, enum: [accounts, leads, opportunities] }
+        definition:
+          type: object
+          additionalProperties: false
+          required: [fields]
+          properties:
+            fields: { type: array, minItems: 1, maxItems: 20, items: { type: string, description: "Allowlisted for the selected entity. Opportunities: id, name, stage, probability, value, forecastCategory, expectedCloseDate, daysSinceLastTouch. daysSinceLastTouch is the whole-day age of the latest org-scoped linked activity, or of opportunity creation when no activity exists." } }
+            conditions: { type: array, maxItems: 20, items: { type: object, additionalProperties: false, required: [field, operator], properties: { field: { type: string, description: "Allowlisted field for the selected entity; opportunity fields include value and daysSinceLastTouch." }, operator: { type: string, enum: [equals, contains, gt, gte, lt, lte, is_empty, is_not_empty] }, value: { oneOf: [{ type: string }, { type: number }], description: "Use a number with gt, gte, lt, or lte for numeric opportunity fields such as value and daysSinceLastTouch." } } } }
+            sort: { type: object, additionalProperties: false, required: [field, direction], properties: { field: { type: string, description: "Allowlisted field for the selected entity; opportunity fields include daysSinceLastTouch." }, direction: { type: string, enum: [asc, desc] } } }
+            limit: { type: integer, minimum: 1, maximum: 1000 }
+    CustomReport:
+      type: object
+      additionalProperties: false
+      required: [id, orgId, name, entityType, definition, createdByUserId, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, "null"] }
+        entityType: { type: string, enum: [accounts, leads, opportunities] }
+        definition: { type: object, additionalProperties: true }
+        createdByUserId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ReportRun:
+      type: object
+      additionalProperties: false
+      required: [id, orgId, reportId, status, rowCount, parameters, startedByUserId, startedAt, completedAt, errorMessage]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        reportId: { type: string, format: uuid }
+        status: { type: string, enum: [running, completed, failed] }
+        rowCount: { type: integer }
+        parameters: { type: object, additionalProperties: true }
+        errorMessage: { type: [string, "null"] }
+        startedByUserId: { type: [string, "null"], format: uuid }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
+    ReportPreview:
+      type: object
+      additionalProperties: false
+      required: [rows]
+      properties: { rows: { type: array, items: { type: object, additionalProperties: true } } }
+    ReportRunResult:
+      type: object
+      additionalProperties: false
+      required: [run, rows]
+      properties: { run: { $ref: "#/components/schemas/ReportRun" }, rows: { type: array, items: { type: object, additionalProperties: true } } }
+    ReportExportInput:
+      type: object
+      additionalProperties: false
+      required: [format]
+      properties: { format: { type: string, enum: [csv, pdf, xlsx] } }
+    ReportExport:
+      type: object
+      additionalProperties: false
+      required: [id, orgId, reportId, format, status, objectPath, contentType, fileName, sizeBytes, rowCount, requestedByUserId, errorMessage, expiresAt, completedAt, createdAt, downloadUrl]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        reportId: { type: [string, "null"], format: uuid }
+        format: { type: string, enum: [csv, pdf, xlsx] }
+        status: { type: string }
+        objectPath: { type: [string, "null"] }
+        contentType: { type: [string, "null"] }
+        fileName: { type: [string, "null"] }
+        sizeBytes: { type: [integer, "null"] }
+        rowCount: { type: [integer, "null"] }
+        requestedByUserId: { type: [string, "null"], format: uuid }
+        errorMessage: { type: [string, "null"] }
+        expiresAt: { type: [string, "null"], format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        downloadUrl: { type: string }
+    ReportScheduleInput:
+      type: object
+      additionalProperties: false
+      required: [frequency, format, recipientEmails]
+      properties:
+        frequency: { type: string, enum: [daily, weekly, monthly] }
+        format: { type: string, enum: [csv, pdf, xlsx] }
+        recipientEmails: { type: array, minItems: 1, maxItems: 20, items: { type: string, format: email } }
+        enabled: { type: boolean }
+    ReportSchedulePatch:
+      type: object
+      additionalProperties: false
+      properties:
+        frequency: { type: string, enum: [daily, weekly, monthly] }
+        format: { type: string, enum: [csv, pdf, xlsx] }
+        recipientEmails: { type: array, minItems: 1, maxItems: 20, items: { type: string, format: email } }
+        enabled: { type: boolean }
+    ReportSchedule:
+      type: object
+      additionalProperties: false
+      required: [id, orgId, reportId, cronExpression, timezone, format, recipientEmails, enabled, nextRunAt, lastRunAt, claimedAt, claimToken, createdByUserId, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        reportId: { type: string, format: uuid }
+        cronExpression: { type: string }
+        timezone: { type: string }
+        format: { type: string, enum: [csv, pdf, xlsx] }
+        recipientEmails: { type: array, items: { type: string, format: email } }
+        enabled: { type: boolean }
+        nextRunAt: { type: [string, "null"], format: date-time }
+        lastRunAt: { type: [string, "null"], format: date-time }
+        claimedAt: { type: [string, "null"], format: date-time }
+        claimToken: { type: [string, "null"] }
+        createdByUserId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DocumentUploadInput:
+      type: object
+      additionalProperties: false
+      required: [objectPath, fileName, contentType, sizeBytes]
+      properties:
+        objectPath: { type: string, pattern: "^/objects/uploads/[a-z0-9-]+$" }
+        fileName: { type: string, minLength: 1, maxLength: 255 }
+        contentType: { type: string, enum: [application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document, text/plain] }
+        sizeBytes: { type: integer, minimum: 1, maximum: 26214400 }
+    SignatureField:
+      type: object
+      additionalProperties: false
+      required: [key, page, required]
+      properties:
+        key: { type: string, pattern: "^[a-z][a-z0-9_]{0,63}$" }
+        page: { type: integer, minimum: 1 }
+        required: { type: boolean, default: true }
+    DocumentCreateInput:
+      type: object
+      additionalProperties: false
+      required: [name, upload]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        description: { type: string, maxLength: 2000 }
+        accountId: { type: string, format: uuid }
+        opportunityId: { type: string, format: uuid }
+        signatureFields: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/SignatureField" }, default: [] }
+        upload: { $ref: "#/components/schemas/DocumentUploadInput" }
+    Document:
+      type: object
+      additionalProperties: false
+      required: [id, orgId, accountId, opportunityId, name, description, signatureFields, currentVersion, status, createdByUserId, archivedAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        accountId: { type: [string, "null"], format: uuid }
+        opportunityId: { type: [string, "null"], format: uuid }
+        name: { type: string }
+        description: { type: [string, "null"] }
+        signatureFields: { type: array, items: { $ref: "#/components/schemas/SignatureField" } }
+        currentVersion: { type: integer }
+        status: { type: string }
+        createdByUserId: { type: [string, "null"], format: uuid }
+        archivedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DocumentVersion:
+      type: object
+      additionalProperties: false
+      required: [id, orgId, documentId, version, objectPath, fileName, contentType, sizeBytes, sha256, source, createdByUserId, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        version: { type: integer }
+        objectPath: { type: string }
+        fileName: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: integer }
+        sha256: { type: [string, "null"] }
+        source: { type: string }
+        createdByUserId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+    DocumentDetail:
+      allOf:
+        - $ref: "#/components/schemas/Document"
+        - type: object
+          required: [versions]
+          properties: { versions: { type: array, items: { $ref: "#/components/schemas/DocumentVersion" } } }
+    SignatureRequestCreateInput:
+      type: object
+      additionalProperties: false
+      required: [signers]
+      properties:
+        signers: { type: array, minItems: 1, maxItems: 20, items: { type: object, additionalProperties: false, required: [name, email], properties: { name: { type: string, minLength: 1 }, email: { type: string, format: email }, signingOrder: { type: integer, minimum: 0 } } } }
+        expiresAt: { type: string, format: date-time }
+        message: { type: string, maxLength: 2000 }
+    SignatureRequestCreated:
+      type: object
+      additionalProperties: false
+      required: [request, signingLinks]
+      properties:
+        request: { type: object, additionalProperties: true }
+        signingLinks: { type: array, items: { type: object, additionalProperties: false, required: [email, signingUrl], properties: { email: { type: string, format: email }, signingUrl: { type: string } } } }
+    PublicSignatureRequest:
+      type: object
+      additionalProperties: false
+      required: [signer, request]
+      properties:
+        signer: { type: object, additionalProperties: false, required: [name, email], properties: { name: { type: string }, email: { type: string, format: email } } }
+        request: { type: object, additionalProperties: false, required: [id, message, expiresAt], properties: { id: { type: string, format: uuid }, message: { type: [string, "null"] }, expiresAt: { type: [string, "null"], format: date-time } } }
+    PublicSignatureCompleteInput:
+      type: object
+      additionalProperties: false
+      required: [typedSignature, consent]
+      properties: { typedSignature: { type: string, minLength: 1, maxLength: 200 }, consent: { type: boolean, const: true } }
+    PublicSignatureCompleteResult:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [status, remainingSigners]
+          properties: { status: { const: pending }, remainingSigners: { type: integer } }
+        - type: object
+          additionalProperties: false
+          required: [status, signedDocumentVersionId]
+          properties: { status: { const: signed }, signedDocumentVersionId: { type: string, format: uuid } }
+    ApiTokenCreateInput:
+      type: object
+      additionalProperties: false
+      required: [name, permissions]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        permissions: { type: array, minItems: 1, items: { type: string, enum: [leads:write] } }
+        rateLimitPerMinute: { type: integer, minimum: 1, maximum: 10000 }
+        expiresAt: { type: string, format: date-time }
+    ApiToken:
+      type: object
+      additionalProperties: false
+      required: [id, orgId, name, tokenPrefix, permissions, rateLimitPerMinute, expiresAt, lastUsedAt, revokedAt, createdByUserId, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        name: { type: string }
+        tokenPrefix: { type: string }
+        permissions: { type: array, items: { type: string, enum: [leads:write] } }
+        rateLimitPerMinute: { type: integer }
+        expiresAt: { type: [string, "null"], format: date-time }
+        lastUsedAt: { type: [string, "null"], format: date-time }
+        revokedAt: { type: [string, "null"], format: date-time }
+        createdByUserId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+    ApiTokenCreated:
+      allOf:
+        - $ref: "#/components/schemas/ApiToken"
+        - type: object
+          required: [token]
+          properties: { token: { type: string, pattern: "^aegis_" } }
+    SecurityPolicyPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        mfaRequired: { type: boolean }
+        ssoRequired: { type: boolean }
+        ipAllowlistEnabled: { type: boolean }
+        allowedCidrs: { type: array, maxItems: 100, items: { type: string, pattern: "^[0-9a-fA-F:.]+(?:/(?:[0-9]|[12][0-9]|3[0-2]|1[01][0-9]|12[0-8]))?$" } }
+        clerkMfaStatus: { type: string, enum: [not_configured, configured] }
+        clerkSsoStatus: { type: string, enum: [not_configured, configured] }
+    SecurityPolicy:
+      type: object
+      additionalProperties: false
+      required: [orgId, mfaRequired, clerkMfaStatus, ssoRequired, clerkSsoStatus, ipAllowlistEnabled, allowedCidrs]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        mfaRequired: { type: boolean }
+        clerkMfaStatus: { type: string, enum: [not_configured, configured] }
+        ssoRequired: { type: boolean }
+        clerkSsoStatus: { type: string, enum: [not_configured, configured] }
+        clerkDashboardConfiguredAt: { type: [string, "null"], format: date-time }
+        ipAllowlistEnabled: { type: boolean }
+        allowedCidrs: { type: array, items: { type: string } }
+        updatedByUserId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    WebhookInput:
+      type: object
+      additionalProperties: false
+      required: [name, url, events]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        url: { type: string, format: uri, maxLength: 2048 }
+        events: { type: array, minItems: 1, maxItems: 4, items: { type: string, enum: [lead.created, lead.updated, opportunity.created, opportunity.updated] } }
+        enabled: { type: boolean }
+    WebhookPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        url: { type: string, format: uri, maxLength: 2048 }
+        events: { type: array, minItems: 1, maxItems: 4, items: { type: string, enum: [lead.created, lead.updated, opportunity.created, opportunity.updated] } }
+        enabled: { type: boolean }
+    Webhook:
+      type: object
+      additionalProperties: false
+      required: [id, orgId, name, url, events, enabled, lastDeliveredAt, createdByUserId, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        name: { type: string }
+        url: { type: string }
+        events: { type: array, items: { type: string } }
+        enabled: { type: boolean }
+        lastDeliveredAt: { type: [string, "null"], format: date-time }
+        createdByUserId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    WebhookCreated:
+      allOf:
+        - $ref: "#/components/schemas/Webhook"
+        - type: object
+          required: [secret]
+          properties: { secret: { type: string } }
+    WebhookTestResult:
+      type: object
+      additionalProperties: true
+    WebhookDelivery:
+      type: object
+      additionalProperties: false
+      required: [id, orgId, webhookId, eventId, eventType, payload, status, attemptCount, nextAttemptAt, claimedAt, responseStatus, responseBody, lastError, deliveredAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        webhookId: { type: string, format: uuid }
+        eventId: { type: string, format: uuid }
+        eventType: { type: string }
+        payload: { type: object, additionalProperties: true }
+        status: { type: string }
+        attemptCount: { type: integer }
+        nextAttemptAt: { type: string, format: date-time }
+        claimedAt: { type: [string, "null"], format: date-time }
+        responseStatus: { type: [integer, "null"] }
+        responseBody: { type: [string, "null"] }
+        lastError: { type: [string, "null"] }
+        deliveredAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+    AuditEvent:
+      type: object
+      additionalProperties: false
+      required: [id, orgId, actorUserId, actorApiTokenId, action, entityType, entityId, ipAddress, userAgent, requestId, metadata, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        actorUserId: { type: [string, "null"], format: uuid }
+        actorApiTokenId: { type: [string, "null"], format: uuid }
+        action: { type: string }
+        entityType: { type: string }
+        entityId: { type: [string, "null"] }
+        ipAddress: { type: [string, "null"] }
+        userAgent: { type: [string, "null"] }
+        requestId: { type: [string, "null"] }
+        metadata: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+    IndustryTemplate:
+      type: object
+      additionalProperties: false
+      required: [key, pipeline, roles, fields, version]
+      properties:
+        key: { type: string, enum: [k12, construction, healthcare] }
+        pipeline: { type: string }
+        roles: { type: array, items: { type: string } }
+        fields: { type: array, items: { type: string } }
+        version: { type: integer, const: 1 }
+    IndustryTemplateApplication:
+      type: object
+      additionalProperties: false
+      required: [key, applied]
+      properties:
+        key: { type: string, enum: [k12, construction, healthcare] }
+        applied: { type: boolean }

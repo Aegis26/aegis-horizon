@@ -23,7 +23,10 @@ import Automation from "@/pages/Automation";
 import Billing from "@/pages/Billing";
 import Settings from "@/pages/Settings";
 import Communications from "@/pages/Communications";
-import { Button } from "react-day-picker";
+import Reports from "@/pages/Reports";
+import Documents from "@/pages/Documents";
+import Signatures from "@/pages/Signatures";
+import { Button } from "@/components/ui/button";
 
 const queryClient = new QueryClient();
 
@@ -205,6 +208,9 @@ function ClerkProviderWithRoutes() {
           <Route path="/territories" component={() => <ProtectedRoute component={Territories} />} />
           <Route path="/forecast" component={() => <ProtectedRoute component={Forecast} />} />
           <Route path="/automation" component={() => <ProtectedRoute component={Automation} />} />
+          <Route path="/reports" component={() => <ProtectedRoute component={Reports} />} />
+          <Route path="/documents" component={() => <ProtectedRoute component={Documents} />} />
+          <Route path="/signatures/:token" component={Signatures} />
           <Route path="/billing" component={() => <ProtectedRoute component={Billing} />} />
           <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
           

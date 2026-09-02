@@ -3402,3 +3402,960 @@ export const ListCommandHistoryResponseItem = zod.object({
 export const ListCommandHistoryResponse = zod.array(ListCommandHistoryResponseItem)
 
 
+export const GetWeightedRevenueForecastParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const getWeightedRevenueForecastQueryGroupByDefault = `weekly`;
+
+export const GetWeightedRevenueForecastQueryParams = zod.object({
+  "groupBy": zod.enum(['weekly', 'monthly']).default(getWeightedRevenueForecastQueryGroupByDefault)
+})
+
+export const GetWeightedRevenueForecastResponse = zod.object({
+  "horizonDays": zod.literal(90),
+  "groupBy": zod.enum(['weekly', 'monthly']),
+  "periods": zod.array(zod.object({
+  "periodStart": zod.coerce.date(),
+  "weightedRevenue": zod.number(),
+  "opportunityCount": zod.number().int()
+}))
+})
+
+
+export const CreateLeadsBatchParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const createLeadsBatchBodyLeadsItemFirstNameMax = 200;
+
+export const createLeadsBatchBodyLeadsItemLastNameMax = 200;
+
+export const createLeadsBatchBodyLeadsItemEmailMax = 320;
+
+export const createLeadsBatchBodyLeadsItemPhoneMax = 64;
+
+export const createLeadsBatchBodyLeadsItemCompanyMax = 500;
+
+export const createLeadsBatchBodyLeadsItemTitleMax = 300;
+
+export const createLeadsBatchBodyLeadsItemIndustryMax = 200;
+
+export const createLeadsBatchBodyLeadsItemSourceMax = 200;
+
+export const createLeadsBatchBodyLeadsItemCountryMax = 100;
+
+export const createLeadsBatchBodyLeadsItemStateMax = 100;
+
+export const createLeadsBatchBodyLeadsItemProductInterestMax = 500;
+
+export const createLeadsBatchBodyLeadsMax = 100;
+
+
+
+export const CreateLeadsBatchBody = zod.object({
+  "leads": zod.array(zod.object({
+  "firstName": zod.string().min(1).max(createLeadsBatchBodyLeadsItemFirstNameMax),
+  "lastName": zod.string().min(1).max(createLeadsBatchBodyLeadsItemLastNameMax),
+  "email": zod.string().email().max(createLeadsBatchBodyLeadsItemEmailMax).nullish(),
+  "phone": zod.string().max(createLeadsBatchBodyLeadsItemPhoneMax).nullish(),
+  "company": zod.string().max(createLeadsBatchBodyLeadsItemCompanyMax).nullish(),
+  "title": zod.string().max(createLeadsBatchBodyLeadsItemTitleMax).nullish(),
+  "industry": zod.string().max(createLeadsBatchBodyLeadsItemIndustryMax).nullish(),
+  "source": zod.string().max(createLeadsBatchBodyLeadsItemSourceMax).nullish(),
+  "country": zod.string().max(createLeadsBatchBodyLeadsItemCountryMax).nullish(),
+  "state": zod.string().max(createLeadsBatchBodyLeadsItemStateMax).nullish(),
+  "productInterest": zod.string().max(createLeadsBatchBodyLeadsItemProductInterestMax).nullish()
+})).min(1).max(createLeadsBatchBodyLeadsMax)
+})
+
+export const CreateLeadsBatchResponse = zod.object({
+  "count": zod.number().int(),
+  "leadIds": zod.array(zod.string().uuid())
+})
+
+
+export const ListCustomReportsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListCustomReportsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "entityType": zod.enum(['accounts', 'leads', 'opportunities']),
+  "definition": zod.record(zod.string(), zod.unknown()),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListCustomReportsResponse = zod.array(ListCustomReportsResponseItem)
+
+
+export const CreateCustomReportParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const createCustomReportBodyNameMax = 120;
+
+export const createCustomReportBodyDescriptionMax = 1000;
+
+export const createCustomReportBodyDefinitionFieldsMax = 20;
+
+export const createCustomReportBodyDefinitionConditionsMax = 20;
+
+export const createCustomReportBodyDefinitionLimitMax = 1000;
+
+
+
+export const CreateCustomReportBody = zod.object({
+  "name": zod.string().min(1).max(createCustomReportBodyNameMax),
+  "description": zod.string().max(createCustomReportBodyDescriptionMax).optional(),
+  "entityType": zod.enum(['accounts', 'leads', 'opportunities']),
+  "definition": zod.object({
+  "fields": zod.array(zod.string().describe('Allowlisted for the selected entity. Opportunities: id, name, stage, probability, value, forecastCategory, expectedCloseDate, daysSinceLastTouch. daysSinceLastTouch is the whole-day age of the latest org-scoped linked activity, or of opportunity creation when no activity exists.')).min(1).max(createCustomReportBodyDefinitionFieldsMax),
+  "conditions": zod.array(zod.object({
+  "field": zod.string().describe('Allowlisted field for the selected entity; opportunity fields include value and daysSinceLastTouch.'),
+  "operator": zod.enum(['equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.union([zod.string(),zod.number()]).optional().describe('Use a number with gt, gte, lt, or lte for numeric opportunity fields such as value and daysSinceLastTouch.')
+})).max(createCustomReportBodyDefinitionConditionsMax).optional(),
+  "sort": zod.object({
+  "field": zod.string().describe('Allowlisted field for the selected entity; opportunity fields include daysSinceLastTouch.'),
+  "direction": zod.enum(['asc', 'desc'])
+}).optional(),
+  "limit": zod.number().int().min(1).max(createCustomReportBodyDefinitionLimitMax).optional()
+})
+})
+
+export const CreateCustomReportResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "entityType": zod.enum(['accounts', 'leads', 'opportunities']),
+  "definition": zod.record(zod.string(), zod.unknown()),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const GetCustomReportParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "reportId": zod.coerce.string().uuid()
+})
+
+export const GetCustomReportResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "entityType": zod.enum(['accounts', 'leads', 'opportunities']),
+  "definition": zod.record(zod.string(), zod.unknown()),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const UpdateCustomReportParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "reportId": zod.coerce.string().uuid()
+})
+
+export const updateCustomReportBodyNameMax = 120;
+
+export const updateCustomReportBodyDescriptionMax = 1000;
+
+export const updateCustomReportBodyDefinitionFieldsMax = 20;
+
+export const updateCustomReportBodyDefinitionConditionsMax = 20;
+
+export const updateCustomReportBodyDefinitionLimitMax = 1000;
+
+
+
+export const UpdateCustomReportBody = zod.object({
+  "name": zod.string().min(1).max(updateCustomReportBodyNameMax).optional(),
+  "description": zod.string().max(updateCustomReportBodyDescriptionMax).optional(),
+  "entityType": zod.enum(['accounts', 'leads', 'opportunities']).optional(),
+  "definition": zod.object({
+  "fields": zod.array(zod.string().describe('Allowlisted for the selected entity. Opportunities: id, name, stage, probability, value, forecastCategory, expectedCloseDate, daysSinceLastTouch. daysSinceLastTouch is the whole-day age of the latest org-scoped linked activity, or of opportunity creation when no activity exists.')).min(1).max(updateCustomReportBodyDefinitionFieldsMax),
+  "conditions": zod.array(zod.object({
+  "field": zod.string().describe('Allowlisted field for the selected entity; opportunity fields include value and daysSinceLastTouch.'),
+  "operator": zod.enum(['equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'is_empty', 'is_not_empty']),
+  "value": zod.union([zod.string(),zod.number()]).optional().describe('Use a number with gt, gte, lt, or lte for numeric opportunity fields such as value and daysSinceLastTouch.')
+})).max(updateCustomReportBodyDefinitionConditionsMax).optional(),
+  "sort": zod.object({
+  "field": zod.string().describe('Allowlisted field for the selected entity; opportunity fields include daysSinceLastTouch.'),
+  "direction": zod.enum(['asc', 'desc'])
+}).optional(),
+  "limit": zod.number().int().min(1).max(updateCustomReportBodyDefinitionLimitMax).optional()
+}).optional()
+})
+
+export const UpdateCustomReportResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "entityType": zod.enum(['accounts', 'leads', 'opportunities']),
+  "definition": zod.record(zod.string(), zod.unknown()),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const DeleteCustomReportParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "reportId": zod.coerce.string().uuid()
+})
+
+export const DeleteCustomReportResponse = zod.void()
+
+
+export const PreviewCustomReportParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "reportId": zod.coerce.string().uuid()
+})
+
+export const PreviewCustomReportResponse = zod.object({
+  "rows": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+export const RunCustomReportParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "reportId": zod.coerce.string().uuid()
+})
+
+export const RunCustomReportResponse = zod.object({
+  "run": zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "reportId": zod.string().uuid(),
+  "status": zod.enum(['running', 'completed', 'failed']),
+  "rowCount": zod.number().int(),
+  "parameters": zod.record(zod.string(), zod.unknown()),
+  "errorMessage": zod.string().nullable(),
+  "startedByUserId": zod.string().uuid().nullable(),
+  "startedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable()
+}),
+  "rows": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+export const ListCustomReportRunsParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "reportId": zod.coerce.string().uuid()
+})
+
+export const ListCustomReportRunsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "reportId": zod.string().uuid(),
+  "status": zod.enum(['running', 'completed', 'failed']),
+  "rowCount": zod.number().int(),
+  "parameters": zod.record(zod.string(), zod.unknown()),
+  "errorMessage": zod.string().nullable(),
+  "startedByUserId": zod.string().uuid().nullable(),
+  "startedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable()
+})
+export const ListCustomReportRunsResponse = zod.array(ListCustomReportRunsResponseItem)
+
+
+export const CreateCustomReportExportParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "reportId": zod.coerce.string().uuid()
+})
+
+export const CreateCustomReportExportBody = zod.object({
+  "format": zod.enum(['csv', 'pdf', 'xlsx'])
+})
+
+export const CreateCustomReportExportResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "reportId": zod.string().uuid().nullable(),
+  "format": zod.enum(['csv', 'pdf', 'xlsx']),
+  "status": zod.string(),
+  "objectPath": zod.string().nullable(),
+  "contentType": zod.string().nullable(),
+  "fileName": zod.string().nullable(),
+  "sizeBytes": zod.number().int().nullable(),
+  "rowCount": zod.number().int().nullable(),
+  "requestedByUserId": zod.string().uuid().nullable(),
+  "errorMessage": zod.string().nullable(),
+  "expiresAt": zod.coerce.date().nullable(),
+  "completedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "downloadUrl": zod.string()
+})
+
+
+export const DownloadCustomReportExportParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "exportId": zod.coerce.string().uuid()
+})
+
+export const DownloadCustomReportExportResponse = zod.void()
+
+
+export const ListReportSchedulesParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "reportId": zod.coerce.string().uuid()
+})
+
+export const ListReportSchedulesResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "reportId": zod.string().uuid(),
+  "cronExpression": zod.string(),
+  "timezone": zod.string(),
+  "format": zod.enum(['csv', 'pdf', 'xlsx']),
+  "recipientEmails": zod.array(zod.string().email()),
+  "enabled": zod.boolean(),
+  "nextRunAt": zod.coerce.date().nullable(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "claimedAt": zod.coerce.date().nullable(),
+  "claimToken": zod.string().nullable(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListReportSchedulesResponse = zod.array(ListReportSchedulesResponseItem)
+
+
+export const CreateReportScheduleParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "reportId": zod.coerce.string().uuid()
+})
+
+export const createReportScheduleBodyRecipientEmailsMax = 20;
+
+
+
+export const CreateReportScheduleBody = zod.object({
+  "frequency": zod.enum(['daily', 'weekly', 'monthly']),
+  "format": zod.enum(['csv', 'pdf', 'xlsx']),
+  "recipientEmails": zod.array(zod.string().email()).min(1).max(createReportScheduleBodyRecipientEmailsMax),
+  "enabled": zod.boolean().optional()
+})
+
+export const CreateReportScheduleResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "reportId": zod.string().uuid(),
+  "cronExpression": zod.string(),
+  "timezone": zod.string(),
+  "format": zod.enum(['csv', 'pdf', 'xlsx']),
+  "recipientEmails": zod.array(zod.string().email()),
+  "enabled": zod.boolean(),
+  "nextRunAt": zod.coerce.date().nullable(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "claimedAt": zod.coerce.date().nullable(),
+  "claimToken": zod.string().nullable(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const UpdateReportScheduleParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "reportId": zod.coerce.string().uuid(),
+  "scheduleId": zod.coerce.string().uuid()
+})
+
+export const updateReportScheduleBodyRecipientEmailsMax = 20;
+
+
+
+export const UpdateReportScheduleBody = zod.object({
+  "frequency": zod.enum(['daily', 'weekly', 'monthly']).optional(),
+  "format": zod.enum(['csv', 'pdf', 'xlsx']).optional(),
+  "recipientEmails": zod.array(zod.string().email()).min(1).max(updateReportScheduleBodyRecipientEmailsMax).optional(),
+  "enabled": zod.boolean().optional()
+})
+
+export const UpdateReportScheduleResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "reportId": zod.string().uuid(),
+  "cronExpression": zod.string(),
+  "timezone": zod.string(),
+  "format": zod.enum(['csv', 'pdf', 'xlsx']),
+  "recipientEmails": zod.array(zod.string().email()),
+  "enabled": zod.boolean(),
+  "nextRunAt": zod.coerce.date().nullable(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "claimedAt": zod.coerce.date().nullable(),
+  "claimToken": zod.string().nullable(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const DeleteReportScheduleParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "reportId": zod.coerce.string().uuid(),
+  "scheduleId": zod.coerce.string().uuid()
+})
+
+export const DeleteReportScheduleResponse = zod.void()
+
+
+export const ListDocumentsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const listDocumentsResponseSignatureFieldsItemKeyRegExp = new RegExp('^[a-z][a-z0-9_]{0,63}$');
+
+export const listDocumentsResponseSignatureFieldsItemRequiredDefault = true;
+
+export const ListDocumentsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid().nullable(),
+  "opportunityId": zod.string().uuid().nullable(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "signatureFields": zod.array(zod.object({
+  "key": zod.string().regex(listDocumentsResponseSignatureFieldsItemKeyRegExp),
+  "page": zod.number().int().min(1),
+  "required": zod.boolean().default(listDocumentsResponseSignatureFieldsItemRequiredDefault)
+})),
+  "currentVersion": zod.number().int(),
+  "status": zod.string(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "archivedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListDocumentsResponse = zod.array(ListDocumentsResponseItem)
+
+
+export const CreateDocumentParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const createDocumentBodyNameMax = 255;
+
+export const createDocumentBodyDescriptionMax = 2000;
+
+export const createDocumentBodySignatureFieldsItemKeyRegExp = new RegExp('^[a-z][a-z0-9_]{0,63}$');
+
+export const createDocumentBodySignatureFieldsItemRequiredDefault = true;
+export const createDocumentBodySignatureFieldsDefault = [];
+export const createDocumentBodySignatureFieldsMax = 50;
+
+export const createDocumentBodyUploadObjectPathRegExp = new RegExp('^/objects/uploads/[a-z0-9-]+$');
+export const createDocumentBodyUploadFileNameMax = 255;
+
+export const createDocumentBodyUploadSizeBytesMax = 26214400;
+
+
+
+export const CreateDocumentBody = zod.object({
+  "name": zod.string().min(1).max(createDocumentBodyNameMax),
+  "description": zod.string().max(createDocumentBodyDescriptionMax).optional(),
+  "accountId": zod.string().uuid().optional(),
+  "opportunityId": zod.string().uuid().optional(),
+  "signatureFields": zod.array(zod.object({
+  "key": zod.string().regex(createDocumentBodySignatureFieldsItemKeyRegExp),
+  "page": zod.number().int().min(1),
+  "required": zod.boolean().default(createDocumentBodySignatureFieldsItemRequiredDefault)
+})).max(createDocumentBodySignatureFieldsMax).default(createDocumentBodySignatureFieldsDefault),
+  "upload": zod.object({
+  "objectPath": zod.string().regex(createDocumentBodyUploadObjectPathRegExp),
+  "fileName": zod.string().min(1).max(createDocumentBodyUploadFileNameMax),
+  "contentType": zod.enum(['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']),
+  "sizeBytes": zod.number().int().min(1).max(createDocumentBodyUploadSizeBytesMax)
+})
+})
+
+export const createDocumentResponseSignatureFieldsItemKeyRegExp = new RegExp('^[a-z][a-z0-9_]{0,63}$');
+
+export const createDocumentResponseSignatureFieldsItemRequiredDefault = true;
+
+export const CreateDocumentResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid().nullable(),
+  "opportunityId": zod.string().uuid().nullable(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "signatureFields": zod.array(zod.object({
+  "key": zod.string().regex(createDocumentResponseSignatureFieldsItemKeyRegExp),
+  "page": zod.number().int().min(1),
+  "required": zod.boolean().default(createDocumentResponseSignatureFieldsItemRequiredDefault)
+})),
+  "currentVersion": zod.number().int(),
+  "status": zod.string(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "archivedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const GetDocumentParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "documentId": zod.coerce.string().uuid()
+})
+
+export const getDocumentResponseOneSignatureFieldsItemKeyRegExp = new RegExp('^[a-z][a-z0-9_]{0,63}$');
+
+export const getDocumentResponseOneSignatureFieldsItemRequiredDefault = true;
+
+export const GetDocumentResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid().nullable(),
+  "opportunityId": zod.string().uuid().nullable(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "signatureFields": zod.array(zod.object({
+  "key": zod.string().regex(getDocumentResponseOneSignatureFieldsItemKeyRegExp),
+  "page": zod.number().int().min(1),
+  "required": zod.boolean().default(getDocumentResponseOneSignatureFieldsItemRequiredDefault)
+})),
+  "currentVersion": zod.number().int(),
+  "status": zod.string(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "archivedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "versions": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "documentId": zod.string().uuid(),
+  "version": zod.number().int(),
+  "objectPath": zod.string(),
+  "fileName": zod.string(),
+  "contentType": zod.string(),
+  "sizeBytes": zod.number().int(),
+  "sha256": zod.string().nullable(),
+  "source": zod.string(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+}))
+
+
+export const DownloadDocumentParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "documentId": zod.coerce.string().uuid()
+})
+
+export const DownloadDocumentResponse = zod.void()
+
+
+export const CreateDocumentVersionParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "documentId": zod.coerce.string().uuid()
+})
+
+export const createDocumentVersionBodyObjectPathRegExp = new RegExp('^/objects/uploads/[a-z0-9-]+$');
+export const createDocumentVersionBodyFileNameMax = 255;
+
+export const createDocumentVersionBodySizeBytesMax = 26214400;
+
+
+
+export const CreateDocumentVersionBody = zod.object({
+  "objectPath": zod.string().regex(createDocumentVersionBodyObjectPathRegExp),
+  "fileName": zod.string().min(1).max(createDocumentVersionBodyFileNameMax),
+  "contentType": zod.enum(['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']),
+  "sizeBytes": zod.number().int().min(1).max(createDocumentVersionBodySizeBytesMax)
+})
+
+export const CreateDocumentVersionResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "documentId": zod.string().uuid(),
+  "version": zod.number().int(),
+  "objectPath": zod.string(),
+  "fileName": zod.string(),
+  "contentType": zod.string(),
+  "sizeBytes": zod.number().int(),
+  "sha256": zod.string().nullable(),
+  "source": zod.string(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+export const CreateSignatureRequestParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "documentId": zod.coerce.string().uuid()
+})
+
+
+export const createSignatureRequestBodySignersItemSigningOrderMin = 0;
+
+export const createSignatureRequestBodySignersMax = 20;
+
+export const createSignatureRequestBodyMessageMax = 2000;
+
+
+
+export const CreateSignatureRequestBody = zod.object({
+  "signers": zod.array(zod.object({
+  "name": zod.string().min(1),
+  "email": zod.string().email(),
+  "signingOrder": zod.number().int().min(createSignatureRequestBodySignersItemSigningOrderMin).optional()
+})).min(1).max(createSignatureRequestBodySignersMax),
+  "expiresAt": zod.coerce.date().optional(),
+  "message": zod.string().max(createSignatureRequestBodyMessageMax).optional()
+})
+
+export const CreateSignatureRequestResponse = zod.object({
+  "request": zod.record(zod.string(), zod.unknown()),
+  "signingLinks": zod.array(zod.object({
+  "email": zod.string().email(),
+  "signingUrl": zod.string()
+}))
+})
+
+
+export const GetPublicSignatureRequestParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetPublicSignatureRequestResponse = zod.object({
+  "signer": zod.object({
+  "name": zod.string(),
+  "email": zod.string().email()
+}),
+  "request": zod.object({
+  "id": zod.string().uuid(),
+  "message": zod.string().nullable(),
+  "expiresAt": zod.coerce.date().nullable()
+})
+})
+
+
+export const CompletePublicSignatureRequestParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const completePublicSignatureRequestBodyTypedSignatureMax = 200;
+
+
+
+export const CompletePublicSignatureRequestBody = zod.object({
+  "typedSignature": zod.string().min(1).max(completePublicSignatureRequestBodyTypedSignatureMax),
+  "consent": zod.literal(true)
+})
+
+export const CompletePublicSignatureRequestResponse = zod.union([zod.object({
+  "status": zod.literal("pending"),
+  "remainingSigners": zod.number().int()
+}),zod.object({
+  "status": zod.literal("signed"),
+  "signedDocumentVersionId": zod.string().uuid()
+})])
+
+
+export const ListApiTokensParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListApiTokensResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "name": zod.string(),
+  "tokenPrefix": zod.string(),
+  "permissions": zod.array(zod.enum(['leads:write'])),
+  "rateLimitPerMinute": zod.number().int(),
+  "expiresAt": zod.coerce.date().nullable(),
+  "lastUsedAt": zod.coerce.date().nullable(),
+  "revokedAt": zod.coerce.date().nullable(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListApiTokensResponse = zod.array(ListApiTokensResponseItem)
+
+
+export const CreateApiTokenParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const createApiTokenBodyNameMax = 100;
+
+
+export const createApiTokenBodyRateLimitPerMinuteMax = 10000;
+
+
+
+export const CreateApiTokenBody = zod.object({
+  "name": zod.string().min(1).max(createApiTokenBodyNameMax),
+  "permissions": zod.array(zod.enum(['leads:write'])).min(1),
+  "rateLimitPerMinute": zod.number().int().min(1).max(createApiTokenBodyRateLimitPerMinuteMax).optional(),
+  "expiresAt": zod.coerce.date().optional()
+})
+
+export const createApiTokenResponseTwoTokenRegExp = new RegExp('^aegis_');
+
+
+export const CreateApiTokenResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "name": zod.string(),
+  "tokenPrefix": zod.string(),
+  "permissions": zod.array(zod.enum(['leads:write'])),
+  "rateLimitPerMinute": zod.number().int(),
+  "expiresAt": zod.coerce.date().nullable(),
+  "lastUsedAt": zod.coerce.date().nullable(),
+  "revokedAt": zod.coerce.date().nullable(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date()
+}).and(zod.object({
+  "token": zod.string().regex(createApiTokenResponseTwoTokenRegExp)
+}))
+
+
+export const RevokeApiTokenParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "tokenId": zod.coerce.string().uuid()
+})
+
+export const RevokeApiTokenResponse = zod.void()
+
+
+export const GetOrgSecurityPolicyParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const GetOrgSecurityPolicyResponse = zod.object({
+  "id": zod.string().uuid().optional(),
+  "orgId": zod.string().uuid(),
+  "mfaRequired": zod.boolean(),
+  "clerkMfaStatus": zod.enum(['not_configured', 'configured']),
+  "ssoRequired": zod.boolean(),
+  "clerkSsoStatus": zod.enum(['not_configured', 'configured']),
+  "clerkDashboardConfiguredAt": zod.coerce.date().nullish(),
+  "ipAllowlistEnabled": zod.boolean(),
+  "allowedCidrs": zod.array(zod.string()),
+  "updatedByUserId": zod.string().uuid().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+export const UpdateOrgSecurityPolicyParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const updateOrgSecurityPolicyBodyAllowedCidrsItemRegExp = new RegExp('^[0-9a-fA-F:.]+(?:/(?:[0-9]|[12][0-9]|3[0-2]|1[01][0-9]|12[0-8]))?$');
+export const updateOrgSecurityPolicyBodyAllowedCidrsMax = 100;
+
+
+
+export const UpdateOrgSecurityPolicyBody = zod.object({
+  "mfaRequired": zod.boolean().optional(),
+  "ssoRequired": zod.boolean().optional(),
+  "ipAllowlistEnabled": zod.boolean().optional(),
+  "allowedCidrs": zod.array(zod.string().regex(updateOrgSecurityPolicyBodyAllowedCidrsItemRegExp)).max(updateOrgSecurityPolicyBodyAllowedCidrsMax).optional(),
+  "clerkMfaStatus": zod.enum(['not_configured', 'configured']).optional(),
+  "clerkSsoStatus": zod.enum(['not_configured', 'configured']).optional()
+})
+
+export const UpdateOrgSecurityPolicyResponse = zod.object({
+  "id": zod.string().uuid().optional(),
+  "orgId": zod.string().uuid(),
+  "mfaRequired": zod.boolean(),
+  "clerkMfaStatus": zod.enum(['not_configured', 'configured']),
+  "ssoRequired": zod.boolean(),
+  "clerkSsoStatus": zod.enum(['not_configured', 'configured']),
+  "clerkDashboardConfiguredAt": zod.coerce.date().nullish(),
+  "ipAllowlistEnabled": zod.boolean(),
+  "allowedCidrs": zod.array(zod.string()),
+  "updatedByUserId": zod.string().uuid().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+export const ListWebhooksParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListWebhooksResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "name": zod.string(),
+  "url": zod.string(),
+  "events": zod.array(zod.string()),
+  "enabled": zod.boolean(),
+  "lastDeliveredAt": zod.coerce.date().nullable(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListWebhooksResponse = zod.array(ListWebhooksResponseItem)
+
+
+export const CreateWebhookParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const createWebhookBodyNameMax = 100;
+
+export const createWebhookBodyUrlMax = 2048;
+
+export const createWebhookBodyEventsMax = 4;
+
+
+
+export const CreateWebhookBody = zod.object({
+  "name": zod.string().min(1).max(createWebhookBodyNameMax),
+  "url": zod.string().url().max(createWebhookBodyUrlMax),
+  "events": zod.array(zod.enum(['lead.created', 'lead.updated', 'opportunity.created', 'opportunity.updated'])).min(1).max(createWebhookBodyEventsMax),
+  "enabled": zod.boolean().optional()
+})
+
+export const CreateWebhookResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "name": zod.string(),
+  "url": zod.string(),
+  "events": zod.array(zod.string()),
+  "enabled": zod.boolean(),
+  "lastDeliveredAt": zod.coerce.date().nullable(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "secret": zod.string()
+}))
+
+
+export const UpdateWebhookParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "webhookId": zod.coerce.string().uuid()
+})
+
+export const updateWebhookBodyNameMax = 100;
+
+export const updateWebhookBodyUrlMax = 2048;
+
+export const updateWebhookBodyEventsMax = 4;
+
+
+
+export const UpdateWebhookBody = zod.object({
+  "name": zod.string().min(1).max(updateWebhookBodyNameMax).optional(),
+  "url": zod.string().url().max(updateWebhookBodyUrlMax).optional(),
+  "events": zod.array(zod.enum(['lead.created', 'lead.updated', 'opportunity.created', 'opportunity.updated'])).min(1).max(updateWebhookBodyEventsMax).optional(),
+  "enabled": zod.boolean().optional()
+})
+
+export const UpdateWebhookResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "name": zod.string(),
+  "url": zod.string(),
+  "events": zod.array(zod.string()),
+  "enabled": zod.boolean(),
+  "lastDeliveredAt": zod.coerce.date().nullable(),
+  "createdByUserId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const DeleteWebhookParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "webhookId": zod.coerce.string().uuid()
+})
+
+export const DeleteWebhookResponse = zod.void()
+
+
+export const TestWebhookDeliveryParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "webhookId": zod.coerce.string().uuid()
+})
+
+export const TestWebhookDeliveryResponse = zod.record(zod.string(), zod.unknown())
+
+
+export const ListWebhookDeliveriesParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "webhookId": zod.coerce.string().uuid()
+})
+
+export const ListWebhookDeliveriesResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "webhookId": zod.string().uuid(),
+  "eventId": zod.string().uuid(),
+  "eventType": zod.string(),
+  "payload": zod.record(zod.string(), zod.unknown()),
+  "status": zod.string(),
+  "attemptCount": zod.number().int(),
+  "nextAttemptAt": zod.coerce.date(),
+  "claimedAt": zod.coerce.date().nullable(),
+  "responseStatus": zod.number().int().nullable(),
+  "responseBody": zod.string().nullable(),
+  "lastError": zod.string().nullable(),
+  "deliveredAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListWebhookDeliveriesResponse = zod.array(ListWebhookDeliveriesResponseItem)
+
+
+export const ListAuditEventsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListAuditEventsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "actorUserId": zod.string().uuid().nullable(),
+  "actorApiTokenId": zod.string().uuid().nullable(),
+  "action": zod.string(),
+  "entityType": zod.string(),
+  "entityId": zod.string().nullable(),
+  "ipAddress": zod.string().nullable(),
+  "userAgent": zod.string().nullable(),
+  "requestId": zod.string().nullable(),
+  "metadata": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.coerce.date()
+})
+export const ListAuditEventsResponse = zod.array(ListAuditEventsResponseItem)
+
+
+export const ListIndustryTemplatesParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListIndustryTemplatesResponseItem = zod.object({
+  "key": zod.enum(['k12', 'construction', 'healthcare']),
+  "pipeline": zod.string(),
+  "roles": zod.array(zod.string()),
+  "fields": zod.array(zod.string()),
+  "version": zod.literal(1)
+})
+export const ListIndustryTemplatesResponse = zod.array(ListIndustryTemplatesResponseItem)
+
+
+export const ApplyIndustryTemplateParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "templateKey": zod.enum(['k12', 'construction', 'healthcare'])
+})
+
+export const ApplyIndustryTemplateResponse = zod.object({
+  "key": zod.enum(['k12', 'construction', 'healthcare']),
+  "applied": zod.boolean()
+})
+
+

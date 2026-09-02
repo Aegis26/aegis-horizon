@@ -1,0 +1,706 @@
+# Aegis Horizon — Phase 6: Analytics, Enterprise & Polish
+
+**Goal:** Ship a complete, enterprise-grade CRM. Dashboards show what matters. Documents are managed and signed. Access is secure (SSO, MFA, IP allowlist). Mobile works offline. API lets customers integrate anything. Industry templates make setup instant.
+
+**Deliverables:** Role-based dashboards (sales, revenue, forecasting), custom reporting (drag-and-drop builder, scheduled delivery), mobile PWA (full offline sync), document management (versioning, e-signature), open API (webhooks, full parity with UI), security hardening (SSO/SAML, MFA, IP allowlist, audit logs), industry modules (K-12, Construction, Healthcare).
+
+**Acceptance Criteria:**
+1. Sales rep sees revenue forecast for next 90 days (by week/month) based on opportunity close probability.
+2. Manager exports custom report "All opportunities > $100k not touched in 7+ days" to PDF.
+3. Rep uses mobile app offline, creates 3 leads, syncs when back online.
+4. Finance uploads contract, marks key fields, e-signature requested, signed, versioned.
+5. Partner integrates via API: POST /api/orgs/:orgId/leads/batch to create 100 leads at once.
+6. Admin enables SSO; user logs in via company Okta; MFA required.
+7. K-12 school admin uses pre-built K-12 template: automatic student pipeline stages, teacher role mapping.
+
+---
+
+## Stack
+
+| Component | Choice | Why |
+|---|---|---|
+| Dashboard | React + Recharts | Real-time updates, existing dependencies |
+| Custom Reporting | React Query Builder + Playwright | Visual drag-and-drop, scheduled exports |
+| Mobile PWA | PWA (Vite + Service Worker) | No App Store friction, works offline |
+| Offline Sync | IndexedDB + WatermelonDB | Lightweight local DB, conflict resolution |
+| Document Storage | Cloudflare R2 + versioning | You already use R2; cheap + fast |
+| E-Signature | EasyESign API or DocuSign Lite | Simple integration, audit trail |
+| Open API | Express + generated OpenAPI | Extend existing API, no new vendor |
+| Authentication | NextAuth.js + OAuth providers | SSO/SAML support, MFA via TOTP |
+| Audit Logging | Existing activity table + new audit_events | Central audit trail for compliance |
+| Industry Templates | Org-scoped seed data + UX flows | No separate products, just templates |
+
+---
+
+## Database Schema Additions
+
+### Dashboards & Reporting
+
+```typescript
+export const dashboards = pgTable('dashboards', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id),
+  name: text('name').notNull(),
+  type: text('type').notNull(), // 'revenue' | 'pipeline' | 'forecast' | 'team' | 'custom'
+  layout: jsonb('layout').default([]), // {widgetId, x, y, w, h, config}
+  roleRestrictions: text('role_restrictions').array().default([]), // ['rep', 'manager', 'admin']
+  isDefault: boolean('is_default').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const widgets = pgTable('widgets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  dashboardId: uuid('dashboard_id').references(() => dashboards.id, { onDelete: 'cascade' }),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  type: text('type').notNull(), // 'revenue_forecast' | 'pipeline_chart' | 'leaderboard' | 'custom_metric'
+  title: text('title'),
+  config: jsonb('config').default({}), // {metric, timeRange, groupBy, filters}
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const customReports = pgTable('custom_reports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id),
+  name: text('name').notNull(),
+  description: text('description'),
+  entityType: text('entity_type').notNull(), // 'lead' | 'opportunity' | 'account' | 'activity'
+  selectedFields: text('selected_fields').array().default([]),
+  filters: jsonb('filters').default([]), // Query builder state: [{field, operator, value}, ...]
+  sortBy: jsonb('sort_by').default([]), // [{field, direction}, ...]
+  schedule: text('schedule'), // 'manual' | 'daily' | 'weekly' | 'monthly'
+  deliveryEmail: text('delivery_email'),
+  lastRun: timestamp('last_run'),
+  nextRun: timestamp('next_run'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const reportRuns = pgTable('report_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  reportId: uuid('report_id').notNull().references(() => customReports.id, { onDelete: 'cascade' }),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  rowCount: integer('row_count'),
+  exportUrl: text('export_url'), // S3/R2 URL
+  exportFormat: text('export_format'), // 'csv' | 'pdf' | 'xlsx'
+  ranAt: timestamp('ran_at').defaultNow(),
+});
+
+export const auditEvents = pgTable('audit_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id),
+  action: text('action').notNull(), // 'create' | 'update' | 'delete' | 'access' | 'export'
+  entityType: text('entity_type').notNull(), // 'lead', 'opportunity', 'document', etc.
+  entityId: uuid('entity_id'),
+  changes: jsonb('changes'), // {before: {...}, after: {...}}
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  status: text('status'), // 'success' | 'failure'
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+```
+
+### Documents & E-Signature
+
+```typescript
+export const documents = pgTable('documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'set null' }),
+  opportunityId: uuid('opportunity_id').references(() => opportunities.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  mimeType: text('mime_type'),
+  fileSize: integer('file_size'),
+  storageUrl: text('storage_url'), // R2 URL
+  currentVersion: integer('current_version').default(1),
+  signatureStatus: text('signature_status').default('unsigned'), // 'unsigned' | 'pending' | 'signed' | 'rejected'
+  uploadedByUserId: uuid('uploaded_by_user_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const documentVersions = pgTable('document_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  documentId: uuid('document_id').notNull().references(() => documents.id, { onDelete: 'cascade' }),
+  version: integer('version'),
+  storageUrl: text('storage_url'),
+  changeNotes: text('change_notes'),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const signatureRequests = pgTable('signature_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  documentId: uuid('document_id').notNull().references(() => documents.id, { onDelete: 'cascade' }),
+  recipientEmail: text('recipient_email').notNull(),
+  recipientName: text('recipient_name'),
+  status: text('status').default('pending'), // 'pending' | 'viewed' | 'signed' | 'rejected' | 'expired'
+  signedAt: timestamp('signed_at'),
+  signedByUserId: uuid('signed_by_user_id').references(() => users.id),
+  signatureUrl: text('signature_url'), // Signed document URL
+  externalSignatureId: text('external_signature_id'), // EasyESign/DocuSign ID
+  expiresAt: timestamp('expires_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+```
+
+### Mobile & Offline Sync
+
+```typescript
+export const syncQueue = pgTable('sync_queue', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  operation: text('operation').notNull(), // 'create' | 'update' | 'delete'
+  entityType: text('entity_type').notNull(),
+  entityId: uuid('entity_id'),
+  payload: jsonb('payload'), // Full record to sync
+  status: text('status').default('pending'), // 'pending' | 'synced' | 'failed'
+  error: text('error'),
+  createdAt: timestamp('created_at').defaultNow(),
+  syncedAt: timestamp('synced_at'),
+});
+
+export const apiTokens = pgTable('api_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id),
+  name: text('name'),
+  token: text('token').notNull().unique(), // Hash of actual token
+  permissions: text('permissions').array().default(['read']),
+  rateLimit: integer('rate_limit').default(1000), // Per minute
+  lastUsedAt: timestamp('last_used_at'),
+  expiresAt: timestamp('expires_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const mfaSetup = pgTable('mfa_setup', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  method: text('method').notNull(), // 'totp' | 'sms' | 'email'
+  secret: text('secret_encrypted'),
+  backupCodes: text('backup_codes_encrypted').array().default([]),
+  verified: boolean('verified').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const industryTemplates = pgTable('industry_templates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  industry: text('industry').notNull().unique(), // 'k12' | 'construction' | 'healthcare'
+  displayName: text('display_name'),
+  description: text('description'),
+  pipelineStages: jsonb('pipeline_stages').default([]), // [{name, probability, order}, ...]
+  customRoles: jsonb('custom_roles').default([]), // [{name, description}, ...]
+  defaultFields: jsonb('default_fields').default([]), // Extra fields for industry
+  seedActivities: jsonb('seed_activities').default([]), // Sample activities/tasks
+  createdAt: timestamp('created_at').defaultNow(),
+});
+```
+
+---
+
+## Core API Routes
+
+### Dashboards & Widgets
+
+**CRUD**
+- `GET /api/orgs/:orgId/dashboards` — List dashboards
+- `POST /api/orgs/:orgId/dashboards` — Create dashboard
+- `PATCH /api/orgs/:orgId/dashboards/:id` — Update layout/config
+- `DELETE /api/orgs/:orgId/dashboards/:id` — Delete
+- `GET /api/orgs/:orgId/dashboards/:id/data` — Get rendered dashboard data (with caching)
+
+**Widget Data**
+- `POST /api/orgs/:orgId/dashboards/:id/widgets` — Add widget
+- `PATCH /api/orgs/:orgId/dashboards/:id/widgets/:widgetId` — Update widget config
+- `DELETE /api/orgs/:orgId/dashboards/:id/widgets/:widgetId` — Remove widget
+
+### Custom Reporting
+
+**Reports**
+- `GET /api/orgs/:orgId/reports` — List custom reports
+- `POST /api/orgs/:orgId/reports` — Create report
+- `PATCH /api/orgs/:orgId/reports/:id` — Update filters/fields
+- `POST /api/orgs/:orgId/reports/:id/run` — Execute report, generate export
+- `GET /api/orgs/:orgId/reports/:id/schedule` — View scheduled runs
+
+**Report Execution**
+- `GET /api/orgs/:orgId/report-runs` — List past runs
+- `GET /api/orgs/:orgId/report-runs/:runId/download` — Download export (CSV/PDF/XLSX)
+
+### Documents & E-Signature
+
+**Documents**
+- `POST /api/orgs/:orgId/documents` — Upload document
+- `GET /api/orgs/:orgId/documents` — List documents (with filters)
+- `GET /api/orgs/:orgId/documents/:id` — Document detail + versions
+- `GET /api/orgs/:orgId/documents/:id/versions` — Version history
+
+**E-Signature**
+- `POST /api/orgs/:orgId/documents/:id/request-signature` — Send signature request
+  ```typescript
+  {
+    recipientEmail: "...",
+    recipientName: "...",
+    expiresIn: 7 // days
+  }
+  ```
+- `GET /api/orgs/:orgId/signature-requests` — List pending requests
+- `PATCH /api/orgs/:orgId/signature-requests/:id/remind` — Send reminder
+- `POST /api/webhooks/easysign/signed` — External webhook for signed documents
+
+### Open API & Webhooks
+
+**API Tokens**
+- `POST /api/orgs/:orgId/api-tokens` — Generate token
+- `GET /api/orgs/:orgId/api-tokens` — List tokens
+- `DELETE /api/orgs/:orgId/api-tokens/:id` — Revoke token
+
+**Webhooks**
+- `POST /api/orgs/:orgId/webhooks` — Register webhook (lead_created, opportunity_updated, etc.)
+- `GET /api/orgs/:orgId/webhooks` — List webhooks
+- `DELETE /api/orgs/:orgId/webhooks/:id` — Delete webhook
+
+**Batch Operations (via API)**
+- `POST /api/orgs/:orgId/leads/batch` — Create multiple leads
+- `POST /api/orgs/:orgId/opportunities/batch` — Create multiple opportunities
+- `POST /api/orgs/:orgId/tasks/batch` — Create multiple tasks
+
+### Security & Audit
+
+**MFA**
+- `POST /api/users/:id/mfa/setup` — Generate TOTP secret
+- `POST /api/users/:id/mfa/verify` — Verify TOTP code
+- `POST /api/users/:id/mfa/backup-codes` — Generate backup codes
+- `DELETE /api/users/:id/mfa` — Disable MFA
+
+**Audit Log**
+- `GET /api/orgs/:orgId/audit-log` — Query audit events (role-based filtering)
+- `GET /api/orgs/:orgId/audit-log/export` — Export audit log (CSV/PDF)
+
+**SSO/SAML**
+- `POST /api/auth/saml/metadata` — SAML metadata endpoint
+- `POST /api/auth/saml/acs` — Assertion Consumer Service (auto-handled by NextAuth)
+
+---
+
+## Backend Services
+
+### DashboardService
+
+```typescript
+// src/services/dashboards.ts
+export class DashboardService {
+  async buildRevenueForeccast(orgId: string, days: 90) {
+    // 1. Fetch all opportunities by close_date within 90 days
+    // 2. Weight by close_probability (from Phase 5)
+    // 3. Group by week/month
+    // 4. Return: {week: '2026-W37', expected: 145000, at_risk: 32000}
+    // 5. Cache for 1 hour
+  }
+
+  async buildPipelineChart(orgId: string) {
+    // Count opportunities by stage
+    // Return stage distribution + avg deal size per stage
+  }
+
+  async buildLeaderboard(orgId: string) {
+    // Top reps by: revenue closed this month, deals closed, quota achievement
+    // Return ranked list with sparklines
+  }
+}
+```
+
+### ReportingService
+
+```typescript
+// src/services/reporting.ts
+export class ReportingService {
+  async buildCustomReport(reportId: string) {
+    // 1. Fetch report definition (filters, fields, sort)
+    // 2. Query database based on filters
+    // 3. Select only requested fields
+    // 4. Sort results
+    // 5. Convert to CSV/PDF/XLSX
+    // 6. Upload to R2
+    // 7. Return download URL
+  }
+
+  async scheduleReport(reportId: string) {
+    // 1. Set cron job based on schedule (daily/weekly/monthly)
+    // 2. On trigger, call buildCustomReport()
+    // 3. Email export to delivery_email
+  }
+}
+```
+
+### DocumentService
+
+```typescript
+// src/services/documents.ts
+export class DocumentService {
+  async uploadDocument(file: File, orgId: string, accountId?: string) {
+    // 1. Upload to R2 with versioning
+    // 2. Create document record
+    // 3. Return document ID
+  }
+
+  async requestSignature(documentId: string, recipientEmail: string) {
+    // 1. Call EasyESign or DocuSign API
+    // 2. Create signature request record
+    // 3. Send email to recipient
+    // 4. Return signature request ID
+  }
+
+  async handleSignatureWebhook(payload: any) {
+    // EasyESign posts back when signed
+    // 1. Update signature_requests status = 'signed'
+    // 2. Create new document version with signed PDF
+    // 3. Create audit event
+  }
+}
+```
+
+### AuthService (SSO/SAML/MFA)
+
+```typescript
+// src/services/auth.ts
+export class AuthService {
+  async enableSSO(orgId: string, samlConfig: {entityId, ssoUrl, certificate}) {
+    // Store SAML config per org
+    // NextAuth will handle the OAuth/SAML flow
+  }
+
+  async setupMFA(userId: string, method: 'totp' | 'sms') {
+    // 1. Generate TOTP secret (via speakeasy)
+    // 2. Return QR code for user to scan
+    // 3. User verifies with 6-digit code
+    // 4. Generate backup codes
+  }
+
+  async verifyMFA(userId: string, code: string) {
+    // 1. Check TOTP or backup code
+    // 2. Return true/false
+  }
+}
+```
+
+### APIService
+
+```typescript
+// src/services/api.ts
+export class APIService {
+  async validateAPIToken(token: string) {
+    // 1. Hash token
+    // 2. Look up in api_tokens
+    // 3. Check rate limit
+    // 4. Return {orgId, permissions, rateLimitRemaining}
+  }
+
+  async createBatchLeads(orgId: string, leads: Lead[]) {
+    // 1. Validate each lead
+    // 2. Create all in transaction
+    // 3. Return [{id, created, errors}, ...]
+    // 4. Log audit events
+  }
+}
+```
+
+### IndustryTemplateService
+
+```typescript
+// src/services/templates.ts
+export class IndustryTemplateService {
+  async applyTemplate(orgId: string, industry: 'k12' | 'construction' | 'healthcare') {
+    // 1. Fetch industry template
+    // 2. Create default pipeline stages for org
+    // 3. Create custom roles
+    // 4. Seed sample tasks/activities
+    // 5. Return confirmation
+  }
+}
+```
+
+---
+
+## Frontend Components
+
+### Revenue Forecast Dashboard
+
+```typescript
+// components/RevenueForecatDashboard.tsx
+export function RevenueForecastDashboard({ orgId }: { orgId: string }) {
+  const { data: forecast } = useQuery(
+    ['forecast', orgId],
+    () => fetch(`/api/orgs/${orgId}/dashboards/forecast`).then(r => r.json())
+  );
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Total Forecast */}
+      <div className="card p-6">
+        <h3 className="font-display text-label text-text-light text-opacity-60 mb-2">
+          90-Day Forecast
+        </h3>
+        <div className="text-4xl font-weight-800 text-primary">
+          ${(forecast?.total || 0).toLocaleString()}
+        </div>
+      </div>
+
+      {/* At Risk */}
+      <div className="card p-6">
+        <h3 className="font-display text-label text-destructive mb-2">At Risk</h3>
+        <div className="text-2xl font-weight-700">
+          ${(forecast?.atRisk || 0).toLocaleString()}
+        </div>
+      </div>
+
+      {/* Confidence */}
+      <div className="card p-6">
+        <h3 className="font-display text-label text-success mb-2">High Confidence</h3>
+        <div className="text-2xl font-weight-700">
+          {forecast?.percentage || 0}%
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="card p-6 lg:col-span-3">
+        <h3 className="font-display text-label mb-4">Weekly Forecast</h3>
+        <LineChart data={forecast?.weekly}>
+          <CartesianGrid />
+          <XAxis dataKey="week" />
+          <YAxis />
+          <Line type="monotone" dataKey="expected" stroke="#00B4D8" />
+          <Line type="monotone" dataKey="atRisk" stroke="#EF4444" />
+        </LineChart>
+      </div>
+    </div>
+  );
+}
+```
+
+### Custom Report Builder
+
+```typescript
+// components/CustomReportBuilder.tsx
+export function CustomReportBuilder() {
+  const [report, setReport] = useState({
+    name: '',
+    entityType: 'opportunity',
+    selectedFields: [],
+    filters: [],
+  });
+
+  const [queryBuilder, setQueryBuilder] = useState<QueryBuilder>({
+    conditions: [],
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Entity & Fields Selection */}
+      <div className="card p-6">
+        <h3 className="font-display text-label mb-4">Select Data</h3>
+        <select className="input-base w-full mb-4" defaultValue="opportunity">
+          <option>Opportunity</option>
+          <option>Lead</option>
+          <option>Account</option>
+        </select>
+
+        <label className="font-display text-small mb-2 block">Fields</label>
+        <div className="space-y-2">
+          {['name', 'value', 'stage', 'created_date', 'owner'].map((field) => (
+            <label key={field} className="flex items-center gap-2">
+              <input type="checkbox" className="checkbox" />
+              <span>{field}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Query Builder */}
+      <div className="card p-6">
+        <h3 className="font-display text-label mb-4">Filters</h3>
+        <QueryBuilder
+          onConditionsChange={setQueryBuilder}
+          fields={['stage', 'value', 'created_date', 'owner']}
+          operators={['equals', 'not_equals', 'gt', 'lt', 'contains']}
+        />
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-4">
+        <button className="btn-secondary">Preview</button>
+        <button className="btn-primary">Export</button>
+      </div>
+    </div>
+  );
+}
+```
+
+### Document Manager
+
+```typescript
+// components/DocumentManager.tsx
+export function DocumentManager({ accountId }: { accountId: string }) {
+  const { data: documents } = useQuery(
+    ['documents', accountId],
+    () => fetch(`/api/orgs/${orgId}/documents?accountId=${accountId}`).then(r => r.json())
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Upload */}
+      <div className="card p-6 border-2 border-dashed border-primary border-opacity-30">
+        <input
+          type="file"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              // Upload and create document
+              await uploadDocument(file, accountId);
+            }
+          }}
+          className="w-full"
+        />
+      </div>
+
+      {/* Document List */}
+      {documents?.map((doc) => (
+        <div key={doc.id} className="card p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-display text-label">{doc.name}</h4>
+              <p className="text-small text-text-light text-opacity-60">
+                v{doc.currentVersion} • Uploaded {formatDate(doc.createdAt)}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-secondary btn-sm">Download</button>
+              <button className="btn-primary btn-sm">Request Signature</button>
+            </div>
+          </div>
+
+          {/* Signature Status */}
+          {doc.signatureStatus !== 'unsigned' && (
+            <div className={`mt-4 p-3 rounded bg-${doc.signatureStatus === 'signed' ? 'success' : 'warning'} bg-opacity-10`}>
+              <p className="text-small">
+                {doc.signatureStatus === 'signed' ? 'Signed by John Doe on Dec 5' : 'Awaiting signature from john@example.com'}
+              </p>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Mobile PWA Shell
+
+```typescript
+// pages/_app.tsx (or layout.tsx depending on framework)
+export default function App() {
+  useEffect(() => {
+    // Register service worker for offline support
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+  }, []);
+
+  return (
+    <>
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <meta name="theme-color" content="#0A0E27" />
+      <meta name="apple-mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+      <AppShell>
+        <YourApp />
+      </AppShell>
+    </>
+  );
+}
+```
+
+### Service Worker (Offline Sync)
+
+```typescript
+// public/sw.js
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open('horizon-v1').then((cache) => {
+      return cache.addAll([
+        '/',
+        '/manifest.json',
+        '/offline.html',
+      ]);
+    })
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.method === 'GET') {
+    event.respondWith(
+      caches.match(event.request).then((response) => {
+        return response || fetch(event.request);
+      })
+    );
+  }
+});
+```
+
+---
+
+## Acceptance Checklist
+
+- [ ] Revenue forecast dashboard shows 90-day outlook by week
+- [ ] Custom report builder allows drag-and-drop field + filter selection
+- [ ] Report exports as CSV/PDF/XLSX to downloadable link
+- [ ] Mobile app works offline; creates 3 leads; syncs when online
+- [ ] Document upload, versioning, and signature request workflow complete
+- [ ] E-signature integration sends and tracks requests
+- [ ] Open API token generation and batch create leads work
+- [ ] Webhooks fire on lead/opportunity create/update
+- [ ] SSO/SAML login works via organization config
+- [ ] MFA (TOTP) can be enabled and verified
+- [ ] K-12 template creates school-specific pipeline stages and roles
+- [ ] Construction template creates deal stages, equipment tracking
+- [ ] Healthcare template creates patient privacy controls, consent tracking
+- [ ] Audit log captures all CRU operations and data exports
+- [ ] All endpoints validate org membership and rate limits
+
+---
+
+## Definition of Done
+
+Phase 6 is complete when:
+
+1. ✅ Sales rep sees accurate 90-day revenue forecast (top of dashboard)
+2. ✅ Manager can build custom report without code (all fields + filters)
+3. ✅ Rep uses mobile app offline; changes sync when online
+4. ✅ Finance team uploads, versions, and e-signs documents
+5. ✅ Partner integration via API (batch operations + webhooks)
+6. ✅ Admin enables SSO; MFA enforced
+7. ✅ Industry template applies immediately (K-12, Construction, Healthcare)
+8. ✅ Audit log shows every action (compliance-ready)
+9. ✅ Performance: dashboard <1s, report gen <5s, API <100ms
+10. ✅ Mobile: 100% offline functionality, zero data loss on sync
+
+**Once verified, Aegis Horizon is enterprise-ready and shippable to production customers.**
+
+---
+
+## Rollout Strategy
+
+**Phase 6 is the final MVP push.** Once complete:
+
+1. **Deploy to staging** (verify with real data)
+2. **Beta with Mad Dog Mowing** (1 week testing)
+3. **Gather feedback** (dashboards, reports, mobile UX)
+4. **Fix + polish** (2-3 days)
+5. **Go-live with production org** (you + 1-2 trusted early customers)
+
+**Target: Aegis Horizon live in production by end of Sprint 6 (30 days from Phase 0).**

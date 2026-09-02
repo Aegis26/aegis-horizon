@@ -1,0 +1,24 @@
+{
+  "name": "Aegis Horizon CRM",
+  "short_name": "Aegis CRM",
+  "description": "The command center for serious sales teams.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#0a0e27",
+  "theme_color": "#0a0e27",
+  "icons": [
+    {
+      "src": "logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "logo-icon.png",
+      "sizes": "852x640",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

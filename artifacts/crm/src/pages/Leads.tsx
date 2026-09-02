@@ -1,14 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useListLeads, getListLeadsQueryKey,
-  useCreateLead, useUpdateLead, useDeleteLead, useQualifyLead, useRescoreLeads,
+  useUpdateLead, useDeleteLead, useQualifyLead, useRescoreLeads,
   useListLeadScoringRules, getListLeadScoringRulesQueryKey,
   useCreateLeadScoringRule, useUpdateLeadScoringRule, useDeleteLeadScoringRule,
   getListOpportunitiesQueryKey, getListAccountsQueryKey,
   useGetConversionPrediction, getGetConversionPredictionQueryKey,
   useRecomputeConversionPrediction
 } from "@workspace/api-client-react";
-import type { Lead, LeadScoringRule, SegmentCondition, ConversionPrediction } from "@workspace/api-client-react";
+import type { Lead, LeadCreate, LeadScoringRule, SegmentCondition } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOrgStore } from "@/store/org-store";
 import { useLocation } from "wouter";
@@ -23,8 +23,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, UserPlus, Sparkles, Trash2, Pencil, ArrowUpRight, RefreshCw } from "lucide-react";
+import { Plus, UserPlus, Sparkles, Trash2, Pencil, ArrowUpRight, RefreshCw, CloudOff, Cloud, LoaderCircle } from "lucide-react";
 import { formatDate, formatPredictionPercentage } from "@/lib/format";
+import { useOfflineLeads } from "@/hooks/use-offline-leads";
+import { subscribeToLeadQueue } from "@/lib/offline-leads";
 
 const STATUS_COLORS: Record<string, string> = {
   new: "border-primary/40 text-primary",
@@ -58,7 +60,7 @@ export default function Leads() {
     query: { enabled: !!orgId, retry: false, queryKey: getListLeadScoringRulesQueryKey(orgId) },
   });
 
-  const createLead = useCreateLead();
+  const { pendingLeads, online, syncing, queueLead, syncNow } = useOfflineLeads(orgId);
   const updateLead = useUpdateLead();
   const deleteLead = useDeleteLead();
   const qualifyLead = useQualifyLead();
@@ -67,26 +69,39 @@ export default function Leads() {
   const updateRule = useUpdateLeadScoringRule();
   const deleteRule = useDeleteLeadScoringRule();
 
+  useEffect(
+    () =>
+      subscribeToLeadQueue(({ syncedLead, orgId: syncedOrgId }) => {
+        if (syncedLead && syncedOrgId === orgId) {
+          queryClient.setQueryData<Lead[]>(getListLeadsQueryKey(orgId), (current = []) =>
+            current.some((lead) => lead.id === syncedLead.id) ? current : [syncedLead, ...current],
+          );
+          void queryClient.invalidateQueries({ queryKey: getListLeadsQueryKey(orgId) });
+        }
+      }),
+    [orgId, queryClient],
+  );
+
   const invalidateLeads = () => queryClient.invalidateQueries({ queryKey: getListLeadsQueryKey(orgId) });
   const invalidateRules = () => queryClient.invalidateQueries({ queryKey: getListLeadScoringRulesQueryKey(orgId) });
 
   const onError = (title: string) => (e: unknown) =>
     toast({ title, description: (e as Error).message, variant: "destructive" });
 
-  if (isLoading) return <div className="p-8"><div className="skeleton h-64 rounded-xl"></div></div>;
+  if (isLoading && online && pendingLeads.length === 0) return <div className="p-4 sm:p-8"><div className="skeleton h-64 rounded-xl"></div></div>;
 
   return (
     <div>
-      <header className="px-8 py-6 border-b border-primary/10 flex items-center justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-40">
+      <header className="px-4 py-4 sm:px-8 sm:py-6 border-b border-primary/10 flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-40">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight font-display mb-1">Leads</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight font-display mb-1">Leads</h1>
           <p className="text-sm text-muted-foreground">Score, route, and qualify inbound leads.</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            className="gap-2"
-            disabled={rescore.isPending}
+            className="gap-2 flex-1 sm:flex-none"
+            disabled={rescore.isPending || !online}
             onClick={() =>
               rescore.mutate({ orgId }, {
                 onSuccess: (r) => { invalidateLeads(); toast({ title: "Leads rescored", description: `${r.leadsRescored} leads rescored and routed.` }); },
@@ -96,13 +111,30 @@ export default function Leads() {
           >
             <RefreshCw className="h-4 w-4" /> {rescore.isPending ? "Rescoring..." : "Rescore all"}
           </Button>
-          <Button className="gap-2" onClick={() => setCreateOpen(true)}>
+          <Button className="gap-2 flex-1 sm:flex-none" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" /> Add lead
           </Button>
         </div>
       </header>
 
-      <div className="p-8">
+      <div className="p-4 sm:p-8">
+        <div className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm ${online ? "border-primary/20 bg-primary/5" : "border-amber-500/30 bg-amber-500/10"}`}>
+          <div className="flex items-center gap-2">
+            {online ? <Cloud className="h-4 w-4 text-primary" /> : <CloudOff className="h-4 w-4 text-amber-400" />}
+            <span>{online ? "Online" : "Offline"}</span>
+            {pendingLeads.length > 0 && (
+              <span className="text-muted-foreground">
+                · {pendingLeads.length} lead{pendingLeads.length === 1 ? "" : "s"} pending sync
+              </span>
+            )}
+          </div>
+          {pendingLeads.length > 0 && online && (
+            <Button size="sm" variant="ghost" className="h-7 gap-1.5" disabled={syncing} onClick={() => void syncNow()}>
+              <LoaderCircle className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing" : "Sync now"}
+            </Button>
+          )}
+        </div>
         <Tabs defaultValue="leads">
           <TabsList className="mb-4">
             <TabsTrigger value="leads">Leads</TabsTrigger>
@@ -110,8 +142,8 @@ export default function Leads() {
           </TabsList>
 
           <TabsContent value="leads">
-            <Card>
-              <CardContent className="p-0">
+            <Card className="overflow-hidden">
+              <CardContent className="p-0 overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -119,14 +151,14 @@ export default function Leads() {
                       <TableHead>Company</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Score</TableHead>
-                      <TableHead>Assigned to</TableHead>
-                      <TableHead>Territory</TableHead>
+                      <TableHead className="hidden lg:table-cell">Assigned to</TableHead>
+                      <TableHead className="hidden lg:table-cell">Territory</TableHead>
                       <TableHead className="text-right">Created</TableHead>
                       <TableHead className="w-40"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {!leads || leads.length === 0 ? (
+                    {pendingLeads.length === 0 && (!leads || leads.length === 0) ? (
                       <TableRow>
                         <TableCell colSpan={8} className="p-0">
                           <div className="flex flex-col items-center justify-center min-h-[320px] px-6 py-16 bg-background/30 text-center">
@@ -139,7 +171,20 @@ export default function Leads() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      leads.map((lead) => (
+                      <>
+                      {pendingLeads.map((lead) => (
+                        <TableRow key={lead.id} className="bg-amber-500/5">
+                          <TableCell className="font-medium text-foreground">{lead.data.firstName} {lead.data.lastName}</TableCell>
+                          <TableCell className="text-muted-foreground">{lead.data.company ?? "—"}</TableCell>
+                          <TableCell><Badge variant="outline" className="border-amber-500/40 text-amber-400">Pending sync</Badge></TableCell>
+                          <TableCell className="text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="hidden text-muted-foreground lg:table-cell">Unassigned</TableCell>
+                          <TableCell className="hidden text-muted-foreground lg:table-cell">—</TableCell>
+                          <TableCell className="text-right font-mono text-muted-foreground/80">{formatDate(lead.createdAt)}</TableCell>
+                          <TableCell><span className="text-xs text-muted-foreground">{lead.lastError ? "Retry queued" : "Queued"}</span></TableCell>
+                        </TableRow>
+                      ))}
+                      {(leads ?? []).map((lead) => (
                         <TableRow key={lead.id}>
                           <TableCell className="font-medium text-foreground">{lead.firstName} {lead.lastName}</TableCell>
                           <TableCell className="text-muted-foreground">{lead.company ?? "—"}</TableCell>
@@ -147,8 +192,8 @@ export default function Leads() {
                             <Badge variant="outline" className={`capitalize ${STATUS_COLORS[lead.status] ?? ""}`}>{lead.status}</Badge>
                           </TableCell>
                           <TableCell className="text-right font-mono font-medium">{lead.score}</TableCell>
-                          <TableCell className="text-muted-foreground">{lead.assignedToName ?? "Unassigned"}</TableCell>
-                          <TableCell className="text-muted-foreground">{lead.territoryName ?? "—"}</TableCell>
+                          <TableCell className="hidden text-muted-foreground lg:table-cell">{lead.assignedToName ?? "Unassigned"}</TableCell>
+                          <TableCell className="hidden text-muted-foreground lg:table-cell">{lead.territoryName ?? "—"}</TableCell>
                           <TableCell className="text-right font-mono text-muted-foreground/80">{formatDate(lead.createdAt)}</TableCell>
                           <TableCell>
                             <div className="flex justify-end gap-1">
@@ -183,7 +228,8 @@ export default function Leads() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))
+                      ))}
+                      </>
                     )}
                   </TableBody>
                 </Table>
@@ -258,7 +304,7 @@ export default function Leads() {
         <LeadFormDialog
           orgId={orgId}
           lead={editLead}
-          pending={createLead.isPending || updateLead.isPending}
+          pending={updateLead.isPending}
           onClose={() => { setCreateOpen(false); setEditLead(null); }}
           onSave={(data) => {
             const opts = {
@@ -266,7 +312,17 @@ export default function Leads() {
               onError: onError("Could not save lead"),
             };
             if (editLead) updateLead.mutate({ orgId, leadId: editLead.id, data }, opts);
-            else createLead.mutate({ orgId, data: data as unknown as Parameters<typeof createLead.mutate>[0]["data"] }, opts);
+            else {
+              void queueLead(data as unknown as LeadCreate)
+                .then(() => {
+                  setCreateOpen(false);
+                  toast({
+                    title: online ? "Lead saved for sync" : "Lead queued offline",
+                    description: online ? "Syncing with the server now." : "It will sync automatically when you're back online.",
+                  });
+                })
+                .catch(onError("Could not queue lead"));
+            }
           }}
         />
       )}
@@ -314,12 +370,12 @@ function LeadFormDialog({ orgId, lead, onClose, onSave, pending }: {
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[92vh] w-[calc(100%-1rem)] overflow-y-auto p-4 sm:p-6">
         <DialogHeader><DialogTitle className="font-display">{lead ? "Edit lead" : "Add lead"}</DialogTitle></DialogHeader>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2"><Label>First name</Label><Input value={form.firstName} onChange={set("firstName")} /></div>
           <div className="space-y-2"><Label>Last name</Label><Input value={form.lastName} onChange={set("lastName")} /></div>
-          <div className="space-y-2 col-span-2"><Label>Email</Label><Input type="email" value={form.email} onChange={set("email")} /></div>
+          <div className="space-y-2 sm:col-span-2"><Label>Email</Label><Input type="email" value={form.email} onChange={set("email")} /></div>
           <div className="space-y-2"><Label>Company</Label><Input value={form.company} onChange={set("company")} /></div>
           <div className="space-y-2"><Label>Title</Label><Input value={form.title} onChange={set("title")} /></div>
           <div className="space-y-2"><Label>Industry</Label><Input value={form.industry} onChange={set("industry")} /></div>

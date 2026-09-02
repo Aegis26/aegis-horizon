@@ -70,6 +70,7 @@ import { sendEmail } from "../lib/email";
 import { processNewLead } from "../services/agents";
 import { publishAutomationEvent } from "../services/workflow";
 import { isOrgMemberId, isOrgTerritoryId } from "../services/orgValidation";
+import { publishWebhookEvent } from "../services/webhooks";
 
 const router: IRouter = Router();
 const gate = [attachUser, attachOrg, requireFeature("sales")] as const;
@@ -357,6 +358,7 @@ router.post("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<voi
     payload: { stage: row.stage },
     actorUserId: req.currentUser!.id,
   });
+  void publishWebhookEvent(orgId, "opportunity.created", row.id, { id: row.id, name: row.name, stage: row.stage });
   res.status(201).json(CreateOpportunityResponse.parse(await opportunityDetail(row)));
 });
 
@@ -429,6 +431,7 @@ router.patch(
       .set(updates)
       .where(eq(opportunities.id, opp.id))
       .returning();
+    void publishWebhookEvent(orgId, "opportunity.updated", row.id, { id: row.id, name: row.name, stage: row.stage });
 
     if (stageChanged) {
       await db.insert(opportunityStageHistory).values({
@@ -627,6 +630,7 @@ router.post("/orgs/:orgId/leads", ...gate, async (req, res): Promise<void> => {
     payload: { status: row.status, score: row.score },
     actorUserId: req.currentUser!.id,
   });
+  void publishWebhookEvent(orgId, "lead.created", row.id, { id: row.id, email: row.email, status: row.status, score: row.score });
   void processNewLead(orgId, row.id, req.currentUser!.id).catch((err) => {
     req.log.error({ err, leadId: row.id }, "Lead qualifier agent failed");
   });
@@ -687,6 +691,7 @@ router.patch("/orgs/:orgId/leads/:leadId", ...gate, async (req, res): Promise<vo
     keepScore: explicitScore !== undefined && explicitScore !== null,
     reassign: routingFieldsChanged && !manualAssignment,
   });
+  void publishWebhookEvent(orgId, "lead.updated", row.id, { id: row.id, email: row.email, status: row.status, score: row.score });
   res.json(UpdateLeadResponse.parse(await leadOut(row)));
 });
 
@@ -1503,6 +1508,49 @@ router.get("/orgs/:orgId/forecast", ...gate, async (req, res): Promise<void> => 
   );
 
   res.json(GetForecastResponse.parse({ months, totals }));
+});
+
+/** Probability-weighted revenue outlook. Always bounded to the next 90 days. */
+router.get("/orgs/:orgId/forecast/weighted", ...gate, async (req, res): Promise<void> => {
+  const groupBy = (req.query as { groupBy?: string }).groupBy === "monthly" ? "monthly" : "weekly";
+  const start = new Date();
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 90);
+  const buckets = new Map<string, { periodStart: string; weightedRevenue: number; opportunityCount: number }>();
+  const bucketFor = (date: Date) => {
+    const d = new Date(date);
+    if (groupBy === "monthly") d.setUTCDate(1);
+    else {
+      const weekday = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() - weekday + 1);
+    }
+    d.setUTCHours(0, 0, 0, 0);
+    return d.toISOString().slice(0, 10);
+  };
+  for (let d = new Date(start); d < end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const key = bucketFor(d);
+    if (!buckets.has(key)) buckets.set(key, { periodStart: key, weightedRevenue: 0, opportunityCount: 0 });
+  }
+  const rows = await db.select().from(opportunities).where(eq(opportunities.orgId, req.currentOrg!.id));
+  for (const opportunity of rows) {
+    if (opportunity.forecastCategory === "closed_lost" || !opportunity.expectedCloseDate) continue;
+    const close = new Date(`${opportunity.expectedCloseDate}T00:00:00.000Z`);
+    if (close < start || close >= end) continue;
+    const bucket = buckets.get(bucketFor(close));
+    if (!bucket) continue;
+    const probability = opportunity.forecastCategory === "closed_won" ? 100 : (opportunity.probability ?? 0);
+    bucket.weightedRevenue += (Number(opportunity.value ?? 0) * probability) / 100;
+    bucket.opportunityCount += 1;
+  }
+  res.json({
+    horizonDays: 90,
+    groupBy,
+    periods: [...buckets.values()].sort((a, b) => a.periodStart.localeCompare(b.periodStart)).map((bucket) => ({
+      ...bucket,
+      weightedRevenue: Math.round(bucket.weightedRevenue * 100) / 100,
+    })),
+  });
 });
 
 export default router;

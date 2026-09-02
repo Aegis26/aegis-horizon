@@ -133,6 +133,21 @@ export class ObjectStorageService {
     });
   }
 
+  /** Persist server-generated private bytes (for example a call recording). */
+  async savePrivateObject(
+    data: Buffer,
+    contentType: string,
+    prefix: string = 'generated',
+  ): Promise<{ objectPath: string; file: File }> {
+    let privateDir = this.getPrivateObjectDir();
+    if (!privateDir.endsWith('/')) privateDir += '/';
+    const relativePath = `${prefix}/${randomUUID()}`;
+    const { bucketName, objectName } = parseObjectPath(`${privateDir}${relativePath}`);
+    const file = objectStorageClient.bucket(bucketName).file(objectName);
+    await file.save(data, { contentType, resumable: false });
+    return { objectPath: `/objects/${relativePath}`, file };
+  }
+
   async getObjectEntityFile(objectPath: string): Promise<File> {
     if (!objectPath.startsWith('/objects/')) {
       throw new ObjectNotFoundError();

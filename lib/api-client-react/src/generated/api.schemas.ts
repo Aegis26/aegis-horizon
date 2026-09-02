@@ -485,6 +485,12 @@ export interface Activity {
   contactId?: string | null;
   /** @nullable */
   opportunityId?: string | null;
+  /** @nullable */
+  threadId?: string | null;
+  /** @nullable */
+  callRecordingId?: string | null;
+  /** @nullable */
+  calendarEventId?: string | null;
   type: string;
   /** @nullable */
   subject?: string | null;
@@ -498,6 +504,220 @@ export interface Activity {
   /** @nullable */
   createdByName?: string | null;
   createdAt: string;
+}
+
+export type ProviderStatusListProvidersItemBindingStatus = typeof ProviderStatusListProvidersItemBindingStatus[keyof typeof ProviderStatusListProvidersItemBindingStatus];
+
+
+export const ProviderStatusListProvidersItemBindingStatus = {
+  available_unbound: 'available_unbound',
+  bound_this_org: 'bound_this_org',
+  bound_other_org: 'bound_other_org',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ProviderStatusListProvidersItemSync = { [key: string]: unknown } | null;
+
+export type ProviderStatusListProvidersItem = {
+  provider: string;
+  bindingStatus?: ProviderStatusListProvidersItemBindingStatus;
+  available?: boolean;
+  /** @nullable */
+  sync?: ProviderStatusListProvidersItemSync;
+};
+
+export interface ProviderStatusList {
+  providers: ProviderStatusListProvidersItem[];
+  aiAnalysisEnabled?: boolean;
+}
+
+export interface ProviderSyncResult {
+  provider: string;
+  status: string;
+  recordsSynced: number;
+  lastSyncedAt: string;
+}
+
+export type ProviderBindingResultBindingStatus = typeof ProviderBindingResultBindingStatus[keyof typeof ProviderBindingResultBindingStatus];
+
+
+export const ProviderBindingResultBindingStatus = {
+  bound_this_org: 'bound_this_org',
+  bound_other_org: 'bound_other_org',
+} as const;
+
+export interface ProviderBindingResult {
+  provider: string;
+  bindingStatus: ProviderBindingResultBindingStatus;
+  boundByUserId?: string;
+}
+
+export interface CommunicationSettings {
+  aiAnalysisEnabled: boolean;
+  updatedAt?: string;
+}
+
+export interface CommunicationSettingsInput {
+  aiAnalysisEnabled: boolean;
+}
+
+export interface InternalNote {
+  id: string;
+  orgId: string;
+  accountId: string;
+  authorUserId: string;
+  body: string;
+  isPrivate: boolean;
+  mentionedUserIds: string[];
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InternalNoteInput {
+  /**
+     * @minLength 1
+     * @maxLength 50000
+     */
+  body: string;
+  isPrivate?: boolean;
+  /** @maxItems 50 */
+  mentionedUserIds?: string[];
+}
+
+export interface InternalNoteUpdate {
+  /**
+     * @minLength 1
+     * @maxLength 50000
+     */
+  body?: string;
+  isPrivate?: boolean;
+  /** @maxItems 50 */
+  mentionedUserIds?: string[];
+}
+
+export interface CrmEmailInput {
+  accountId: string;
+  contactId?: string;
+  threadId?: string;
+  to: string;
+  /** @minLength 1 */
+  subject: string;
+  /** @minLength 1 */
+  html: string;
+}
+
+export interface CrmEmailResult {
+  id: string;
+  activityId: string;
+  /** @nullable */
+  threadId?: string | null;
+}
+
+export interface EmailThread {
+  id: string;
+  orgId: string;
+  accountId: string;
+  /** @nullable */
+  contactId?: string | null;
+  provider: string;
+  externalThreadId: string;
+  /** @nullable */
+  subject?: string | null;
+  /** @nullable */
+  snippet?: string | null;
+  participants: string[];
+  /** @nullable */
+  summary?: string | null;
+  /** @nullable */
+  sentiment?: string | null;
+  /** @nullable */
+  keywords?: string[] | null;
+  /** @nullable */
+  objections?: string[] | null;
+  /** @nullable */
+  leaning?: string | null;
+  /** @nullable */
+  lastMessageAt?: string | null;
+}
+
+export interface EmailMessage {
+  id: string;
+  orgId: string;
+  threadId: string;
+  provider: string;
+  externalMessageId: string;
+  /** @nullable */
+  sender?: string | null;
+  recipients: string[];
+  /** @nullable */
+  subject?: string | null;
+  /** @nullable */
+  snippet?: string | null;
+  /** @nullable */
+  sentAt?: string | null;
+}
+
+export interface CalendarEvent {
+  id: string;
+  orgId: string;
+  accountId: string;
+  /** @nullable */
+  contactId?: string | null;
+  provider: string;
+  externalEventId: string;
+  title: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  location?: string | null;
+  attendees: string[];
+  startsAt: string;
+  /** @nullable */
+  endsAt?: string | null;
+  /** @nullable */
+  meetingUrl?: string | null;
+}
+
+export interface CallRecording {
+  id: string;
+  orgId: string;
+  accountId: string;
+  /** @nullable */
+  contactId?: string | null;
+  callSid: string;
+  status: string;
+  toNumber: string;
+  /** @nullable */
+  recordingObjectPath?: string | null;
+  /** @nullable */
+  transcript?: string | null;
+  /** @nullable */
+  summary?: string | null;
+  /** @nullable */
+  sentiment?: string | null;
+  /** @nullable */
+  keywords?: string[] | null;
+  /** @nullable */
+  objections?: string[] | null;
+  /** @nullable */
+  leaning?: string | null;
+}
+
+export interface CallInput {
+  accountId: string;
+  contactId?: string;
+  /** @minLength 7 */
+  to: string;
+}
+
+export interface CallResult {
+  callId: string;
+  callSid: string;
+  activityId: string;
+  status: string;
 }
 
 export type ActivityCreateType = typeof ActivityCreateType[keyof typeof ActivityCreateType];
@@ -1112,6 +1332,10 @@ industry?: string;
  */
 segmentId?: string;
 includeInactive?: boolean;
+};
+
+export type GetEmailThread200 = EmailThread & {
+  messages: EmailMessage[];
 };
 
 export type ListOpportunitiesParams = {

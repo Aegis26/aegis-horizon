@@ -22,6 +22,7 @@ import Forecast from "@/pages/Forecast";
 import Automation from "@/pages/Automation";
 import Billing from "@/pages/Billing";
 import Settings from "@/pages/Settings";
+import Communications from "@/pages/Communications";
 import { Button } from "react-day-picker";
 
 const queryClient = new QueryClient();
@@ -194,6 +195,7 @@ function ClerkProviderWithRoutes() {
           <Route path="/sign-up/*?" component={SignUpPage} />
           
           <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
+          <Route path="/communications" component={() => <ProtectedRoute component={Communications} />} />
           <Route path="/accounts" component={() => <ProtectedRoute component={Accounts} />} />
           <Route path="/accounts/:accountId" component={() => <ProtectedRoute component={AccountDetail} />} />
           <Route path="/segments" component={() => <ProtectedRoute component={Segments} />} />

@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { 
-  useGetOrg, 
-  useUpdateOrg, 
-  useListMembers, 
-  useInviteMember, 
-  useUpdateMemberRole, 
+import {
+  useGetOrg,
+  useUpdateOrg,
+  useListMembers,
+  useInviteMember,
+  useUpdateMemberRole,
   useRemoveMember,
   getGetOrgQueryKey,
   getListMembersQueryKey
@@ -23,16 +23,17 @@ import { useToast } from "@/hooks/use-toast";
 import { getInitials, formatDate } from "@/lib/format";
 import { Building2, Users, Save, Trash2, Mail } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ProviderSettings } from "@/components/settings/ProviderSettings";
 
 export default function Settings() {
   const { selectedOrgId } = useOrgStore();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  
+
   const { data: org, isLoading: orgLoading } = useGetOrg(selectedOrgId || "", {
     query: { enabled: !!selectedOrgId, queryKey: getGetOrgQueryKey(selectedOrgId || "") }
   });
-  
+
   const { data: members, isLoading: membersLoading } = useListMembers(selectedOrgId || "", {
     query: { enabled: !!selectedOrgId, queryKey: getListMembersQueryKey(selectedOrgId || "") }
   });
@@ -71,7 +72,7 @@ export default function Settings() {
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail) return;
-    
+
     inviteMember.mutate({
       orgId: selectedOrgId!,
       data: { email: inviteEmail, role: inviteRole as any }
@@ -137,21 +138,21 @@ export default function Settings() {
           <div className="space-y-2 max-w-md">
             <Label htmlFor="orgName">Organization Name</Label>
             <div className="flex gap-2">
-              <Input 
-                id="orgName" 
-                value={orgName} 
-                onChange={e => setOrgName(e.target.value)} 
+              <Input
+                id="orgName"
+                value={orgName}
+                onChange={e => setOrgName(e.target.value)}
               />
-              <Button 
+              <Button
                 className="font-display"
-                onClick={handleSaveOrg} 
+                onClick={handleSaveOrg}
                 disabled={orgName === org?.name || updateOrg.isPending}
               >
                 <Save className="h-4 w-4 mr-2" /> Save
               </Button>
             </div>
           </div>
-          
+
           <div className="pt-4 border-t border-border/50">
             <Label className="text-muted-foreground">Organization ID</Label>
             <div className="font-mono text-xs mt-1 bg-muted p-2 rounded max-w-md border border-border/50">{org?.id}</div>
@@ -234,8 +235,8 @@ export default function Settings() {
                     {member.role === "owner" ? (
                       <Badge variant="secondary" className="capitalize">{member.role}</Badge>
                     ) : (
-                      <Select 
-                        value={member.role} 
+                      <Select
+                        value={member.role}
                         onValueChange={(val) => handleRoleChange(member.id, val)}
                         disabled={updateRole.isPending}
                       >
@@ -255,9 +256,9 @@ export default function Settings() {
                     {formatDate(member.createdAt)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => handleRemove(member.id)}
                       disabled={member.role === "owner" || removeMember.isPending}
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
@@ -271,6 +272,8 @@ export default function Settings() {
           </Table>
         </CardContent>
       </Card>
+
+      <ProviderSettings />
       </div>
     </div>
   );

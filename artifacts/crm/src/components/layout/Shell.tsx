@@ -9,6 +9,7 @@ import {
   UserPlus,
   FileText,
   Map,
+  MessageSquare,
   TrendingUp,
   Workflow, 
   CreditCard,
@@ -23,6 +24,7 @@ import { Button } from "@/components/ui/button";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/communications", label: "Communications", icon: MessageSquare, feature: "crm" },
   { href: "/accounts", label: "Accounts", icon: Users, feature: "crm" },
   { href: "/segments", label: "Segments", icon: Filter, feature: "crm" },
   { href: "/leads", label: "Leads", icon: UserPlus, feature: "sales" },

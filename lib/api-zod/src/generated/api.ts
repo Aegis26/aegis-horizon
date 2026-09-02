@@ -744,6 +744,9 @@ export const CreateActivityResponse = zod.object({
   "accountId": zod.string(),
   "contactId": zod.string().nullish(),
   "opportunityId": zod.string().nullish(),
+  "threadId": zod.string().nullish(),
+  "callRecordingId": zod.string().nullish(),
+  "calendarEventId": zod.string().nullish(),
   "type": zod.string(),
   "subject": zod.string().nullish(),
   "body": zod.string().nullish(),
@@ -774,6 +777,9 @@ export const GetAccountTimelineResponseItem = zod.object({
   "accountId": zod.string(),
   "contactId": zod.string().nullish(),
   "opportunityId": zod.string().nullish(),
+  "threadId": zod.string().nullish(),
+  "callRecordingId": zod.string().nullish(),
+  "calendarEventId": zod.string().nullish(),
   "type": zod.string(),
   "subject": zod.string().nullish(),
   "body": zod.string().nullish(),
@@ -816,6 +822,9 @@ export const AttachFileToActivityResponse = zod.object({
   "accountId": zod.string(),
   "contactId": zod.string().nullish(),
   "opportunityId": zod.string().nullish(),
+  "threadId": zod.string().nullish(),
+  "callRecordingId": zod.string().nullish(),
+  "calendarEventId": zod.string().nullish(),
   "type": zod.string(),
   "subject": zod.string().nullish(),
   "body": zod.string().nullish(),
@@ -984,6 +993,371 @@ export const PreviewSegmentConditionsResponseItem = zod.object({
   "createdAt": zod.string().nullish()
 })
 export const PreviewSegmentConditionsResponse = zod.array(PreviewSegmentConditionsResponseItem)
+
+
+/**
+ * @summary List live connector accounts and synchronization status
+ */
+export const ListCommunicationProvidersParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListCommunicationProvidersResponse = zod.object({
+  "providers": zod.array(zod.object({
+  "provider": zod.string(),
+  "bindingStatus": zod.enum(['available_unbound', 'bound_this_org', 'bound_other_org']).optional(),
+  "available": zod.boolean().optional(),
+  "sync": zod.record(zod.string(), zod.unknown()).nullish()
+})),
+  "aiAnalysisEnabled": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Force a bounded email or calendar synchronization
+ */
+export const ForceProviderSyncParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "provider": zod.enum(['gmail', 'outlook', 'google_calendar', 'slack'])
+})
+
+export const ForceProviderSyncResponse = zod.object({
+  "provider": zod.string(),
+  "status": zod.string(),
+  "recordsSynced": zod.number().int(),
+  "lastSyncedAt": zod.string()
+})
+
+
+/**
+ * @summary Owner/admin claims this deployment-global connector for the organization
+ */
+export const BindCommunicationProviderParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "provider": zod.enum(['gmail', 'outlook', 'google_calendar', 'slack'])
+})
+
+export const BindCommunicationProviderResponse = zod.object({
+  "provider": zod.string(),
+  "bindingStatus": zod.enum(['bound_this_org', 'bound_other_org']),
+  "boundByUserId": zod.string().uuid().optional()
+})
+
+
+/**
+ * @summary Owner-only removal of Aegis binding; it does not disconnect OAuth
+ */
+export const UnbindCommunicationProviderParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "provider": zod.enum(['gmail', 'outlook', 'google_calendar', 'slack'])
+})
+
+export const UnbindCommunicationProviderResponse = zod.void()
+
+
+export const GetCommunicationSettingsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const GetCommunicationSettingsResponse = zod.object({
+  "aiAnalysisEnabled": zod.boolean(),
+  "updatedAt": zod.string().optional()
+})
+
+
+/**
+ * @summary Owner/admin updates explicit AI analysis consent
+ */
+export const UpdateCommunicationSettingsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const UpdateCommunicationSettingsBody = zod.object({
+  "aiAnalysisEnabled": zod.boolean()
+})
+
+export const UpdateCommunicationSettingsResponse = zod.object({
+  "aiAnalysisEnabled": zod.boolean(),
+  "updatedAt": zod.string().optional()
+})
+
+
+export const ListInternalNotesParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const ListInternalNotesResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid(),
+  "authorUserId": zod.string().uuid(),
+  "body": zod.string(),
+  "isPrivate": zod.boolean(),
+  "mentionedUserIds": zod.array(zod.string().uuid()),
+  "isDeleted": zod.boolean(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListInternalNotesResponse = zod.array(ListInternalNotesResponseItem)
+
+
+export const CreateInternalNoteParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const createInternalNoteBodyBodyMax = 50000;
+
+export const createInternalNoteBodyIsPrivateDefault = false;
+export const createInternalNoteBodyMentionedUserIdsMax = 50;
+
+
+
+export const CreateInternalNoteBody = zod.object({
+  "body": zod.string().min(1).max(createInternalNoteBodyBodyMax),
+  "isPrivate": zod.boolean().default(createInternalNoteBodyIsPrivateDefault),
+  "mentionedUserIds": zod.array(zod.string().uuid()).max(createInternalNoteBodyMentionedUserIdsMax).optional()
+})
+
+export const CreateInternalNoteResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid(),
+  "authorUserId": zod.string().uuid(),
+  "body": zod.string(),
+  "isPrivate": zod.boolean(),
+  "mentionedUserIds": zod.array(zod.string().uuid()),
+  "isDeleted": zod.boolean(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+export const UpdateInternalNoteParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string(),
+  "noteId": zod.coerce.string().uuid()
+})
+
+export const updateInternalNoteBodyBodyMax = 50000;
+
+export const updateInternalNoteBodyMentionedUserIdsMax = 50;
+
+
+
+export const UpdateInternalNoteBody = zod.object({
+  "body": zod.string().min(1).max(updateInternalNoteBodyBodyMax).optional(),
+  "isPrivate": zod.boolean().optional(),
+  "mentionedUserIds": zod.array(zod.string().uuid()).max(updateInternalNoteBodyMentionedUserIdsMax).optional()
+})
+
+export const UpdateInternalNoteResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid(),
+  "authorUserId": zod.string().uuid(),
+  "body": zod.string(),
+  "isPrivate": zod.boolean(),
+  "mentionedUserIds": zod.array(zod.string().uuid()),
+  "isDeleted": zod.boolean(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+export const DeleteInternalNoteParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string(),
+  "noteId": zod.coerce.string().uuid()
+})
+
+export const DeleteInternalNoteResponse = zod.void()
+
+
+export const SendCrmEmailParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+
+
+
+
+export const SendCrmEmailBody = zod.object({
+  "accountId": zod.string().uuid(),
+  "contactId": zod.string().uuid().optional(),
+  "threadId": zod.string().uuid().optional(),
+  "to": zod.string().email(),
+  "subject": zod.string().min(1),
+  "html": zod.string().min(1)
+})
+
+export const SendCrmEmailResponse = zod.object({
+  "id": zod.string(),
+  "activityId": zod.string().uuid(),
+  "threadId": zod.string().nullish()
+})
+
+
+export const ListEmailThreadsParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const ListEmailThreadsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid(),
+  "contactId": zod.string().uuid().nullish(),
+  "provider": zod.string(),
+  "externalThreadId": zod.string(),
+  "subject": zod.string().nullish(),
+  "snippet": zod.string().nullish(),
+  "participants": zod.array(zod.string()),
+  "summary": zod.string().nullish(),
+  "sentiment": zod.string().nullish(),
+  "keywords": zod.array(zod.string()).nullish(),
+  "objections": zod.array(zod.string()).nullish(),
+  "leaning": zod.string().nullish(),
+  "lastMessageAt": zod.string().nullish()
+})
+export const ListEmailThreadsResponse = zod.array(ListEmailThreadsResponseItem)
+
+
+export const GetEmailThreadParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "threadId": zod.coerce.string().uuid()
+})
+
+export const GetEmailThreadResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid(),
+  "contactId": zod.string().uuid().nullish(),
+  "provider": zod.string(),
+  "externalThreadId": zod.string(),
+  "subject": zod.string().nullish(),
+  "snippet": zod.string().nullish(),
+  "participants": zod.array(zod.string()),
+  "summary": zod.string().nullish(),
+  "sentiment": zod.string().nullish(),
+  "keywords": zod.array(zod.string()).nullish(),
+  "objections": zod.array(zod.string()).nullish(),
+  "leaning": zod.string().nullish(),
+  "lastMessageAt": zod.string().nullish()
+}).and(zod.object({
+  "messages": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "threadId": zod.string().uuid(),
+  "provider": zod.string(),
+  "externalMessageId": zod.string(),
+  "sender": zod.string().nullish(),
+  "recipients": zod.array(zod.string()),
+  "subject": zod.string().nullish(),
+  "snippet": zod.string().nullish(),
+  "sentAt": zod.string().nullish()
+}))
+}))
+
+
+export const ListCalendarEventsParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const ListCalendarEventsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid(),
+  "contactId": zod.string().uuid().nullish(),
+  "provider": zod.string(),
+  "externalEventId": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "location": zod.string().nullish(),
+  "attendees": zod.array(zod.string()),
+  "startsAt": zod.string(),
+  "endsAt": zod.string().nullish(),
+  "meetingUrl": zod.string().nullish()
+})
+export const ListCalendarEventsResponse = zod.array(ListCalendarEventsResponseItem)
+
+
+export const ListCallRecordingsParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const ListCallRecordingsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid(),
+  "contactId": zod.string().uuid().nullish(),
+  "callSid": zod.string(),
+  "status": zod.string(),
+  "toNumber": zod.string(),
+  "recordingObjectPath": zod.string().nullish(),
+  "transcript": zod.string().nullish(),
+  "summary": zod.string().nullish(),
+  "sentiment": zod.string().nullish(),
+  "keywords": zod.array(zod.string()).nullish(),
+  "objections": zod.array(zod.string()).nullish(),
+  "leaning": zod.string().nullish()
+})
+export const ListCallRecordingsResponse = zod.array(ListCallRecordingsResponseItem)
+
+
+export const InitiateCrmCallParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const initiateCrmCallBodyToMin = 7;
+
+
+
+export const InitiateCrmCallBody = zod.object({
+  "accountId": zod.string().uuid(),
+  "contactId": zod.string().uuid().optional(),
+  "to": zod.string().min(initiateCrmCallBodyToMin)
+})
+
+export const InitiateCrmCallResponse = zod.object({
+  "callId": zod.string().uuid(),
+  "callSid": zod.string(),
+  "activityId": zod.string().uuid(),
+  "status": zod.string()
+})
+
+
+export const GetCallRecordingParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "callId": zod.coerce.string().uuid()
+})
+
+export const GetCallRecordingResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid(),
+  "contactId": zod.string().uuid().nullish(),
+  "callSid": zod.string(),
+  "status": zod.string(),
+  "toNumber": zod.string(),
+  "recordingObjectPath": zod.string().nullish(),
+  "transcript": zod.string().nullish(),
+  "summary": zod.string().nullish(),
+  "sentiment": zod.string().nullish(),
+  "keywords": zod.array(zod.string()).nullish(),
+  "objections": zod.array(zod.string()).nullish(),
+  "leaning": zod.string().nullish()
+})
+
+
+/**
+ * @summary Signature-validated Twilio recording callback
+ */
+export const TwilioRecordingWebhookResponse = zod.void()
 
 
 /**

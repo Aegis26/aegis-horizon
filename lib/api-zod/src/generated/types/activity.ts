@@ -14,6 +14,12 @@ export interface Activity {
   contactId?: string | null;
   /** @nullable */
   opportunityId?: string | null;
+  /** @nullable */
+  threadId?: string | null;
+  /** @nullable */
+  callRecordingId?: string | null;
+  /** @nullable */
+  calendarEventId?: string | null;
   type: string;
   /** @nullable */
   subject?: string | null;

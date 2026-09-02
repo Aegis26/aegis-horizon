@@ -9,6 +9,8 @@ import { ProfileTab } from "@/components/accounts/ProfileTab";
 import { ContactsTab } from "@/components/accounts/ContactsTab";
 import { TimelineTab } from "@/components/accounts/TimelineTab";
 import { FilesTab } from "@/components/accounts/FilesTab";
+import { MessageSquare } from "lucide-react";
+import { Workspace as CommunicationsWorkspace } from "./Communications";
 
 export default function AccountDetail() {
   const [match, params] = useRoute("/accounts/:accountId");
@@ -68,6 +70,7 @@ export default function AccountDetail() {
             <TabsTrigger value="timeline" className="gap-2 font-display data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><Clock className="h-4 w-4"/> Timeline</TabsTrigger>
             <TabsTrigger value="files" className="gap-2 font-display data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><FileText className="h-4 w-4"/> Files</TabsTrigger>
             <TabsTrigger value="opportunities" className="gap-2 font-display data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><Target className="h-4 w-4"/> Opportunities</TabsTrigger>
+            <TabsTrigger value="communications" className="gap-2 font-display data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><MessageSquare className="h-4 w-4"/> Communications</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="mt-0 outline-none">
@@ -125,6 +128,12 @@ export default function AccountDetail() {
                 </table>
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="communications" className="mt-0 outline-none">
+            <div className="bg-card border border-primary/10 rounded-lg shadow-md overflow-hidden h-[600px] flex flex-col">
+              <CommunicationsWorkspace accountId={account.id} orgId={selectedOrgId!} />
+            </div>
           </TabsContent>
         </Tabs>
       </div>

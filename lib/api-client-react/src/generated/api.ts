@@ -31,19 +31,32 @@ import type {
   BillingCatalog,
   BulkImportRequest,
   BulkImportResult,
+  CalendarEvent,
+  CallInput,
+  CallRecording,
+  CallResult,
   CheckoutRequest,
   CheckoutSession,
+  CommunicationSettings,
+  CommunicationSettingsInput,
   Contact,
   ContactCreate,
   ContactUpdate,
+  CrmEmailInput,
+  CrmEmailResult,
   DashboardSummary,
+  EmailThread,
   ErrorEnvelope,
   FeatureEntitlement,
   FeatureGateError,
   FeatureSelection,
   Forecast,
+  GetEmailThread200,
   GetForecastParams,
   HealthStatus,
+  InternalNote,
+  InternalNoteInput,
+  InternalNoteUpdate,
   Lead,
   LeadCreate,
   LeadScoringRule,
@@ -65,6 +78,9 @@ import type {
   OrganizationUpdate,
   Pipeline,
   PipelineCreate,
+  ProviderBindingResult,
+  ProviderStatusList,
+  ProviderSyncResult,
   QualifyLeadRequest,
   Quote,
   QuoteCreate,
@@ -2677,6 +2693,1313 @@ export const usePreviewSegmentConditions = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getPreviewSegmentConditionsMutationOptions(options));
+    }
+
+export const getListCommunicationProvidersUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/providers`
+}
+
+/**
+ * @summary List live connector accounts and synchronization status
+ */
+export const listCommunicationProviders = async (orgId: string, options?: Parameters<typeof customFetch>[1]): Promise<ProviderStatusList> => {
+
+  return customFetch<ProviderStatusList>(getListCommunicationProvidersUrl(orgId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCommunicationProvidersQueryKey = (orgId: string,) => {
+    return [
+    `/api/orgs/${orgId}/providers`
+    ] as const;
+    }
+
+
+export const getListCommunicationProvidersQueryOptions = <TData = Awaited<ReturnType<typeof listCommunicationProviders>>, TError = ErrorType<unknown>>(orgId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCommunicationProviders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCommunicationProvidersQueryKey(orgId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCommunicationProviders>>> = ({ signal }) => listCommunicationProviders(orgId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCommunicationProviders>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCommunicationProvidersQueryResult = NonNullable<Awaited<ReturnType<typeof listCommunicationProviders>>>
+export type ListCommunicationProvidersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List live connector accounts and synchronization status
+ */
+
+export function useListCommunicationProviders<TData = Awaited<ReturnType<typeof listCommunicationProviders>>, TError = ErrorType<unknown>>(
+ orgId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCommunicationProviders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCommunicationProvidersQueryOptions(orgId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getForceProviderSyncUrl = (orgId: string,
+    provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack',) => {
+
+
+
+
+  return `/api/orgs/${orgId}/providers/${provider}/sync`
+}
+
+/**
+ * @summary Force a bounded email or calendar synchronization
+ */
+export const forceProviderSync = async (orgId: string,
+    provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack', options?: Parameters<typeof customFetch>[1]): Promise<ProviderSyncResult> => {
+
+  return customFetch<ProviderSyncResult>(getForceProviderSyncUrl(orgId,provider),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getForceProviderSyncMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof forceProviderSync>>, TError,{orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof forceProviderSync>>, TError,{orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}, TContext> => {
+
+const mutationKey = ['forceProviderSync'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof forceProviderSync>>, {orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}> = (props) => {
+          const {orgId,provider} = props ?? {};
+
+          return  forceProviderSync(orgId,provider,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ForceProviderSyncMutationResult = NonNullable<Awaited<ReturnType<typeof forceProviderSync>>>
+
+    export type ForceProviderSyncMutationError = ErrorType<void>
+
+    /**
+ * @summary Force a bounded email or calendar synchronization
+ */
+export const useForceProviderSync = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof forceProviderSync>>, TError,{orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof forceProviderSync>>,
+        TError,
+        {orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'},
+        TContext
+      > => {
+      return useMutation(getForceProviderSyncMutationOptions(options));
+    }
+
+export const getBindCommunicationProviderUrl = (orgId: string,
+    provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack',) => {
+
+
+
+
+  return `/api/orgs/${orgId}/providers/${provider}/bind`
+}
+
+/**
+ * @summary Owner/admin claims this deployment-global connector for the organization
+ */
+export const bindCommunicationProvider = async (orgId: string,
+    provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack', options?: Parameters<typeof customFetch>[1]): Promise<ProviderBindingResult> => {
+
+  return customFetch<ProviderBindingResult>(getBindCommunicationProviderUrl(orgId,provider),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getBindCommunicationProviderMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bindCommunicationProvider>>, TError,{orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bindCommunicationProvider>>, TError,{orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}, TContext> => {
+
+const mutationKey = ['bindCommunicationProvider'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bindCommunicationProvider>>, {orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}> = (props) => {
+          const {orgId,provider} = props ?? {};
+
+          return  bindCommunicationProvider(orgId,provider,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BindCommunicationProviderMutationResult = NonNullable<Awaited<ReturnType<typeof bindCommunicationProvider>>>
+
+    export type BindCommunicationProviderMutationError = ErrorType<void>
+
+    /**
+ * @summary Owner/admin claims this deployment-global connector for the organization
+ */
+export const useBindCommunicationProvider = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bindCommunicationProvider>>, TError,{orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bindCommunicationProvider>>,
+        TError,
+        {orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'},
+        TContext
+      > => {
+      return useMutation(getBindCommunicationProviderMutationOptions(options));
+    }
+
+export const getUnbindCommunicationProviderUrl = (orgId: string,
+    provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack',) => {
+
+
+
+
+  return `/api/orgs/${orgId}/providers/${provider}/bind`
+}
+
+/**
+ * @summary Owner-only removal of Aegis binding; it does not disconnect OAuth
+ */
+export const unbindCommunicationProvider = async (orgId: string,
+    provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack', options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getUnbindCommunicationProviderUrl(orgId,provider),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getUnbindCommunicationProviderMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unbindCommunicationProvider>>, TError,{orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unbindCommunicationProvider>>, TError,{orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}, TContext> => {
+
+const mutationKey = ['unbindCommunicationProvider'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unbindCommunicationProvider>>, {orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}> = (props) => {
+          const {orgId,provider} = props ?? {};
+
+          return  unbindCommunicationProvider(orgId,provider,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnbindCommunicationProviderMutationResult = NonNullable<Awaited<ReturnType<typeof unbindCommunicationProvider>>>
+
+    export type UnbindCommunicationProviderMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Owner-only removal of Aegis binding; it does not disconnect OAuth
+ */
+export const useUnbindCommunicationProvider = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unbindCommunicationProvider>>, TError,{orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unbindCommunicationProvider>>,
+        TError,
+        {orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'},
+        TContext
+      > => {
+      return useMutation(getUnbindCommunicationProviderMutationOptions(options));
+    }
+
+export const getGetCommunicationSettingsUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/communication-settings`
+}
+
+export const getCommunicationSettings = async (orgId: string, options?: Parameters<typeof customFetch>[1]): Promise<CommunicationSettings> => {
+
+  return customFetch<CommunicationSettings>(getGetCommunicationSettingsUrl(orgId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCommunicationSettingsQueryKey = (orgId: string,) => {
+    return [
+    `/api/orgs/${orgId}/communication-settings`
+    ] as const;
+    }
+
+
+export const getGetCommunicationSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getCommunicationSettings>>, TError = ErrorType<unknown>>(orgId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommunicationSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCommunicationSettingsQueryKey(orgId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommunicationSettings>>> = ({ signal }) => getCommunicationSettings(orgId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCommunicationSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCommunicationSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getCommunicationSettings>>>
+export type GetCommunicationSettingsQueryError = ErrorType<unknown>
+
+
+
+export function useGetCommunicationSettings<TData = Awaited<ReturnType<typeof getCommunicationSettings>>, TError = ErrorType<unknown>>(
+ orgId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommunicationSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCommunicationSettingsQueryOptions(orgId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateCommunicationSettingsUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/communication-settings`
+}
+
+/**
+ * @summary Owner/admin updates explicit AI analysis consent
+ */
+export const updateCommunicationSettings = async (orgId: string,
+    communicationSettingsInput: CommunicationSettingsInput, options?: Parameters<typeof customFetch>[1]): Promise<CommunicationSettings> => {
+
+  return customFetch<CommunicationSettings>(getUpdateCommunicationSettingsUrl(orgId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(communicationSettingsInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateCommunicationSettingsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCommunicationSettings>>, TError,{orgId: string;data: BodyType<CommunicationSettingsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCommunicationSettings>>, TError,{orgId: string;data: BodyType<CommunicationSettingsInput>}, TContext> => {
+
+const mutationKey = ['updateCommunicationSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCommunicationSettings>>, {orgId: string;data: BodyType<CommunicationSettingsInput>}> = (props) => {
+          const {orgId,data} = props ?? {};
+
+          return  updateCommunicationSettings(orgId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCommunicationSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateCommunicationSettings>>>
+    export type UpdateCommunicationSettingsMutationBody = BodyType<CommunicationSettingsInput>
+    export type UpdateCommunicationSettingsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Owner/admin updates explicit AI analysis consent
+ */
+export const useUpdateCommunicationSettings = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCommunicationSettings>>, TError,{orgId: string;data: BodyType<CommunicationSettingsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCommunicationSettings>>,
+        TError,
+        {orgId: string;data: BodyType<CommunicationSettingsInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateCommunicationSettingsMutationOptions(options));
+    }
+
+export const getListInternalNotesUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}/notes`
+}
+
+export const listInternalNotes = async (orgId: string,
+    accountId: string, options?: Parameters<typeof customFetch>[1]): Promise<InternalNote[]> => {
+
+  return customFetch<InternalNote[]>(getListInternalNotesUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInternalNotesQueryKey = (orgId: string,
+    accountId: string,) => {
+    return [
+    `/api/orgs/${orgId}/accounts/${accountId}/notes`
+    ] as const;
+    }
+
+
+export const getListInternalNotesQueryOptions = <TData = Awaited<ReturnType<typeof listInternalNotes>>, TError = ErrorType<unknown>>(orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInternalNotes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInternalNotesQueryKey(orgId,accountId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInternalNotes>>> = ({ signal }) => listInternalNotes(orgId,accountId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined && accountId !== null && accountId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInternalNotes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListInternalNotesQueryResult = NonNullable<Awaited<ReturnType<typeof listInternalNotes>>>
+export type ListInternalNotesQueryError = ErrorType<unknown>
+
+
+
+export function useListInternalNotes<TData = Awaited<ReturnType<typeof listInternalNotes>>, TError = ErrorType<unknown>>(
+ orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInternalNotes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListInternalNotesQueryOptions(orgId,accountId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateInternalNoteUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}/notes`
+}
+
+export const createInternalNote = async (orgId: string,
+    accountId: string,
+    internalNoteInput: InternalNoteInput, options?: Parameters<typeof customFetch>[1]): Promise<InternalNote> => {
+
+  return customFetch<InternalNote>(getCreateInternalNoteUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(internalNoteInput)
+  }
+);}
+
+
+
+
+
+export const getCreateInternalNoteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInternalNote>>, TError,{orgId: string;accountId: string;data: BodyType<InternalNoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createInternalNote>>, TError,{orgId: string;accountId: string;data: BodyType<InternalNoteInput>}, TContext> => {
+
+const mutationKey = ['createInternalNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createInternalNote>>, {orgId: string;accountId: string;data: BodyType<InternalNoteInput>}> = (props) => {
+          const {orgId,accountId,data} = props ?? {};
+
+          return  createInternalNote(orgId,accountId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateInternalNoteMutationResult = NonNullable<Awaited<ReturnType<typeof createInternalNote>>>
+    export type CreateInternalNoteMutationBody = BodyType<InternalNoteInput>
+    export type CreateInternalNoteMutationError = ErrorType<unknown>
+
+    export const useCreateInternalNote = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInternalNote>>, TError,{orgId: string;accountId: string;data: BodyType<InternalNoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createInternalNote>>,
+        TError,
+        {orgId: string;accountId: string;data: BodyType<InternalNoteInput>},
+        TContext
+      > => {
+      return useMutation(getCreateInternalNoteMutationOptions(options));
+    }
+
+export const getUpdateInternalNoteUrl = (orgId: string,
+    accountId: string,
+    noteId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}/notes/${noteId}`
+}
+
+export const updateInternalNote = async (orgId: string,
+    accountId: string,
+    noteId: string,
+    internalNoteUpdate: InternalNoteUpdate, options?: Parameters<typeof customFetch>[1]): Promise<InternalNote> => {
+
+  return customFetch<InternalNote>(getUpdateInternalNoteUrl(orgId,accountId,noteId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(internalNoteUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateInternalNoteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateInternalNote>>, TError,{orgId: string;accountId: string;noteId: string;data: BodyType<InternalNoteUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateInternalNote>>, TError,{orgId: string;accountId: string;noteId: string;data: BodyType<InternalNoteUpdate>}, TContext> => {
+
+const mutationKey = ['updateInternalNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateInternalNote>>, {orgId: string;accountId: string;noteId: string;data: BodyType<InternalNoteUpdate>}> = (props) => {
+          const {orgId,accountId,noteId,data} = props ?? {};
+
+          return  updateInternalNote(orgId,accountId,noteId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateInternalNoteMutationResult = NonNullable<Awaited<ReturnType<typeof updateInternalNote>>>
+    export type UpdateInternalNoteMutationBody = BodyType<InternalNoteUpdate>
+    export type UpdateInternalNoteMutationError = ErrorType<unknown>
+
+    export const useUpdateInternalNote = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateInternalNote>>, TError,{orgId: string;accountId: string;noteId: string;data: BodyType<InternalNoteUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateInternalNote>>,
+        TError,
+        {orgId: string;accountId: string;noteId: string;data: BodyType<InternalNoteUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateInternalNoteMutationOptions(options));
+    }
+
+export const getDeleteInternalNoteUrl = (orgId: string,
+    accountId: string,
+    noteId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}/notes/${noteId}`
+}
+
+export const deleteInternalNote = async (orgId: string,
+    accountId: string,
+    noteId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteInternalNoteUrl(orgId,accountId,noteId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteInternalNoteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInternalNote>>, TError,{orgId: string;accountId: string;noteId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteInternalNote>>, TError,{orgId: string;accountId: string;noteId: string}, TContext> => {
+
+const mutationKey = ['deleteInternalNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteInternalNote>>, {orgId: string;accountId: string;noteId: string}> = (props) => {
+          const {orgId,accountId,noteId} = props ?? {};
+
+          return  deleteInternalNote(orgId,accountId,noteId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteInternalNoteMutationResult = NonNullable<Awaited<ReturnType<typeof deleteInternalNote>>>
+
+    export type DeleteInternalNoteMutationError = ErrorType<unknown>
+
+    export const useDeleteInternalNote = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInternalNote>>, TError,{orgId: string;accountId: string;noteId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteInternalNote>>,
+        TError,
+        {orgId: string;accountId: string;noteId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteInternalNoteMutationOptions(options));
+    }
+
+export const getSendCrmEmailUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/emails/send`
+}
+
+export const sendCrmEmail = async (orgId: string,
+    crmEmailInput: CrmEmailInput, options?: Parameters<typeof customFetch>[1]): Promise<CrmEmailResult> => {
+
+  return customFetch<CrmEmailResult>(getSendCrmEmailUrl(orgId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(crmEmailInput)
+  }
+);}
+
+
+
+
+
+export const getSendCrmEmailMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendCrmEmail>>, TError,{orgId: string;data: BodyType<CrmEmailInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendCrmEmail>>, TError,{orgId: string;data: BodyType<CrmEmailInput>}, TContext> => {
+
+const mutationKey = ['sendCrmEmail'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendCrmEmail>>, {orgId: string;data: BodyType<CrmEmailInput>}> = (props) => {
+          const {orgId,data} = props ?? {};
+
+          return  sendCrmEmail(orgId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendCrmEmailMutationResult = NonNullable<Awaited<ReturnType<typeof sendCrmEmail>>>
+    export type SendCrmEmailMutationBody = BodyType<CrmEmailInput>
+    export type SendCrmEmailMutationError = ErrorType<unknown>
+
+    export const useSendCrmEmail = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendCrmEmail>>, TError,{orgId: string;data: BodyType<CrmEmailInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendCrmEmail>>,
+        TError,
+        {orgId: string;data: BodyType<CrmEmailInput>},
+        TContext
+      > => {
+      return useMutation(getSendCrmEmailMutationOptions(options));
+    }
+
+export const getListEmailThreadsUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}/email-threads`
+}
+
+export const listEmailThreads = async (orgId: string,
+    accountId: string, options?: Parameters<typeof customFetch>[1]): Promise<EmailThread[]> => {
+
+  return customFetch<EmailThread[]>(getListEmailThreadsUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListEmailThreadsQueryKey = (orgId: string,
+    accountId: string,) => {
+    return [
+    `/api/orgs/${orgId}/accounts/${accountId}/email-threads`
+    ] as const;
+    }
+
+
+export const getListEmailThreadsQueryOptions = <TData = Awaited<ReturnType<typeof listEmailThreads>>, TError = ErrorType<unknown>>(orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEmailThreads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListEmailThreadsQueryKey(orgId,accountId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listEmailThreads>>> = ({ signal }) => listEmailThreads(orgId,accountId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined && accountId !== null && accountId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listEmailThreads>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListEmailThreadsQueryResult = NonNullable<Awaited<ReturnType<typeof listEmailThreads>>>
+export type ListEmailThreadsQueryError = ErrorType<unknown>
+
+
+
+export function useListEmailThreads<TData = Awaited<ReturnType<typeof listEmailThreads>>, TError = ErrorType<unknown>>(
+ orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEmailThreads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListEmailThreadsQueryOptions(orgId,accountId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetEmailThreadUrl = (orgId: string,
+    threadId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/email-threads/${threadId}`
+}
+
+export const getEmailThread = async (orgId: string,
+    threadId: string, options?: Parameters<typeof customFetch>[1]): Promise<GetEmailThread200> => {
+
+  return customFetch<GetEmailThread200>(getGetEmailThreadUrl(orgId,threadId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEmailThreadQueryKey = (orgId: string,
+    threadId: string,) => {
+    return [
+    `/api/orgs/${orgId}/email-threads/${threadId}`
+    ] as const;
+    }
+
+
+export const getGetEmailThreadQueryOptions = <TData = Awaited<ReturnType<typeof getEmailThread>>, TError = ErrorType<unknown>>(orgId: string,
+    threadId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEmailThread>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEmailThreadQueryKey(orgId,threadId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEmailThread>>> = ({ signal }) => getEmailThread(orgId,threadId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined && threadId !== null && threadId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEmailThread>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEmailThreadQueryResult = NonNullable<Awaited<ReturnType<typeof getEmailThread>>>
+export type GetEmailThreadQueryError = ErrorType<unknown>
+
+
+
+export function useGetEmailThread<TData = Awaited<ReturnType<typeof getEmailThread>>, TError = ErrorType<unknown>>(
+ orgId: string,
+    threadId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEmailThread>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEmailThreadQueryOptions(orgId,threadId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListCalendarEventsUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}/calendar-events`
+}
+
+export const listCalendarEvents = async (orgId: string,
+    accountId: string, options?: Parameters<typeof customFetch>[1]): Promise<CalendarEvent[]> => {
+
+  return customFetch<CalendarEvent[]>(getListCalendarEventsUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCalendarEventsQueryKey = (orgId: string,
+    accountId: string,) => {
+    return [
+    `/api/orgs/${orgId}/accounts/${accountId}/calendar-events`
+    ] as const;
+    }
+
+
+export const getListCalendarEventsQueryOptions = <TData = Awaited<ReturnType<typeof listCalendarEvents>>, TError = ErrorType<unknown>>(orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCalendarEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCalendarEventsQueryKey(orgId,accountId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCalendarEvents>>> = ({ signal }) => listCalendarEvents(orgId,accountId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined && accountId !== null && accountId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCalendarEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCalendarEventsQueryResult = NonNullable<Awaited<ReturnType<typeof listCalendarEvents>>>
+export type ListCalendarEventsQueryError = ErrorType<unknown>
+
+
+
+export function useListCalendarEvents<TData = Awaited<ReturnType<typeof listCalendarEvents>>, TError = ErrorType<unknown>>(
+ orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCalendarEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCalendarEventsQueryOptions(orgId,accountId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListCallRecordingsUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}/calls`
+}
+
+export const listCallRecordings = async (orgId: string,
+    accountId: string, options?: Parameters<typeof customFetch>[1]): Promise<CallRecording[]> => {
+
+  return customFetch<CallRecording[]>(getListCallRecordingsUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCallRecordingsQueryKey = (orgId: string,
+    accountId: string,) => {
+    return [
+    `/api/orgs/${orgId}/accounts/${accountId}/calls`
+    ] as const;
+    }
+
+
+export const getListCallRecordingsQueryOptions = <TData = Awaited<ReturnType<typeof listCallRecordings>>, TError = ErrorType<unknown>>(orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCallRecordings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCallRecordingsQueryKey(orgId,accountId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCallRecordings>>> = ({ signal }) => listCallRecordings(orgId,accountId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined && accountId !== null && accountId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCallRecordings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCallRecordingsQueryResult = NonNullable<Awaited<ReturnType<typeof listCallRecordings>>>
+export type ListCallRecordingsQueryError = ErrorType<unknown>
+
+
+
+export function useListCallRecordings<TData = Awaited<ReturnType<typeof listCallRecordings>>, TError = ErrorType<unknown>>(
+ orgId: string,
+    accountId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCallRecordings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCallRecordingsQueryOptions(orgId,accountId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getInitiateCrmCallUrl = (orgId: string,
+    accountId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/accounts/${accountId}/calls`
+}
+
+export const initiateCrmCall = async (orgId: string,
+    accountId: string,
+    callInput: CallInput, options?: Parameters<typeof customFetch>[1]): Promise<CallResult> => {
+
+  return customFetch<CallResult>(getInitiateCrmCallUrl(orgId,accountId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(callInput)
+  }
+);}
+
+
+
+
+
+export const getInitiateCrmCallMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof initiateCrmCall>>, TError,{orgId: string;accountId: string;data: BodyType<CallInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof initiateCrmCall>>, TError,{orgId: string;accountId: string;data: BodyType<CallInput>}, TContext> => {
+
+const mutationKey = ['initiateCrmCall'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof initiateCrmCall>>, {orgId: string;accountId: string;data: BodyType<CallInput>}> = (props) => {
+          const {orgId,accountId,data} = props ?? {};
+
+          return  initiateCrmCall(orgId,accountId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InitiateCrmCallMutationResult = NonNullable<Awaited<ReturnType<typeof initiateCrmCall>>>
+    export type InitiateCrmCallMutationBody = BodyType<CallInput>
+    export type InitiateCrmCallMutationError = ErrorType<void>
+
+    export const useInitiateCrmCall = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof initiateCrmCall>>, TError,{orgId: string;accountId: string;data: BodyType<CallInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof initiateCrmCall>>,
+        TError,
+        {orgId: string;accountId: string;data: BodyType<CallInput>},
+        TContext
+      > => {
+      return useMutation(getInitiateCrmCallMutationOptions(options));
+    }
+
+export const getGetCallRecordingUrl = (orgId: string,
+    callId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/calls/${callId}`
+}
+
+export const getCallRecording = async (orgId: string,
+    callId: string, options?: Parameters<typeof customFetch>[1]): Promise<CallRecording> => {
+
+  return customFetch<CallRecording>(getGetCallRecordingUrl(orgId,callId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCallRecordingQueryKey = (orgId: string,
+    callId: string,) => {
+    return [
+    `/api/orgs/${orgId}/calls/${callId}`
+    ] as const;
+    }
+
+
+export const getGetCallRecordingQueryOptions = <TData = Awaited<ReturnType<typeof getCallRecording>>, TError = ErrorType<unknown>>(orgId: string,
+    callId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCallRecording>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCallRecordingQueryKey(orgId,callId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCallRecording>>> = ({ signal }) => getCallRecording(orgId,callId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined && callId !== null && callId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCallRecording>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCallRecordingQueryResult = NonNullable<Awaited<ReturnType<typeof getCallRecording>>>
+export type GetCallRecordingQueryError = ErrorType<unknown>
+
+
+
+export function useGetCallRecording<TData = Awaited<ReturnType<typeof getCallRecording>>, TError = ErrorType<unknown>>(
+ orgId: string,
+    callId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCallRecording>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCallRecordingQueryOptions(orgId,callId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getTwilioRecordingWebhookUrl = () => {
+
+
+
+
+  return `/api/calls/webhook`
+}
+
+/**
+ * @summary Signature-validated Twilio recording callback
+ */
+export const twilioRecordingWebhook = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getTwilioRecordingWebhookUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getTwilioRecordingWebhookMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof twilioRecordingWebhook>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof twilioRecordingWebhook>>, TError,void, TContext> => {
+
+const mutationKey = ['twilioRecordingWebhook'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof twilioRecordingWebhook>>, void> = () => {
+
+
+          return  twilioRecordingWebhook(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TwilioRecordingWebhookMutationResult = NonNullable<Awaited<ReturnType<typeof twilioRecordingWebhook>>>
+
+    export type TwilioRecordingWebhookMutationError = ErrorType<void>
+
+    /**
+ * @summary Signature-validated Twilio recording callback
+ */
+export const useTwilioRecordingWebhook = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof twilioRecordingWebhook>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof twilioRecordingWebhook>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getTwilioRecordingWebhookMutationOptions(options));
     }
 
 export const getRequestUploadUrlUrl = () => {

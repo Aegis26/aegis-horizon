@@ -1,0 +1,787 @@
+# Aegis Horizon — Phase 5: AI, Automation & Intelligence
+
+**Goal:** AI assists users and automates repetitive work. Copilot drafts emails, predicts outcomes, runs workflows, and agents handle autonomous tasks. Every rep feels like they have a personal AI assistant.
+
+**Deliverables:** AI Copilot (summaries, drafts, recommendations), Predictive models (churn risk, conversion likelihood, close probability), No-code workflow automation (visual builder), AI Agents (lead qualification, follow-up sequences), AI voice assistant (natural language commands).
+
+**Acceptance Criteria:**
+1. Rep clicks "Summarize" on account → 2-sentence summary + next best action in 2 seconds.
+2. Churn model flags accounts at risk; alert goes to account owner.
+3. Workflow: "If opp in Proposal > 14 days, create task 'Follow up'" — executes automatically.
+4. Agent: New lead arrives → Auto-qualified, opportunity created, outreach drafted, follow-up scheduled.
+5. Rep speaks: "Show my largest open deal and schedule a call for tomorrow at 2pm" → Executed.
+
+---
+
+## Stack
+
+| Component | Choice | Why |
+|---|---|---|
+| AI LLM | Claude (Anthropic) | You're already using it; consistent API |
+| Embeddings | Anthropic Embeddings | For semantic search in account data |
+| Predictive Models | Claude + simple heuristics | Start rule-based, upgrade to ML later |
+| Workflow Engine | Custom event-driven system | Lightweight, no external vendor |
+| Voice Interface | Twilio Voice + Claude | Natural language command parsing |
+| Scheduling | node-cron + Bull queue | Background job processing |
+| Vector DB | Postgres (pgvector) | Already using Postgres; no new infra |
+| API Rate Limiting | Redis + Token Bucket | Prevent Claude API abuse |
+
+---
+
+## Database Schema Additions
+
+### AI Copilot & Recommendations
+
+```typescript
+export const aiRecommendations = pgTable('ai_recommendations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'cascade' }),
+  opportunityId: uuid('opportunity_id').references(() => opportunities.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(), // 'next_action' | 'email_draft' | 'follow_up' | 'risk_alert'
+  title: text('title'),
+  description: text('description'),
+  suggestedAction: text('suggested_action'),
+  confidence: decimal('confidence', { precision: 3, scale: 2 }), // 0.0-1.0
+  source: text('source'), // 'copilot' | 'predictive' | 'agent'
+  dismissed: boolean('dismissed').default(false),
+  actedOn: boolean('acted_on').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const aiSummaries = pgTable('ai_summaries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  entityType: text('entity_type').notNull(), // 'account' | 'opportunity' | 'email_thread'
+  entityId: uuid('entity_id').notNull(),
+  summaryShort: text('summary_short'), // 2 sentences
+  summaryLong: text('summary_long'), // Full paragraph
+  topics: text('topics').array().default([]),
+  sentiment: text('sentiment'), // 'positive' | 'neutral' | 'negative'
+  generatedAt: timestamp('generated_at').defaultNow(),
+  expiresAt: timestamp('expires_at'), // Regenerate if stale
+});
+```
+
+### Predictive Models
+
+```typescript
+export const churnPredictions = pgTable('churn_predictions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  riskScore: decimal('risk_score', { precision: 3, scale: 2 }), // 0.0-1.0
+  riskLevel: text('risk_level').notNull(), // 'low' | 'medium' | 'high' | 'critical'
+  riskFactors: jsonb('risk_factors').default([]), // [{factor: 'no_activity_90_days', weight: 0.3}, ...]
+  daysUntilChurn: integer('days_until_churn'), // Estimated days if trend continues
+  recommendedAction: text('recommended_action'),
+  alertedAt: timestamp('alerted_at'),
+  resolvedAt: timestamp('resolved_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const conversionPredictions = pgTable('conversion_predictions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  leadId: uuid('lead_id').references(() => leads.id, { onDelete: 'cascade' }),
+  conversionProbability: decimal('conversion_probability', { precision: 3, scale: 2 }), // 0.0-1.0
+  predictedCloseDate: date('predicted_close_date'),
+  factors: jsonb('factors').default([]), // [{factor: 'company_size_10k+', boost: 0.2}, ...]
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const closeProbability = pgTable('close_probability', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  opportunityId: uuid('opportunity_id').notNull().references(() => opportunities.id, { onDelete: 'cascade' }),
+  predictedProbability: decimal('predicted_probability', { precision: 3, scale: 2 }), // 0.0-1.0
+  baselineByStage: decimal('baseline_by_stage', { precision: 3, scale: 2 }),
+  adjustmentFactors: jsonb('adjustment_factors').default([]),
+  expectedCloseDate: date('expected_close_date'),
+  confidence: decimal('confidence', { precision: 3, scale: 2 }),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+```
+
+### Workflow Automation
+
+```typescript
+export const workflows = pgTable('workflows', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  trigger: jsonb('trigger').notNull(), // {type: 'record_created' | 'field_change' | 'time_based', config: {...}}
+  conditions: jsonb('conditions').default([]), // [{field: 'stage', operator: '=', value: 'proposal'}, ...]
+  actions: jsonb('actions').notNull(), // [{type: 'create_task', config: {...}}, {type: 'send_email', config: {...}}, ...]
+  active: boolean('active').default(true),
+  dryRunMode: boolean('dry_run_mode').default(false), // Test without executing
+  executionCount: integer('execution_count').default(0),
+  lastExecutedAt: timestamp('last_executed_at'),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const workflowExecutions = pgTable('workflow_executions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  workflowId: uuid('workflow_id').notNull().references(() => workflows.id, { onDelete: 'cascade' }),
+  entityType: text('entity_type'), // 'lead' | 'opportunity' | 'account'
+  entityId: uuid('entity_id'),
+  triggerData: jsonb('trigger_data'), // The event that triggered the workflow
+  actionResults: jsonb('action_results').default([]), // [{action_id, status, result}, ...]
+  status: text('status').notNull(), // 'pending' | 'running' | 'success' | 'failed'
+  errorMessage: text('error_message'),
+  executedAt: timestamp('executed_at'),
+  completedAt: timestamp('completed_at'),
+});
+```
+
+### AI Agents
+
+```typescript
+export const aiAgents = pgTable('ai_agents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  type: text('type').notNull(), // 'lead_qualifier' | 'follow_up_sequencer' | 'renewal_monitor'
+  systemPrompt: text('system_prompt'), // Claude system instructions
+  tools: text('tools').array().default([]), // ['create_opportunity', 'send_email', 'schedule_task']
+  active: boolean('active').default(true),
+  executionFrequency: text('execution_frequency'), // 'realtime' | 'hourly' | 'daily'
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const agentExecutions = pgTable('agent_executions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  agentId: uuid('agent_id').notNull().references(() => aiAgents.id),
+  entityType: text('entity_type'),
+  entityId: uuid('entity_id'),
+  input: jsonb('input'), // What the agent was asked to process
+  reasoning: text('reasoning'), // Agent's step-by-step thinking
+  actions: jsonb('actions').default([]), // [{tool, params, result}, ...]
+  output: text('output'), // Final result/summary
+  status: text('status'), // 'success' | 'partial' | 'failed'
+  tokensUsed: integer('tokens_used'),
+  executedAt: timestamp('executed_at'),
+});
+
+export const voiceCommands = pgTable('voice_commands', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id),
+  audioUrl: text('audio_url'),
+  transcript: text('transcript'),
+  interpretation: text('interpretation'), // What the command means
+  action: text('action'), // What will be executed
+  status: text('status'), // 'pending' | 'executing' | 'completed' | 'failed'
+  result: jsonb('result'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+```
+
+---
+
+## Core API Routes
+
+### AI Copilot
+
+**Summaries & Analysis**
+- `POST /api/ai/copilot/summarize` — Summarize account/opportunity/email
+  ```typescript
+  {
+    entityType: 'account' | 'opportunity' | 'email_thread',
+    entityId: "...",
+    style: 'short' | 'long' // 2 sentences vs full paragraph
+  }
+  ```
+- `POST /api/ai/copilot/next-action` — Recommend next action on account
+- `POST /api/ai/copilot/draft-email` — Draft email response
+  ```typescript
+  {
+    accountId: "...",
+    context: "...", // Previous email or situation
+    tone: 'professional' | 'casual'
+  }
+  ```
+
+### Predictions
+
+**Risk & Conversion**
+- `GET /api/predictions/churn` — List accounts at churn risk
+- `GET /api/predictions/churn/:accountId` — Detailed churn risk for account
+- `GET /api/predictions/conversion/:leadId` — Lead conversion probability
+- `GET /api/predictions/close/:opportunityId` — Deal close probability
+
+### Workflow Automation
+
+**Build & Manage Workflows**
+- `POST /api/workflows` — Create workflow
+- `GET /api/workflows` — List workflows
+- `PATCH /api/workflows/:id` — Edit workflow
+- `DELETE /api/workflows/:id` — Delete workflow
+- `POST /api/workflows/:id/test` — Run in dry-run mode (no actual execution)
+- `POST /api/workflows/:id/toggle` — Enable/disable workflow
+- `GET /api/workflow-executions` — List all executions (audit log)
+
+### AI Agents
+
+**Agent Management**
+- `POST /api/agents` — Create agent (lead qualifier, renewal monitor, etc.)
+- `GET /api/agents` — List agents
+- `POST /api/agents/:id/run` — Manually trigger agent
+- `GET /api/agent-executions` — Agent execution history
+
+### Voice Commands
+
+**Voice Interface**
+- `POST /api/voice/process` — Process voice command
+  ```typescript
+  {
+    audioUrl: "...", // Or audioBase64
+    context: {accountId, opportunityId} // Optional context
+  }
+  ```
+- `GET /api/voice/commands` — History of voice commands
+
+---
+
+## Backend Services
+
+### CopilotService
+
+```typescript
+// src/services/copilot.ts
+export class CopilotService {
+  async summarizeAccount(accountId: string, style: 'short' | 'long') {
+    // 1. Fetch account + timeline (emails, calls, notes, activities)
+    // 2. Build context for Claude: "Summarize this customer relationship"
+    // 3. Call Claude Sonnet
+    // 4. Cache summary for 24h
+    // 5. Return summary + topics + sentiment
+  }
+
+  async draftEmail(accountId: string, context: string, tone: string) {
+    // 1. Fetch account + recent emails for tone matching
+    // 2. Build prompt: "Draft a {tone} email response to this situation"
+    // 3. Call Claude
+    // 4. Return draft (user edits before sending)
+  }
+
+  async recommendNextAction(accountId: string) {
+    // 1. Analyze account timeline + stage + history
+    // 2. Call Claude: "What should the sales rep do next?"
+    // 3. Consider churn risk, renewal dates, activity gaps
+    // 4. Return action + confidence + reasoning
+  }
+}
+```
+
+### PredictiveService
+
+```typescript
+// src/services/predictive.ts
+export class PredictiveService {
+  async calculateChurnRisk(accountId: string) {
+    // 1. Fetch account metrics: days since last activity, payment status, support tickets
+    // 2. Score based on rules:
+    //    - No activity in 90+ days: +0.3
+    //    - Contract up for renewal within 30 days: +0.2
+    //    - Recent support escalation: +0.1
+    // 3. Cap at 1.0
+    // 4. Store in churnPredictions table
+    // 5. If score > 0.7, create recommendation for account owner
+  }
+
+  async calculateConversionProbability(leadId: string) {
+    // 1. Fetch lead: company size, industry, budget, engagement score
+    // 2. Score based on rules:
+    //    - Company 10k+ employees: +0.2
+    //    - Responded to email within 24h: +0.1
+    //    - Viewed pricing page: +0.15
+    // 3. Predict close date based on historical averages for similar leads
+    // 4. Store prediction
+  }
+
+  async calculateCloseProbability(opportunityId: string) {
+    // 1. Fetch opportunity: stage, days in stage, deal value, engagement
+    // 2. Baseline probability by stage (from historical data)
+    // 3. Adjust up/down based on:
+    //    - Multiple decision makers in account: +0.1
+    //    - Quote sent and accepted: +0.2
+    //    - No activity in 14+ days: -0.15
+    // 4. Store prediction
+  }
+}
+```
+
+### WorkflowEngine
+
+```typescript
+// src/services/workflow.ts
+export class WorkflowEngine {
+  async evaluateWorkflow(workflow: Workflow, triggerData: any) {
+    // 1. Check trigger condition (is this event relevant?)
+    // 2. Evaluate all conditions (e.g., stage = 'proposal' AND days_in_stage > 14)
+    // 3. If all conditions match, execute actions in sequence
+    // 4. Log execution result
+  }
+
+  async executeAction(action: WorkflowAction, context: any) {
+    // Supported actions:
+    // - 'create_task': Create task for rep
+    // - 'send_email': Send email from template
+    // - 'create_opportunity': Auto-convert lead
+    // - 'update_field': Change account/opportunity field
+    // - 'create_recommendation': Add copilot recommendation
+    // - 'webhook': Call external webhook
+  }
+
+  async registerTrigger(workflowId: string, trigger: Trigger) {
+    // Listen for events and trigger workflows
+    // - 'record_created': New lead/opportunity created
+    // - 'field_change': Opportunity stage changed
+    // - 'time_based': Cron job (daily, hourly)
+  }
+}
+```
+
+### AgentService
+
+```typescript
+// src/services/agents.ts
+export class AgentService {
+  async leadQualificationAgent(lead: Lead) {
+    // 1. Load agent system prompt
+    // 2. Build context: lead data + company research
+    // 3. Call Claude with tools: [create_opportunity, send_email, schedule_task]
+    // 4. Agent thinks step-by-step:
+    //    - "Does this lead fit our ICP?"
+    //    - "Should I create an opportunity?"
+    //    - "What should I email them?"
+    // 5. Execute agent's decided actions
+    // 6. Log reasoning + actions taken
+  }
+
+  async renewalMonitoringAgent() {
+    // 1. Find all accounts with renewal_date within 60 days
+    // 2. For each, call Claude:
+    //    - "Is this customer at risk of churning?"
+    //    - "What should the CSM do now?"
+    // 3. Create recommendations and tasks
+  }
+
+  async followUpSequencer(lead: Lead) {
+    // 1. Determine optimal follow-up timing
+    // 2. Draft follow-up email via Claude
+    // 3. Schedule it for optimal time
+  }
+}
+```
+
+### VoiceService
+
+```typescript
+// src/services/voice.ts
+export class VoiceService {
+  async processVoiceCommand(audioUrl: string, userContext?: any) {
+    // 1. Transcribe audio (via speech-to-text API)
+    // 2. Build system prompt: "You are a sales rep's assistant. Commands include: show my deals, schedule a call, create a task."
+    // 3. Call Claude with transcript: "What command is the rep asking for?"
+    // 4. Parse Claude's interpretation:
+    //    - Type: 'query' | 'action'
+    //    - Command: e.g., 'show_large_deals' | 'schedule_call'
+    //    - Parameters: {date: 'tomorrow 2pm', duration: 30}
+    // 5. Execute the command
+    // 6. Build voice response: "I've scheduled a call for tomorrow at 2pm with Sarah"
+    // 7. Synthesize and return audio
+  }
+}
+```
+
+---
+
+## Frontend Components
+
+### AI Copilot Panel
+
+```typescript
+// components/CopilotPanel.tsx
+export function CopilotPanel({ accountId }: { accountId: string }) {
+  const [mode, setMode] = useState<'summary' | 'draft' | 'next-action'>('summary');
+  const [isLoading, setIsLoading] = useState(false);
+  const [result, setResult] = useState<any>(null);
+
+  const handleSummarize = async () => {
+    setIsLoading(true);
+    const response = await fetch(`/api/ai/copilot/summarize`, {
+      method: 'POST',
+      body: JSON.stringify({ entityType: 'account', entityId: accountId, style: 'short' }),
+    });
+    const data = await response.json();
+    setResult(data);
+    setIsLoading(false);
+  };
+
+  return (
+    <div className="card p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-display text-label text-white flex items-center gap-2">
+          🤖 Copilot
+        </h3>
+        <button
+          onClick={handleSummarize}
+          className="btn-primary btn-sm"
+          disabled={isLoading}
+        >
+          {isLoading ? 'Thinking...' : 'Summarize'}
+        </button>
+      </div>
+
+      {result && (
+        <div className="space-y-3">
+          <p className="text-body text-text-light">{result.summaryShort}</p>
+          <div className="flex flex-wrap gap-2">
+            {result.topics.map((topic: string) => (
+              <span key={topic} className="badge badge-info text-tiny">
+                {topic}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### Churn Risk Alert
+
+```typescript
+// components/ChurnRiskAlert.tsx
+export function ChurnRiskAlert({ account }: { account: Account }) {
+  const { data: churnRisk } = useQuery(
+    ['churn-risk', account.id],
+    () => fetch(`/api/predictions/churn/${account.id}`).then(r => r.json())
+  );
+
+  if (!churnRisk || churnRisk.riskLevel === 'low') return null;
+
+  return (
+    <div className={`alert alert-${churnRisk.riskLevel === 'critical' ? 'error' : 'warning'}`}>
+      <div className="flex items-start gap-4">
+        <span className="text-xl">⚠️</span>
+        <div className="flex-1">
+          <h4 className="font-display text-label mb-1">Churn Risk</h4>
+          <p className="text-body text-text-light mb-3">
+            {churnRisk.riskLevel === 'critical'
+              ? 'This account is at high risk of churning within 30 days.'
+              : 'This account shows signs of disengagement.'}
+          </p>
+          <p className="text-small text-text-light text-opacity-70 mb-3">
+            Key factors: {churnRisk.riskFactors.map(f => f.factor).join(', ')}
+          </p>
+          <button className="btn-secondary btn-sm">
+            {churnRisk.recommendedAction}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+### Workflow Builder (Visual)
+
+```typescript
+// components/WorkflowBuilder.tsx
+export function WorkflowBuilder() {
+  const [workflow, setWorkflow] = useState<Workflow>({
+    name: '',
+    trigger: {},
+    conditions: [],
+    actions: [],
+  });
+
+  const addCondition = () => {
+    setWorkflow({
+      ...workflow,
+      conditions: [...workflow.conditions, { field: '', operator: '=', value: '' }],
+    });
+  };
+
+  const addAction = () => {
+    setWorkflow({
+      ...workflow,
+      actions: [...workflow.actions, { type: 'create_task', config: {} }],
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Trigger selector */}
+      <div className="card p-6">
+        <h3 className="font-display text-label mb-4">When</h3>
+        <select className="input-base w-full">
+          <option>Record created</option>
+          <option>Field changed</option>
+          <option>Time-based (daily, weekly)</option>
+        </select>
+      </div>
+
+      {/* Conditions */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display text-label">And if</h3>
+          <button onClick={addCondition} className="btn-tertiary btn-sm">
+            + Condition
+          </button>
+        </div>
+        {workflow.conditions.map((cond, idx) => (
+          <div key={idx} className="space-y-2 mb-4">
+            <select className="input-base w-full" defaultValue={cond.field}>
+              <option>Opportunity stage</option>
+              <option>Days in stage</option>
+              <option>Deal value</option>
+            </select>
+            <select className="input-base w-full" defaultValue={cond.operator}>
+              <option>=</option>
+              <option>&gt;</option>
+              <option>&lt;</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Value"
+              defaultValue={cond.value}
+              className="input-base w-full"
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display text-label">Then</h3>
+          <button onClick={addAction} className="btn-tertiary btn-sm">
+            + Action
+          </button>
+        </div>
+        {workflow.actions.map((action, idx) => (
+          <div key={idx} className="space-y-2 mb-4">
+            <select className="input-base w-full" defaultValue={action.type}>
+              <option>Create task</option>
+              <option>Send email</option>
+              <option>Create opportunity</option>
+              <option>Update field</option>
+            </select>
+            {/* Dynamic config fields based on action type */}
+          </div>
+        ))}
+      </div>
+
+      {/* Test & Save */}
+      <div className="flex gap-4">
+        <button className="btn-secondary">Test (Dry Run)</button>
+        <button className="btn-primary">Save Workflow</button>
+      </div>
+    </div>
+  );
+}
+```
+
+### Voice Command Interface
+
+```typescript
+// components/VoiceCommand.tsx
+export function VoiceCommand() {
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const [result, setResult] = useState<any>(null);
+
+  const startListening = async () => {
+    setIsListening(true);
+    // Use browser's Web Speech API or Twilio VoIP
+    // Send audio to backend
+  };
+
+  const processCommand = async (audioUrl: string) => {
+    const response = await fetch(`/api/voice/process`, {
+      method: 'POST',
+      body: JSON.stringify({ audioUrl }),
+    });
+    const data = await response.json();
+    setResult(data);
+  };
+
+  return (
+    <div className="card p-6 text-center">
+      <h3 className="font-display text-label mb-4">🎤 Voice Commands</h3>
+      <p className="text-small text-text-light text-opacity-60 mb-6">
+        Try: "Show my largest open deals" or "Schedule a call for tomorrow at 2pm"
+      </p>
+
+      <button
+        onClick={startListening}
+        className={`btn-lg rounded-full w-20 h-20 flex items-center justify-center mx-auto ${
+          isListening ? 'animate-pulse' : ''
+        }`}
+      >
+        🎤
+      </button>
+
+      {transcript && (
+        <p className="text-body text-text-light mt-4">{transcript}</p>
+      )}
+
+      {result && (
+        <div className="mt-6 space-y-2">
+          <p className="text-small text-primary font-display">Understood:</p>
+          <p className="text-body text-text-light">{result.interpretation}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+## Claude Prompts (System Instructions)
+
+### Copilot System Prompt
+
+```
+You are an AI copilot for a CRM system. Your job is to help sales reps work faster and smarter.
+
+When summarizing customer accounts, be concise (2-3 sentences) and focus on:
+- Recent activity and engagement
+- Key decisions or blockers
+- Sentiment of the relationship
+
+When drafting emails:
+- Match the tone of previous communications
+- Be professional but personable
+- Include a clear call-to-action
+- Keep it to 3-4 sentences max
+
+When recommending next actions:
+- Consider the deal stage and days in stage
+- Look for risk signals (no activity, budget concerns)
+- Suggest concrete, immediately actionable steps
+
+Always be helpful, concise, and data-driven.
+```
+
+### Agent System Prompt (Lead Qualifier)
+
+```
+You are an AI agent that qualifies leads and decides whether they should be converted to sales opportunities.
+
+You have access to these tools:
+- create_opportunity(lead_id, account_id, name, value)
+- send_email(to, subject, body)
+- schedule_task(user_id, title, due_date)
+
+For each lead, analyze:
+1. Does the company fit our Ideal Customer Profile (ICP)?
+   - Company size: 10-1000 employees
+   - Industry: Tech, K-12, Healthcare, Finance
+   - Budget indicators: Funded, growing
+2. Is there engagement intent?
+   - Multiple email opens
+   - Website product page views
+   - Sales call request
+3. Should we proceed?
+   - If YES: Create opportunity, send intro email, schedule follow-up
+   - If NO: Mark unqualified with reason
+
+Think step-by-step. Explain your reasoning before taking actions.
+```
+
+---
+
+## Critical Implementation Notes
+
+### Token Budgeting for Claude
+
+Phase 5 will use Claude heavily. Set up rate limiting:
+
+```typescript
+// Rate limiting per org
+const claudeTokenBudget = {
+  'free': 10000, // tokens/month
+  'professional': 100000,
+  'enterprise': 1000000,
+};
+
+// Check before calling Claude
+async function checkTokenBudget(orgId: string) {
+  const usage = await getOrgTokenUsage(orgId);
+  const budget = claudeTokenBudget[org.plan];
+  if (usage > budget) throw new Error('Token budget exceeded');
+}
+```
+
+### Workflow Safety
+
+Workflows can do damage if misconfigured. Safety rules:
+
+```typescript
+// 1. Dry-run mode before activation
+// 2. Max 100 executions/day per workflow (prevent loops)
+// 3. Require approval for destructive actions (delete, update)
+// 4. Log ALL actions with audit trail
+// 5. Alert on unusual execution patterns
+```
+
+### Agent Autonomy
+
+Agents are powerful. Constraints:
+
+```typescript
+// 1. No agent can spend > $1000/deal without approval
+// 2. No agent can delete records
+// 3. All agent actions visible in audit log
+// 4. User can pause/kill agent execution anytime
+// 5. Agent can DRAFT, not SEND emails (human approves)
+```
+
+---
+
+## Acceptance Checklist
+
+- [ ] Copilot summarizes account in <2 seconds (cached)
+- [ ] Copilot drafts email matching previous tone
+- [ ] Churn risk model identifies at-risk accounts
+- [ ] Conversion probability predicts lead outcomes
+- [ ] Workflow: trigger + conditions + actions execute automatically
+- [ ] Workflow dry-run tests without side effects
+- [ ] Agent lead qualifier auto-creates opportunities
+- [ ] Agent reasoning visible in execution logs
+- [ ] Voice command processes and executes correctly
+- [ ] All Claude calls respect token budget
+- [ ] No infinite loops or runaway agents
+- [ ] Audit log captures all agent actions
+
+---
+
+## Definition of Done
+
+Phase 5 is complete when:
+
+1. ✅ Rep clicks "Summarize" → Account summary in 2 seconds
+2. ✅ Copilot drafts replies that match previous communications
+3. ✅ Churn model surfaces at-risk accounts with recommended actions
+4. ✅ Conversion predictions help reps prioritize leads
+5. ✅ Workflows automate repetitive tasks (no code needed)
+6. ✅ Agents autonomously qualify leads and schedule follow-ups
+7. ✅ Voice commands execute complex queries naturally
+8. ✅ All AI features respect rate limits and budgets
+9. ✅ Audit logs show what agents did and why
+10. ✅ No token budget overages
+
+**Once verified, Phase 5 ships. Move to Phase 6 (Analytics, Enterprise, Polish).**

@@ -1750,7 +1750,9 @@ export const CreateLeadBody = zod.object({
   "country": zod.string().nullish(),
   "state": zod.string().nullish(),
   "productInterest": zod.string().nullish(),
-  "source": zod.string().nullish()
+  "source": zod.string().nullish(),
+  "assignedToUserId": zod.string().uuid().nullish(),
+  "territoryId": zod.string().uuid().nullish()
 })
 
 export const CreateLeadResponse = zod.object({
@@ -2541,16 +2543,862 @@ export const GetForecastResponse = zod.object({
 
 
 /**
- * @summary List automation workflows (requires 'automation' feature; 403 otherwise)
+ * @summary List automation workflows
  */
 export const ListWorkflowsParams = zod.object({
   "orgId": zod.coerce.string()
 })
 
+
+
+
 export const ListWorkflowsResponseItem = zod.object({
-  "id": zod.string(),
-  "createdAt": zod.string().nullish()
-})
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "trigger": zod.object({
+  "type": zod.enum(['record_created', 'field_change', 'time_based']),
+  "entityType": zod.enum(['lead', 'opportunity', 'account']),
+  "field": zod.string().optional(),
+  "schedule": zod.enum(['hourly', 'daily']).optional()
+}),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'gt', 'gte', 'lt', 'lte', 'contains']),
+  "value": zod.unknown()
+})).optional(),
+  "actions": zod.array(zod.object({
+  "type": zod.enum(['create_task', 'create_recommendation', 'create_opportunity', 'update_field']),
+  "config": zod.record(zod.string(), zod.unknown())
+})).min(1)
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "active": zod.boolean(),
+  "version": zod.number().int(),
+  "lastDryRunVersion": zod.number().int().nullish(),
+  "createdAt": zod.coerce.date()
+}))
 export const ListWorkflowsResponse = zod.array(ListWorkflowsResponseItem)
+
+
+export const CreateWorkflowParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+
+
+
+export const CreateWorkflowBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "trigger": zod.object({
+  "type": zod.enum(['record_created', 'field_change', 'time_based']),
+  "entityType": zod.enum(['lead', 'opportunity', 'account']),
+  "field": zod.string().optional(),
+  "schedule": zod.enum(['hourly', 'daily']).optional()
+}),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'gt', 'gte', 'lt', 'lte', 'contains']),
+  "value": zod.unknown()
+})).optional(),
+  "actions": zod.array(zod.object({
+  "type": zod.enum(['create_task', 'create_recommendation', 'create_opportunity', 'update_field']),
+  "config": zod.record(zod.string(), zod.unknown())
+})).min(1)
+})
+
+
+
+
+export const CreateWorkflowResponse = zod.object({
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "trigger": zod.object({
+  "type": zod.enum(['record_created', 'field_change', 'time_based']),
+  "entityType": zod.enum(['lead', 'opportunity', 'account']),
+  "field": zod.string().optional(),
+  "schedule": zod.enum(['hourly', 'daily']).optional()
+}),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'gt', 'gte', 'lt', 'lte', 'contains']),
+  "value": zod.unknown()
+})).optional(),
+  "actions": zod.array(zod.object({
+  "type": zod.enum(['create_task', 'create_recommendation', 'create_opportunity', 'update_field']),
+  "config": zod.record(zod.string(), zod.unknown())
+})).min(1)
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "active": zod.boolean(),
+  "version": zod.number().int(),
+  "lastDryRunVersion": zod.number().int().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+
+
+export const UpdateWorkflowParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "workflowId": zod.coerce.string().uuid()
+})
+
+
+
+
+export const UpdateWorkflowBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "trigger": zod.object({
+  "type": zod.enum(['record_created', 'field_change', 'time_based']),
+  "entityType": zod.enum(['lead', 'opportunity', 'account']),
+  "field": zod.string().optional(),
+  "schedule": zod.enum(['hourly', 'daily']).optional()
+}),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'gt', 'gte', 'lt', 'lte', 'contains']),
+  "value": zod.unknown()
+})).optional(),
+  "actions": zod.array(zod.object({
+  "type": zod.enum(['create_task', 'create_recommendation', 'create_opportunity', 'update_field']),
+  "config": zod.record(zod.string(), zod.unknown())
+})).min(1)
+})
+
+
+
+
+export const UpdateWorkflowResponse = zod.object({
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "trigger": zod.object({
+  "type": zod.enum(['record_created', 'field_change', 'time_based']),
+  "entityType": zod.enum(['lead', 'opportunity', 'account']),
+  "field": zod.string().optional(),
+  "schedule": zod.enum(['hourly', 'daily']).optional()
+}),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'gt', 'gte', 'lt', 'lte', 'contains']),
+  "value": zod.unknown()
+})).optional(),
+  "actions": zod.array(zod.object({
+  "type": zod.enum(['create_task', 'create_recommendation', 'create_opportunity', 'update_field']),
+  "config": zod.record(zod.string(), zod.unknown())
+})).min(1)
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "active": zod.boolean(),
+  "version": zod.number().int(),
+  "lastDryRunVersion": zod.number().int().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+
+
+export const DeactivateWorkflowParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "workflowId": zod.coerce.string().uuid()
+})
+
+export const DeactivateWorkflowResponse = zod.void()
+
+
+export const TestWorkflowParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "workflowId": zod.coerce.string().uuid()
+})
+
+export const TestWorkflowBody = zod.object({
+  "entityType": zod.enum(['lead', 'opportunity', 'account']),
+  "entityId": zod.string().uuid()
+})
+
+export const TestWorkflowResponse = zod.object({
+  "dryRun": zod.boolean(),
+  "sideEffects": zod.number().int(),
+  "conditionsMatched": zod.boolean(),
+  "plannedActions": zod.array(zod.object({
+  "type": zod.enum(['create_task', 'create_recommendation', 'create_opportunity', 'update_field']),
+  "status": zod.enum(['planned', 'skipped', 'success', 'failed']),
+  "result": zod.record(zod.string(), zod.unknown()).optional(),
+  "config": zod.record(zod.string(), zod.unknown()).optional()
+}))
+})
+
+
+export const ToggleWorkflowParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "workflowId": zod.coerce.string().uuid()
+})
+
+export const ToggleWorkflowBody = zod.object({
+  "active": zod.boolean()
+})
+
+
+
+
+export const ToggleWorkflowResponse = zod.object({
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "trigger": zod.object({
+  "type": zod.enum(['record_created', 'field_change', 'time_based']),
+  "entityType": zod.enum(['lead', 'opportunity', 'account']),
+  "field": zod.string().optional(),
+  "schedule": zod.enum(['hourly', 'daily']).optional()
+}),
+  "conditions": zod.array(zod.object({
+  "field": zod.string(),
+  "operator": zod.enum(['equals', 'not_equals', 'gt', 'gte', 'lt', 'lte', 'contains']),
+  "value": zod.unknown()
+})).optional(),
+  "actions": zod.array(zod.object({
+  "type": zod.enum(['create_task', 'create_recommendation', 'create_opportunity', 'update_field']),
+  "config": zod.record(zod.string(), zod.unknown())
+})).min(1)
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "active": zod.boolean(),
+  "version": zod.number().int(),
+  "lastDryRunVersion": zod.number().int().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+
+
+export const ListWorkflowExecutionsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListWorkflowExecutionsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "workflowId": zod.string().uuid(),
+  "idempotencyKey": zod.string(),
+  "entityType": zod.union([zod.literal('lead'),zod.literal('opportunity'),zod.literal('account'),zod.literal(null)]).nullish(),
+  "entityId": zod.string().uuid().nullish(),
+  "triggerData": zod.record(zod.string(), zod.unknown()),
+  "actionResults": zod.array(zod.object({
+  "type": zod.enum(['create_task', 'create_recommendation', 'create_opportunity', 'update_field']),
+  "status": zod.enum(['planned', 'skipped', 'success', 'failed']),
+  "result": zod.record(zod.string(), zod.unknown()).optional(),
+  "config": zod.record(zod.string(), zod.unknown()).optional()
+})),
+  "status": zod.enum(['pending', 'running', 'success', 'failed']),
+  "errorMessage": zod.string().nullish(),
+  "claimedAt": zod.coerce.date().nullish(),
+  "executedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListWorkflowExecutionsResponse = zod.array(ListWorkflowExecutionsResponseItem)
+
+
+export const GetAiBudgetStatusParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const GetAiBudgetStatusResponse = zod.object({
+  "consentEnabled": zod.boolean(),
+  "budget": zod.number().int(),
+  "used": zod.number().int(),
+  "remaining": zod.number().int()
+})
+
+
+export const SummarizeWithCopilotParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const summarizeWithCopilotBodyStyleDefault = `short`;
+
+export const SummarizeWithCopilotBody = zod.object({
+  "entityType": zod.enum(['account', 'opportunity', 'email_thread']),
+  "entityId": zod.string().uuid(),
+  "style": zod.enum(['short', 'long']).default(summarizeWithCopilotBodyStyleDefault)
+})
+
+export const SummarizeWithCopilotResponse = zod.object({
+  "summaryShort": zod.string().describe('Exactly two concise sentences'),
+  "summaryLong": zod.string().nullish(),
+  "nextBestAction": zod.string(),
+  "topics": zod.array(zod.string()),
+  "sentiment": zod.enum(['positive', 'neutral', 'negative']),
+  "cached": zod.boolean(),
+  "generatedAt": zod.coerce.date()
+})
+
+
+export const GetCopilotNextActionParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const GetCopilotNextActionBody = zod.object({
+  "accountId": zod.string().uuid()
+})
+
+export const GetCopilotNextActionResponse = zod.object({
+  "action": zod.string(),
+  "rationale": zod.string(),
+  "confidence": zod.number()
+})
+
+
+export const DraftCopilotEmailParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const DraftCopilotEmailBody = zod.object({
+  "accountId": zod.string().uuid(),
+  "context": zod.string(),
+  "tone": zod.enum(['professional', 'casual']).optional()
+})
+
+export const DraftCopilotEmailResponse = zod.object({
+  "draft": zod.string(),
+  "editable": zod.boolean(),
+  "sent": zod.boolean()
+})
+
+
+export const ListChurnPredictionsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListChurnPredictionsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid(),
+  "version": zod.number().int(),
+  "riskScore": zod.string(),
+  "riskLevel": zod.enum(['low', 'medium', 'high', 'critical']),
+  "riskFactors": zod.array(zod.object({
+  "factor": zod.string(),
+  "weight": zod.number(),
+  "detail": zod.string()
+})),
+  "daysUntilChurn": zod.number().int().nullish(),
+  "recommendedAction": zod.string(),
+  "alertedAt": zod.coerce.date().nullish(),
+  "resolvedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListChurnPredictionsResponse = zod.array(ListChurnPredictionsResponseItem)
+
+
+export const GetChurnPredictionParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const GetChurnPredictionResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid(),
+  "version": zod.number().int(),
+  "riskScore": zod.string(),
+  "riskLevel": zod.enum(['low', 'medium', 'high', 'critical']),
+  "riskFactors": zod.array(zod.object({
+  "factor": zod.string(),
+  "weight": zod.number(),
+  "detail": zod.string()
+})),
+  "daysUntilChurn": zod.number().int().nullish(),
+  "recommendedAction": zod.string(),
+  "alertedAt": zod.coerce.date().nullish(),
+  "resolvedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const RecomputeChurnPredictionParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "accountId": zod.coerce.string()
+})
+
+export const RecomputeChurnPredictionResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "accountId": zod.string().uuid(),
+  "version": zod.number().int(),
+  "riskScore": zod.string(),
+  "riskLevel": zod.enum(['low', 'medium', 'high', 'critical']),
+  "riskFactors": zod.array(zod.object({
+  "factor": zod.string(),
+  "weight": zod.number(),
+  "detail": zod.string()
+})),
+  "daysUntilChurn": zod.number().int().nullish(),
+  "recommendedAction": zod.string(),
+  "alertedAt": zod.coerce.date().nullish(),
+  "resolvedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const GetConversionPredictionParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "leadId": zod.coerce.string().uuid()
+})
+
+export const GetConversionPredictionResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "leadId": zod.string().uuid(),
+  "conversionProbability": zod.string(),
+  "predictedCloseDate": zod.coerce.date().nullish(),
+  "factors": zod.array(zod.object({
+  "factor": zod.string(),
+  "weight": zod.number(),
+  "detail": zod.string()
+})),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const RecomputeConversionPredictionParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "leadId": zod.coerce.string().uuid()
+})
+
+export const RecomputeConversionPredictionResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "leadId": zod.string().uuid(),
+  "conversionProbability": zod.string(),
+  "predictedCloseDate": zod.coerce.date().nullish(),
+  "factors": zod.array(zod.object({
+  "factor": zod.string(),
+  "weight": zod.number(),
+  "detail": zod.string()
+})),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const GetClosePredictionParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "opportunityId": zod.coerce.string().uuid()
+})
+
+export const GetClosePredictionResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "opportunityId": zod.string().uuid(),
+  "predictedProbability": zod.string(),
+  "baselineByStage": zod.string(),
+  "adjustmentFactors": zod.array(zod.object({
+  "factor": zod.string(),
+  "weight": zod.number(),
+  "detail": zod.string()
+})),
+  "expectedCloseDate": zod.coerce.date().nullish(),
+  "confidence": zod.string(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const RecomputeClosePredictionParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "opportunityId": zod.coerce.string().uuid()
+})
+
+export const RecomputeClosePredictionResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "opportunityId": zod.string().uuid(),
+  "predictedProbability": zod.string(),
+  "baselineByStage": zod.string(),
+  "adjustmentFactors": zod.array(zod.object({
+  "factor": zod.string(),
+  "weight": zod.number(),
+  "detail": zod.string()
+})),
+  "expectedCloseDate": zod.coerce.date().nullish(),
+  "confidence": zod.string(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const ListTasksParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListTasksResponseItem = zod.object({
+  "accountId": zod.string().uuid().nullish(),
+  "opportunityId": zod.string().uuid().nullish(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "type": zod.string().nullish(),
+  "status": zod.enum(['open', 'in_progress', 'completed', 'cancelled']).optional(),
+  "priority": zod.enum(['low', 'medium', 'high']).optional(),
+  "assignedToUserId": zod.string().uuid().nullish(),
+  "dueDate": zod.coerce.date().nullish(),
+  "dueTime": zod.string().nullish()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+export const ListTasksResponse = zod.array(ListTasksResponseItem)
+
+
+export const CreateTaskParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const CreateTaskBody = zod.object({
+  "accountId": zod.string().uuid().nullish(),
+  "opportunityId": zod.string().uuid().nullish(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "type": zod.string().nullish(),
+  "status": zod.enum(['open', 'in_progress', 'completed', 'cancelled']).optional(),
+  "priority": zod.enum(['low', 'medium', 'high']).optional(),
+  "assignedToUserId": zod.string().uuid().nullish(),
+  "dueDate": zod.coerce.date().nullish(),
+  "dueTime": zod.string().nullish()
+})
+
+export const CreateTaskResponse = zod.object({
+  "accountId": zod.string().uuid().nullish(),
+  "opportunityId": zod.string().uuid().nullish(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "type": zod.string().nullish(),
+  "status": zod.enum(['open', 'in_progress', 'completed', 'cancelled']).optional(),
+  "priority": zod.enum(['low', 'medium', 'high']).optional(),
+  "assignedToUserId": zod.string().uuid().nullish(),
+  "dueDate": zod.coerce.date().nullish(),
+  "dueTime": zod.string().nullish()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+
+
+export const UpdateTaskParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "taskId": zod.coerce.string().uuid()
+})
+
+export const UpdateTaskBody = zod.object({
+  "accountId": zod.string().uuid().nullish(),
+  "opportunityId": zod.string().uuid().nullish(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "type": zod.string().nullish(),
+  "status": zod.enum(['open', 'in_progress', 'completed', 'cancelled']).optional(),
+  "priority": zod.enum(['low', 'medium', 'high']).optional(),
+  "assignedToUserId": zod.string().uuid().nullish(),
+  "dueDate": zod.coerce.date().nullish(),
+  "dueTime": zod.string().nullish()
+})
+
+export const UpdateTaskResponse = zod.object({
+  "accountId": zod.string().uuid().nullish(),
+  "opportunityId": zod.string().uuid().nullish(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "type": zod.string().nullish(),
+  "status": zod.enum(['open', 'in_progress', 'completed', 'cancelled']).optional(),
+  "priority": zod.enum(['low', 'medium', 'high']).optional(),
+  "assignedToUserId": zod.string().uuid().nullish(),
+  "dueDate": zod.coerce.date().nullish(),
+  "dueTime": zod.string().nullish()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+
+
+export const CompleteTaskParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "taskId": zod.coerce.string().uuid()
+})
+
+export const CompleteTaskResponse = zod.object({
+  "accountId": zod.string().uuid().nullish(),
+  "opportunityId": zod.string().uuid().nullish(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "type": zod.string().nullish(),
+  "status": zod.enum(['open', 'in_progress', 'completed', 'cancelled']).optional(),
+  "priority": zod.enum(['low', 'medium', 'high']).optional(),
+  "assignedToUserId": zod.string().uuid().nullish(),
+  "dueDate": zod.coerce.date().nullish(),
+  "dueTime": zod.string().nullish()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+
+
+export const ListAgentsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListAgentsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "name": zod.string(),
+  "type": zod.enum(['lead_qualifier', 'follow_up_sequencer', 'renewal_monitor']),
+  "systemPrompt": zod.string().nullish(),
+  "config": zod.record(zod.string(), zod.unknown()),
+  "tools": zod.array(zod.string()),
+  "active": zod.boolean(),
+  "executionFrequency": zod.enum(['realtime', 'hourly', 'daily']),
+  "createdBy": zod.string().uuid().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListAgentsResponse = zod.array(ListAgentsResponseItem)
+
+
+export const CreateAgentParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const CreateAgentBody = zod.object({
+  "name": zod.string(),
+  "type": zod.enum(['lead_qualifier', 'follow_up_sequencer', 'renewal_monitor']),
+  "systemPrompt": zod.string().nullish(),
+  "config": zod.record(zod.string(), zod.unknown()).optional(),
+  "active": zod.boolean().optional(),
+  "executionFrequency": zod.enum(['realtime', 'hourly', 'daily']).optional()
+})
+
+export const CreateAgentResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "name": zod.string(),
+  "type": zod.enum(['lead_qualifier', 'follow_up_sequencer', 'renewal_monitor']),
+  "systemPrompt": zod.string().nullish(),
+  "config": zod.record(zod.string(), zod.unknown()),
+  "tools": zod.array(zod.string()),
+  "active": zod.boolean(),
+  "executionFrequency": zod.enum(['realtime', 'hourly', 'daily']),
+  "createdBy": zod.string().uuid().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const UpdateAgentParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "agentId": zod.coerce.string().uuid()
+})
+
+export const UpdateAgentBody = zod.object({
+  "name": zod.string(),
+  "type": zod.enum(['lead_qualifier', 'follow_up_sequencer', 'renewal_monitor']),
+  "systemPrompt": zod.string().nullish(),
+  "config": zod.record(zod.string(), zod.unknown()).optional(),
+  "active": zod.boolean().optional(),
+  "executionFrequency": zod.enum(['realtime', 'hourly', 'daily']).optional()
+})
+
+export const UpdateAgentResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "name": zod.string(),
+  "type": zod.enum(['lead_qualifier', 'follow_up_sequencer', 'renewal_monitor']),
+  "systemPrompt": zod.string().nullish(),
+  "config": zod.record(zod.string(), zod.unknown()),
+  "tools": zod.array(zod.string()),
+  "active": zod.boolean(),
+  "executionFrequency": zod.enum(['realtime', 'hourly', 'daily']),
+  "createdBy": zod.string().uuid().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const DeactivateAgentParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "agentId": zod.coerce.string().uuid()
+})
+
+export const DeactivateAgentResponse = zod.void()
+
+
+export const RunAgentParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "agentId": zod.coerce.string().uuid()
+})
+
+export const RunAgentBody = zod.object({
+  "entityType": zod.enum(['lead', 'account', 'opportunity']),
+  "entityId": zod.string().uuid()
+})
+
+export const RunAgentResponse = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "agentId": zod.string().uuid(),
+  "idempotencyKey": zod.string(),
+  "entityType": zod.string().nullish(),
+  "entityId": zod.string().uuid().nullish(),
+  "input": zod.record(zod.string(), zod.unknown()),
+  "decisionRationale": zod.string().nullish(),
+  "actions": zod.array(zod.object({
+  "action": zod.string(),
+  "status": zod.string().optional(),
+  "score": zod.number().optional(),
+  "taskId": zod.string().uuid().nullish(),
+  "opportunityId": zod.string().uuid().nullish(),
+  "recommendationId": zod.string().uuid().nullish(),
+  "sent": zod.boolean().optional()
+})),
+  "output": zod.string().nullish(),
+  "status": zod.enum(['running', 'success', 'partial', 'failed']),
+  "tokensUsed": zod.number().int(),
+  "executedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullish()
+})
+
+
+export const ListAgentExecutionsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListAgentExecutionsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "agentId": zod.string().uuid(),
+  "idempotencyKey": zod.string(),
+  "entityType": zod.string().nullish(),
+  "entityId": zod.string().uuid().nullish(),
+  "input": zod.record(zod.string(), zod.unknown()),
+  "decisionRationale": zod.string().nullish(),
+  "actions": zod.array(zod.object({
+  "action": zod.string(),
+  "status": zod.string().optional(),
+  "score": zod.number().optional(),
+  "taskId": zod.string().uuid().nullish(),
+  "opportunityId": zod.string().uuid().nullish(),
+  "recommendationId": zod.string().uuid().nullish(),
+  "sent": zod.boolean().optional()
+})),
+  "output": zod.string().nullish(),
+  "status": zod.enum(['running', 'success', 'partial', 'failed']),
+  "tokensUsed": zod.number().int(),
+  "executedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullish()
+})
+export const ListAgentExecutionsResponse = zod.array(ListAgentExecutionsResponseItem)
+
+
+export const ProcessTextCommandParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ProcessTextCommandBody = zod.object({
+  "transcript": zod.string()
+})
+
+export const ProcessTextCommandResponse = zod.object({
+  "commandId": zod.string().uuid(),
+  "requiresConfirmation": zod.boolean(),
+  "interpretation": zod.object({
+  "commands": zod.array(zod.object({
+  "action": zod.enum(['query_largest_open_deal', 'schedule_call_task']),
+  "date": zod.coerce.date().optional(),
+  "time": zod.string().optional()
+}))
+})
+})
+
+
+export const ConfirmTextCommandParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "commandId": zod.coerce.string().uuid()
+})
+
+export const ConfirmTextCommandResponse = zod.object({
+  "commandId": zod.string().uuid(),
+  "confirmationRequired": zod.boolean(),
+  "result": zod.object({
+  "largestOpenDeal": zod.union([zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "value": zod.string().nullable(),
+  "stage": zod.string()
+}),zod.null()]),
+  "scheduledTask": zod.object({
+  "accountId": zod.string().uuid().nullish(),
+  "opportunityId": zod.string().uuid().nullish(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "type": zod.string().nullish(),
+  "status": zod.enum(['open', 'in_progress', 'completed', 'cancelled']).optional(),
+  "priority": zod.enum(['low', 'medium', 'high']).optional(),
+  "assignedToUserId": zod.string().uuid().nullish(),
+  "dueDate": zod.coerce.date().nullish(),
+  "dueTime": zod.string().nullish()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})).optional()
+})
+})
+
+
+export const ListCommandHistoryParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListCommandHistoryResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "orgId": zod.string().uuid(),
+  "userId": zod.string().uuid(),
+  "transcript": zod.string(),
+  "interpretation": zod.union([zod.object({
+  "commands": zod.array(zod.object({
+  "action": zod.enum(['query_largest_open_deal', 'schedule_call_task']),
+  "date": zod.coerce.date().optional(),
+  "time": zod.string().optional()
+}))
+}),zod.null()]).optional(),
+  "action": zod.string().nullish(),
+  "status": zod.enum(['processing', 'awaiting_confirmation', 'executing', 'completed', 'failed']),
+  "confirmationRequired": zod.boolean(),
+  "result": zod.union([zod.object({
+  "largestOpenDeal": zod.union([zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "value": zod.string().nullable(),
+  "stage": zod.string()
+}),zod.null()]),
+  "scheduledTask": zod.object({
+  "accountId": zod.string().uuid().nullish(),
+  "opportunityId": zod.string().uuid().nullish(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "type": zod.string().nullish(),
+  "status": zod.enum(['open', 'in_progress', 'completed', 'cancelled']).optional(),
+  "priority": zod.enum(['low', 'medium', 'high']).optional(),
+  "assignedToUserId": zod.string().uuid().nullish(),
+  "dueDate": zod.coerce.date().nullish(),
+  "dueTime": zod.string().nullish()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})).optional()
+}),zod.null()]).optional(),
+  "errorMessage": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullish()
+})
+export const ListCommandHistoryResponse = zod.array(ListCommandHistoryResponseItem)
 
 

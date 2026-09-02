@@ -67,26 +67,21 @@ import {
   type QuoteLineItem,
 } from "../services/quotePdf";
 import { sendEmail } from "../lib/email";
+import { processNewLead } from "../services/agents";
+import { publishAutomationEvent } from "../services/workflow";
+import { isOrgMemberId, isOrgTerritoryId } from "../services/orgValidation";
 
 const router: IRouter = Router();
 const gate = [attachUser, attachOrg, requireFeature("sales")] as const;
 
 /** True when the user is a member of the org (tenant-isolation guard). */
 async function isOrgMember(orgId: string, userId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ userId: orgUsers.userId })
-    .from(orgUsers)
-    .where(and(eq(orgUsers.orgId, orgId), eq(orgUsers.userId, userId)));
-  return Boolean(row);
+  return isOrgMemberId(orgId, userId);
 }
 
 /** True when the territory belongs to the org. */
 async function isOrgTerritory(orgId: string, territoryId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: territories.id })
-    .from(territories)
-    .where(and(eq(territories.id, territoryId), eq(territories.orgId, orgId)));
-  return Boolean(row);
+  return isOrgTerritoryId(orgId, territoryId);
 }
 
 /* ------------------------------ pipelines ------------------------------ */
@@ -353,6 +348,15 @@ router.post("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<voi
     toStage: stageKey,
     changedByUserId: req.currentUser!.id,
   });
+  await publishAutomationEvent({
+    orgId,
+    eventKey: `opportunity-created:${row.id}`,
+    eventType: "record_created",
+    entityType: "opportunity",
+    entityId: row.id,
+    payload: { stage: row.stage },
+    actorUserId: req.currentUser!.id,
+  });
   res.status(201).json(CreateOpportunityResponse.parse(await opportunityDetail(row)));
 });
 
@@ -433,6 +437,15 @@ router.patch(
         fromStage: opp.stage,
         toStage: data.stage!,
         changedByUserId: req.currentUser!.id,
+      });
+      await publishAutomationEvent({
+        orgId,
+        eventKey: `opportunity-stage:${opp.id}:${row.stage}:${row.updatedAt.toISOString()}`,
+        eventType: "field_change",
+        entityType: "opportunity",
+        entityId: opp.id,
+        payload: { field: "stage", oldValue: opp.stage, newValue: row.stage },
+        actorUserId: req.currentUser!.id,
       });
     }
     res.json(UpdateOpportunityResponse.parse(await opportunityDetail(row)));
@@ -585,12 +598,38 @@ router.post("/orgs/:orgId/leads", ...gate, async (req, res): Promise<void> => {
     return;
   }
   const orgId = req.currentOrg!.id;
+  if (
+    parsed.data.assignedToUserId &&
+    !(await isOrgMember(orgId, parsed.data.assignedToUserId))
+  ) {
+    res.status(400).json({ error: "assignedToUserId must reference a member of this organization" });
+    return;
+  }
+  if (
+    parsed.data.territoryId &&
+    !(await isOrgTerritory(orgId, parsed.data.territoryId))
+  ) {
+    res.status(400).json({ error: "territoryId must reference a territory in this organization" });
+    return;
+  }
   const [inserted] = await db
     .insert(leads)
     .values({ ...parsed.data, orgId })
     .returning();
   // Auto-score + auto-route to the matching territory owner.
   const row = await scoreAndRouteLead(orgId, inserted, { reassign: true });
+  await publishAutomationEvent({
+    orgId,
+    eventKey: `lead-created:${row.id}`,
+    eventType: "record_created",
+    entityType: "lead",
+    entityId: row.id,
+    payload: { status: row.status, score: row.score },
+    actorUserId: req.currentUser!.id,
+  });
+  void processNewLead(orgId, row.id, req.currentUser!.id).catch((err) => {
+    req.log.error({ err, leadId: row.id }, "Lead qualifier agent failed");
+  });
   res.status(201).json(CreateLeadResponse.parse(await leadOut(row)));
 });
 
@@ -756,6 +795,24 @@ router.post(
       .update(leads)
       .set({ status: "qualified", convertedOpportunityId: opp.id })
       .where(eq(leads.id, lead.id));
+    await publishAutomationEvent({
+      orgId,
+      eventKey: `lead-qualified:${lead.id}:${opp.id}`,
+      eventType: "field_change",
+      entityType: "lead",
+      entityId: lead.id,
+      payload: { field: "status", oldValue: lead.status, newValue: "qualified" },
+      actorUserId: req.currentUser!.id,
+    });
+    await publishAutomationEvent({
+      orgId,
+      eventKey: `opportunity-created:${opp.id}`,
+      eventType: "record_created",
+      entityType: "opportunity",
+      entityId: opp.id,
+      payload: { stage: opp.stage },
+      actorUserId: req.currentUser!.id,
+    });
     res.status(201).json(QualifyLeadResponse.parse(await opportunityDetail(opp)));
   },
 );

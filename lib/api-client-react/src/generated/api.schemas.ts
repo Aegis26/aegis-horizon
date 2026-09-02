@@ -5,6 +5,582 @@
  * Multi-tenant CRM SaaS API (Phase 1 foundation)
  * OpenAPI spec version: 0.1.0
  */
+export type WorkflowInputTriggerType = typeof WorkflowInputTriggerType[keyof typeof WorkflowInputTriggerType];
+
+
+export const WorkflowInputTriggerType = {
+  record_created: 'record_created',
+  field_change: 'field_change',
+  time_based: 'time_based',
+} as const;
+
+export type WorkflowInputTriggerEntityType = typeof WorkflowInputTriggerEntityType[keyof typeof WorkflowInputTriggerEntityType];
+
+
+export const WorkflowInputTriggerEntityType = {
+  lead: 'lead',
+  opportunity: 'opportunity',
+  account: 'account',
+} as const;
+
+export type WorkflowInputTriggerSchedule = typeof WorkflowInputTriggerSchedule[keyof typeof WorkflowInputTriggerSchedule];
+
+
+export const WorkflowInputTriggerSchedule = {
+  hourly: 'hourly',
+  daily: 'daily',
+} as const;
+
+export type WorkflowInputTrigger = {
+  type: WorkflowInputTriggerType;
+  entityType: WorkflowInputTriggerEntityType;
+  field?: string;
+  schedule?: WorkflowInputTriggerSchedule;
+};
+
+export type WorkflowInputConditionsItemOperator = typeof WorkflowInputConditionsItemOperator[keyof typeof WorkflowInputConditionsItemOperator];
+
+
+export const WorkflowInputConditionsItemOperator = {
+  equals: 'equals',
+  not_equals: 'not_equals',
+  gt: 'gt',
+  gte: 'gte',
+  lt: 'lt',
+  lte: 'lte',
+  contains: 'contains',
+} as const;
+
+export type WorkflowInputConditionsItem = {
+  field: string;
+  operator: WorkflowInputConditionsItemOperator;
+  value: unknown;
+};
+
+export type WorkflowInputActionsItemType = typeof WorkflowInputActionsItemType[keyof typeof WorkflowInputActionsItemType];
+
+
+export const WorkflowInputActionsItemType = {
+  create_task: 'create_task',
+  create_recommendation: 'create_recommendation',
+  create_opportunity: 'create_opportunity',
+  update_field: 'update_field',
+} as const;
+
+export type WorkflowInputActionsItemConfig = { [key: string]: unknown };
+
+export type WorkflowInputActionsItem = {
+  type: WorkflowInputActionsItemType;
+  config: WorkflowInputActionsItemConfig;
+};
+
+export interface WorkflowInput {
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  trigger: WorkflowInputTrigger;
+  conditions?: WorkflowInputConditionsItem[];
+  /** @minItems 1 */
+  actions: WorkflowInputActionsItem[];
+}
+
+export type Workflow = WorkflowInput & ({
+  id: string;
+  active: boolean;
+  version: number;
+  /** @nullable */
+  lastDryRunVersion?: number | null;
+  createdAt: string;
+});
+
+export interface AiBudgetStatus {
+  consentEnabled: boolean;
+  budget: number;
+  used: number;
+  remaining: number;
+}
+
+export type CopilotSummarySentiment = typeof CopilotSummarySentiment[keyof typeof CopilotSummarySentiment];
+
+
+export const CopilotSummarySentiment = {
+  positive: 'positive',
+  neutral: 'neutral',
+  negative: 'negative',
+} as const;
+
+export interface CopilotSummary {
+  /** Exactly two concise sentences */
+  summaryShort: string;
+  /** @nullable */
+  summaryLong?: string | null;
+  nextBestAction: string;
+  topics: string[];
+  sentiment: CopilotSummarySentiment;
+  cached: boolean;
+  generatedAt: string;
+}
+
+export type TaskInputStatus = typeof TaskInputStatus[keyof typeof TaskInputStatus];
+
+
+export const TaskInputStatus = {
+  open: 'open',
+  in_progress: 'in_progress',
+  completed: 'completed',
+  cancelled: 'cancelled',
+} as const;
+
+export type TaskInputPriority = typeof TaskInputPriority[keyof typeof TaskInputPriority];
+
+
+export const TaskInputPriority = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export interface TaskInput {
+  /** @nullable */
+  accountId?: string | null;
+  /** @nullable */
+  opportunityId?: string | null;
+  title: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  type?: string | null;
+  status?: TaskInputStatus;
+  priority?: TaskInputPriority;
+  /** @nullable */
+  assignedToUserId?: string | null;
+  /** @nullable */
+  dueDate?: string | null;
+  /** @nullable */
+  dueTime?: string | null;
+}
+
+export type Task = TaskInput & ({
+  id: string;
+  /** @nullable */
+  completedAt?: string | null;
+  createdAt: string;
+});
+
+export type AgentInputType = typeof AgentInputType[keyof typeof AgentInputType];
+
+
+export const AgentInputType = {
+  lead_qualifier: 'lead_qualifier',
+  follow_up_sequencer: 'follow_up_sequencer',
+  renewal_monitor: 'renewal_monitor',
+} as const;
+
+export type AgentInputConfig = { [key: string]: unknown };
+
+export type AgentInputExecutionFrequency = typeof AgentInputExecutionFrequency[keyof typeof AgentInputExecutionFrequency];
+
+
+export const AgentInputExecutionFrequency = {
+  realtime: 'realtime',
+  hourly: 'hourly',
+  daily: 'daily',
+} as const;
+
+export interface AgentInput {
+  name: string;
+  type: AgentInputType;
+  /** @nullable */
+  systemPrompt?: string | null;
+  config?: AgentInputConfig;
+  active?: boolean;
+  executionFrequency?: AgentInputExecutionFrequency;
+}
+
+export interface PredictionFactor {
+  factor: string;
+  weight: number;
+  detail: string;
+}
+
+export type ChurnPredictionRiskLevel = typeof ChurnPredictionRiskLevel[keyof typeof ChurnPredictionRiskLevel];
+
+
+export const ChurnPredictionRiskLevel = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  critical: 'critical',
+} as const;
+
+export interface ChurnPrediction {
+  id: string;
+  orgId: string;
+  accountId: string;
+  version: number;
+  riskScore: string;
+  riskLevel: ChurnPredictionRiskLevel;
+  riskFactors: PredictionFactor[];
+  /** @nullable */
+  daysUntilChurn?: number | null;
+  recommendedAction: string;
+  /** @nullable */
+  alertedAt?: string | null;
+  /** @nullable */
+  resolvedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversionPrediction {
+  id: string;
+  orgId: string;
+  leadId: string;
+  conversionProbability: string;
+  /** @nullable */
+  predictedCloseDate?: string | null;
+  factors: PredictionFactor[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClosePrediction {
+  id: string;
+  orgId: string;
+  opportunityId: string;
+  predictedProbability: string;
+  baselineByStage: string;
+  adjustmentFactors: PredictionFactor[];
+  /** @nullable */
+  expectedCloseDate?: string | null;
+  confidence: string;
+  updatedAt: string;
+}
+
+export interface NextActionRecommendation {
+  action: string;
+  rationale: string;
+  confidence: number;
+}
+
+export type WorkflowActionResultType = typeof WorkflowActionResultType[keyof typeof WorkflowActionResultType];
+
+
+export const WorkflowActionResultType = {
+  create_task: 'create_task',
+  create_recommendation: 'create_recommendation',
+  create_opportunity: 'create_opportunity',
+  update_field: 'update_field',
+} as const;
+
+export type WorkflowActionResultStatus = typeof WorkflowActionResultStatus[keyof typeof WorkflowActionResultStatus];
+
+
+export const WorkflowActionResultStatus = {
+  planned: 'planned',
+  skipped: 'skipped',
+  success: 'success',
+  failed: 'failed',
+} as const;
+
+export type WorkflowActionResultResult = { [key: string]: unknown };
+
+export type WorkflowActionResultConfig = { [key: string]: unknown };
+
+export interface WorkflowActionResult {
+  type: WorkflowActionResultType;
+  status: WorkflowActionResultStatus;
+  result?: WorkflowActionResultResult;
+  config?: WorkflowActionResultConfig;
+}
+
+/**
+ * @nullable
+ */
+export type WorkflowExecutionEntityType = typeof WorkflowExecutionEntityType[keyof typeof WorkflowExecutionEntityType] | null;
+
+
+export const WorkflowExecutionEntityType = {
+  lead: 'lead',
+  opportunity: 'opportunity',
+  account: 'account',
+} as const;
+
+export type WorkflowExecutionTriggerData = { [key: string]: unknown };
+
+export type WorkflowExecutionStatus = typeof WorkflowExecutionStatus[keyof typeof WorkflowExecutionStatus];
+
+
+export const WorkflowExecutionStatus = {
+  pending: 'pending',
+  running: 'running',
+  success: 'success',
+  failed: 'failed',
+} as const;
+
+export interface WorkflowExecution {
+  id: string;
+  orgId: string;
+  workflowId: string;
+  idempotencyKey: string;
+  /** @nullable */
+  entityType?: WorkflowExecutionEntityType;
+  /** @nullable */
+  entityId?: string | null;
+  triggerData: WorkflowExecutionTriggerData;
+  actionResults: WorkflowActionResult[];
+  status: WorkflowExecutionStatus;
+  /** @nullable */
+  errorMessage?: string | null;
+  /** @nullable */
+  claimedAt?: string | null;
+  /** @nullable */
+  executedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  createdAt: string;
+}
+
+export interface WorkflowDryRun {
+  dryRun: boolean;
+  sideEffects: number;
+  conditionsMatched: boolean;
+  plannedActions: WorkflowActionResult[];
+}
+
+export type AiAgentType = typeof AiAgentType[keyof typeof AiAgentType];
+
+
+export const AiAgentType = {
+  lead_qualifier: 'lead_qualifier',
+  follow_up_sequencer: 'follow_up_sequencer',
+  renewal_monitor: 'renewal_monitor',
+} as const;
+
+export type AiAgentConfig = { [key: string]: unknown };
+
+export type AiAgentExecutionFrequency = typeof AiAgentExecutionFrequency[keyof typeof AiAgentExecutionFrequency];
+
+
+export const AiAgentExecutionFrequency = {
+  realtime: 'realtime',
+  hourly: 'hourly',
+  daily: 'daily',
+} as const;
+
+export interface AiAgent {
+  id: string;
+  orgId: string;
+  name: string;
+  type: AiAgentType;
+  /** @nullable */
+  systemPrompt?: string | null;
+  config: AiAgentConfig;
+  tools: string[];
+  active: boolean;
+  executionFrequency: AiAgentExecutionFrequency;
+  /** @nullable */
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentExecutionAction {
+  action: string;
+  status?: string;
+  score?: number;
+  /** @nullable */
+  taskId?: string | null;
+  /** @nullable */
+  opportunityId?: string | null;
+  /** @nullable */
+  recommendationId?: string | null;
+  sent?: boolean;
+}
+
+export type AgentExecutionInput = { [key: string]: unknown };
+
+export type AgentExecutionStatus = typeof AgentExecutionStatus[keyof typeof AgentExecutionStatus];
+
+
+export const AgentExecutionStatus = {
+  running: 'running',
+  success: 'success',
+  partial: 'partial',
+  failed: 'failed',
+} as const;
+
+export interface AgentExecution {
+  id: string;
+  orgId: string;
+  agentId: string;
+  idempotencyKey: string;
+  /** @nullable */
+  entityType?: string | null;
+  /** @nullable */
+  entityId?: string | null;
+  input: AgentExecutionInput;
+  /** @nullable */
+  decisionRationale?: string | null;
+  actions: AgentExecutionAction[];
+  /** @nullable */
+  output?: string | null;
+  status: AgentExecutionStatus;
+  tokensUsed: number;
+  executedAt: string;
+  /** @nullable */
+  completedAt?: string | null;
+}
+
+export type ParsedCommandActionAction = typeof ParsedCommandActionAction[keyof typeof ParsedCommandActionAction];
+
+
+export const ParsedCommandActionAction = {
+  query_largest_open_deal: 'query_largest_open_deal',
+  schedule_call_task: 'schedule_call_task',
+} as const;
+
+export interface ParsedCommandAction {
+  action: ParsedCommandActionAction;
+  date?: string;
+  time?: string;
+}
+
+export interface CommandInterpretation {
+  commands: ParsedCommandAction[];
+}
+
+export interface CommandDeal {
+  id: string;
+  name: string;
+  /** @nullable */
+  value: string | null;
+  stage: string;
+}
+
+export interface CommandResult {
+  largestOpenDeal: CommandDeal | null;
+  scheduledTask?: Task;
+}
+
+export interface CommandPendingResponse {
+  commandId: string;
+  requiresConfirmation: boolean;
+  interpretation: CommandInterpretation;
+}
+
+export interface CommandResultResponse {
+  commandId: string;
+  confirmationRequired: boolean;
+  result: CommandResult;
+}
+
+export type CommandHistoryEntryStatus = typeof CommandHistoryEntryStatus[keyof typeof CommandHistoryEntryStatus];
+
+
+export const CommandHistoryEntryStatus = {
+  processing: 'processing',
+  awaiting_confirmation: 'awaiting_confirmation',
+  executing: 'executing',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export interface CommandHistoryEntry {
+  id: string;
+  orgId: string;
+  userId: string;
+  transcript: string;
+  interpretation?: CommandInterpretation | null;
+  /** @nullable */
+  action?: string | null;
+  status: CommandHistoryEntryStatus;
+  confirmationRequired: boolean;
+  result?: CommandResult | null;
+  /** @nullable */
+  errorMessage?: string | null;
+  createdAt: string;
+  /** @nullable */
+  completedAt?: string | null;
+}
+
+export type EntityRunRequestEntityType = typeof EntityRunRequestEntityType[keyof typeof EntityRunRequestEntityType];
+
+
+export const EntityRunRequestEntityType = {
+  lead: 'lead',
+  opportunity: 'opportunity',
+  account: 'account',
+} as const;
+
+export interface EntityRunRequest {
+  entityType: EntityRunRequestEntityType;
+  entityId: string;
+}
+
+export interface ToggleRequest {
+  active: boolean;
+}
+
+export type CopilotSummarizeRequestEntityType = typeof CopilotSummarizeRequestEntityType[keyof typeof CopilotSummarizeRequestEntityType];
+
+
+export const CopilotSummarizeRequestEntityType = {
+  account: 'account',
+  opportunity: 'opportunity',
+  email_thread: 'email_thread',
+} as const;
+
+export type CopilotSummarizeRequestStyle = typeof CopilotSummarizeRequestStyle[keyof typeof CopilotSummarizeRequestStyle];
+
+
+export const CopilotSummarizeRequestStyle = {
+  short: 'short',
+  long: 'long',
+} as const;
+
+export interface CopilotSummarizeRequest {
+  entityType: CopilotSummarizeRequestEntityType;
+  entityId: string;
+  style?: CopilotSummarizeRequestStyle;
+}
+
+export interface AccountIdRequest {
+  accountId: string;
+}
+
+export type EmailDraftRequestTone = typeof EmailDraftRequestTone[keyof typeof EmailDraftRequestTone];
+
+
+export const EmailDraftRequestTone = {
+  professional: 'professional',
+  casual: 'casual',
+} as const;
+
+export interface EmailDraftRequest {
+  accountId: string;
+  context: string;
+  tone?: EmailDraftRequestTone;
+}
+
+export type AgentRunRequestEntityType = typeof AgentRunRequestEntityType[keyof typeof AgentRunRequestEntityType];
+
+
+export const AgentRunRequestEntityType = {
+  lead: 'lead',
+  account: 'account',
+  opportunity: 'opportunity',
+} as const;
+
+export interface AgentRunRequest {
+  entityType: AgentRunRequestEntityType;
+  entityId: string;
+}
+
+export interface CommandRequest {
+  transcript: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -250,12 +826,6 @@ export interface Opportunity {
   expectedCloseDate?: string | null;
   /** @nullable */
   forecastCategory?: string | null;
-  /** @nullable */
-  createdAt?: string | null;
-}
-
-export interface WorkflowStub {
-  id: string;
   /** @nullable */
   createdAt?: string | null;
 }
@@ -1014,6 +1584,10 @@ export interface LeadCreate {
   productInterest?: string | null;
   /** @nullable */
   source?: string | null;
+  /** @nullable */
+  assignedToUserId?: string | null;
+  /** @nullable */
+  territoryId?: string | null;
 }
 
 export type LeadUpdateStatus = typeof LeadUpdateStatus[keyof typeof LeadUpdateStatus];
@@ -1320,5 +1894,11 @@ export type GetForecastParams = {
  */
 months?: number;
 ownerUserId?: string;
+};
+
+export type DraftCopilotEmail200 = {
+  draft: string;
+  editable: boolean;
+  sent: boolean;
 };
 

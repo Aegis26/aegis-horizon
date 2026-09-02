@@ -1541,8 +1541,8 @@ paths:
   /orgs/{orgId}/workflows:
     get:
       operationId: listWorkflows
-      tags: [crm]
-      summary: List automation workflows (requires 'automation' feature; 403 otherwise)
+      tags: [automation]
+      summary: List automation workflows
       parameters:
         - $ref: "#/components/parameters/OrgId"
       responses:
@@ -1553,13 +1553,253 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/WorkflowStub"
-        "403":
-          description: Feature not enabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/FeatureGateError"
+                  $ref: "#/components/schemas/Workflow"
+    post:
+      operationId: createWorkflow
+      tags: [automation]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/WorkflowInput" } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Workflow" } } } }
+  /orgs/{orgId}/workflows/{workflowId}:
+    patch:
+      operationId: updateWorkflow
+      tags: [automation]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: workflowId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/WorkflowInput" } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/Workflow" } } } }
+    delete:
+      operationId: deactivateWorkflow
+      tags: [automation]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: workflowId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Deactivated } }
+  /orgs/{orgId}/workflows/{workflowId}/test:
+    post:
+      operationId: testWorkflow
+      tags: [automation]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: workflowId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/EntityRunRequest" } } }
+      responses:
+        "200": { description: Side-effect-free plan, content: { application/json: { schema: { $ref: "#/components/schemas/WorkflowDryRun" } } } }
+  /orgs/{orgId}/workflows/{workflowId}/toggle:
+    post:
+      operationId: toggleWorkflow
+      tags: [automation]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: workflowId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ToggleRequest" } } }
+      responses:
+        "200": { description: Toggled, content: { application/json: { schema: { $ref: "#/components/schemas/Workflow" } } } }
+        "409": { description: Latest version has not passed dry-run }
+  /orgs/{orgId}/workflow-executions:
+    get:
+      operationId: listWorkflowExecutions
+      tags: [automation]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      responses:
+        "200": { description: Audit log, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/WorkflowExecution" } } } } }
+  /orgs/{orgId}/ai/copilot/budget:
+    get:
+      operationId: getAiBudgetStatus
+      tags: [ai]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      responses:
+        "200": { description: Monthly token budget, content: { application/json: { schema: { $ref: "#/components/schemas/AiBudgetStatus" } } } }
+  /orgs/{orgId}/ai/copilot/summarize:
+    post:
+      operationId: summarizeWithCopilot
+      tags: [ai]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CopilotSummarizeRequest" } } }
+      responses:
+        "200": { description: Summary, content: { application/json: { schema: { $ref: "#/components/schemas/CopilotSummary" } } } }
+        "403": { description: AI consent disabled }
+        "429": { description: Token budget exhausted }
+  /orgs/{orgId}/ai/copilot/next-action:
+    post:
+      operationId: getCopilotNextAction
+      tags: [ai]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AccountIdRequest" } } } }
+      responses:
+        "200": { description: Recommendation, content: { application/json: { schema: { $ref: "#/components/schemas/NextActionRecommendation" } } } }
+  /orgs/{orgId}/ai/copilot/draft-email:
+    post:
+      operationId: draftCopilotEmail
+      tags: [ai]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EmailDraftRequest" } } } }
+      responses:
+        "200": { description: Editable draft only, content: { application/json: { schema: { type: object, required: [draft, editable, sent], properties: { draft: { type: string }, editable: { type: boolean }, sent: { type: boolean } } } } } }
+  /orgs/{orgId}/predictions/churn:
+    get:
+      operationId: listChurnPredictions
+      tags: [predictions]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      responses: { "200": { description: Churn predictions, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ChurnPrediction" } } } } } }
+  /orgs/{orgId}/predictions/churn/{accountId}:
+    get:
+      operationId: getChurnPrediction
+      tags: [predictions]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/AccountId"
+      responses: { "200": { description: Churn prediction, content: { application/json: { schema: { $ref: "#/components/schemas/ChurnPrediction" } } } } }
+  /orgs/{orgId}/predictions/churn/{accountId}/recompute:
+    post:
+      operationId: recomputeChurnPrediction
+      tags: [predictions]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/AccountId"
+      responses: { "200": { description: Recomputed, content: { application/json: { schema: { $ref: "#/components/schemas/ChurnPrediction" } } } } }
+  /orgs/{orgId}/predictions/conversion/{leadId}:
+    get:
+      operationId: getConversionPrediction
+      tags: [predictions]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: leadId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "200": { description: Conversion prediction, content: { application/json: { schema: { $ref: "#/components/schemas/ConversionPrediction" } } } } }
+  /orgs/{orgId}/predictions/conversion/{leadId}/recompute:
+    post:
+      operationId: recomputeConversionPrediction
+      tags: [predictions]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: leadId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "200": { description: Recomputed, content: { application/json: { schema: { $ref: "#/components/schemas/ConversionPrediction" } } } } }
+  /orgs/{orgId}/predictions/close/{opportunityId}:
+    get:
+      operationId: getClosePrediction
+      tags: [predictions]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: opportunityId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "200": { description: Close prediction, content: { application/json: { schema: { $ref: "#/components/schemas/ClosePrediction" } } } } }
+  /orgs/{orgId}/predictions/close/{opportunityId}/recompute:
+    post:
+      operationId: recomputeClosePrediction
+      tags: [predictions]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: opportunityId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "200": { description: Recomputed, content: { application/json: { schema: { $ref: "#/components/schemas/ClosePrediction" } } } } }
+  /orgs/{orgId}/tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      responses: { "200": { description: Tasks, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Task" } } } } } }
+    post:
+      operationId: createTask
+      tags: [tasks]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TaskInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } } }
+  /orgs/{orgId}/tasks/{taskId}:
+    patch:
+      operationId: updateTask
+      tags: [tasks]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TaskInput" } } } }
+      responses: { "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } } }
+  /orgs/{orgId}/tasks/{taskId}/complete:
+    post:
+      operationId: completeTask
+      tags: [tasks]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "200": { description: Completed, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } } }
+  /orgs/{orgId}/agents:
+    get:
+      operationId: listAgents
+      tags: [agents]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      responses: { "200": { description: Agents, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/AiAgent" } } } } } }
+    post:
+      operationId: createAgent
+      tags: [agents]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AgentInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/AiAgent" } } } } }
+  /orgs/{orgId}/agents/{agentId}:
+    patch:
+      operationId: updateAgent
+      tags: [agents]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: agentId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AgentInput" } } } }
+      responses: { "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/AiAgent" } } } } }
+    delete:
+      operationId: deactivateAgent
+      tags: [agents]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: agentId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Deactivated } }
+  /orgs/{orgId}/agents/{agentId}/run:
+    post:
+      operationId: runAgent
+      tags: [agents]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: agentId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AgentRunRequest" } } } }
+      responses: { "200": { description: Execution, content: { application/json: { schema: { $ref: "#/components/schemas/AgentExecution" } } } } }
+  /orgs/{orgId}/agent-executions:
+    get:
+      operationId: listAgentExecutions
+      tags: [agents]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      responses: { "200": { description: Agent audit, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/AgentExecution" } } } } } }
+  /orgs/{orgId}/commands/process:
+    post:
+      operationId: processTextCommand
+      tags: [commands]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CommandRequest" } } } }
+      responses:
+        "202": { description: Persisted interpretation; explicit confirmation required before any action, content: { application/json: { schema: { $ref: "#/components/schemas/CommandPendingResponse" } } } }
+  /orgs/{orgId}/commands/{commandId}/confirm:
+    post:
+      operationId: confirmTextCommand
+      tags: [commands]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - { name: commandId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Exact persisted command executed once, content: { application/json: { schema: { $ref: "#/components/schemas/CommandResultResponse" } } } }
+        "403": { description: Tasks feature required for schedule_call_task }
+        "409": { description: Command was already processed or cannot be confirmed }
+  /orgs/{orgId}/commands/history:
+    get:
+      operationId: listCommandHistory
+      tags: [commands]
+      parameters: [{ $ref: "#/components/parameters/OrgId" }]
+      responses: { "200": { description: Current user command history, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/CommandHistoryEntry" } } } } } }
 components:
   parameters:
     OrgId:
@@ -1623,6 +1863,333 @@ components:
       schema:
         type: string
   schemas:
+    WorkflowInput:
+      type: object
+      required: [name, trigger, actions]
+      properties:
+        name: { type: string }
+        description: { type: ["string", "null"] }
+        trigger:
+          type: object
+          required: [type, entityType]
+          properties:
+            type: { type: string, enum: [record_created, field_change, time_based] }
+            entityType: { type: string, enum: [lead, opportunity, account] }
+            field: { type: string }
+            schedule: { type: string, enum: [hourly, daily] }
+        conditions:
+          type: array
+          items:
+            type: object
+            required: [field, operator, value]
+            properties:
+              field: { type: string }
+              operator: { type: string, enum: [equals, not_equals, gt, gte, lt, lte, contains] }
+              value: {}
+        actions:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [type, config]
+            properties:
+              type: { type: string, enum: [create_task, create_recommendation, create_opportunity, update_field] }
+              config: { type: object, additionalProperties: true }
+    Workflow:
+      allOf:
+        - $ref: "#/components/schemas/WorkflowInput"
+        - type: object
+          required: [id, active, version, createdAt]
+          properties:
+            id: { type: string, format: uuid }
+            active: { type: boolean }
+            version: { type: integer }
+            lastDryRunVersion: { type: ["integer", "null"] }
+            createdAt: { type: string, format: date-time }
+    AiBudgetStatus:
+      type: object
+      required: [consentEnabled, budget, used, remaining]
+      properties:
+        consentEnabled: { type: boolean }
+        budget: { type: integer }
+        used: { type: integer }
+        remaining: { type: integer }
+    CopilotSummary:
+      type: object
+      required: [summaryShort, nextBestAction, topics, sentiment, cached, generatedAt]
+      properties:
+        summaryShort: { type: string, description: Exactly two concise sentences }
+        summaryLong: { type: ["string", "null"] }
+        nextBestAction: { type: string }
+        topics: { type: array, items: { type: string } }
+        sentiment: { type: string, enum: [positive, neutral, negative] }
+        cached: { type: boolean }
+        generatedAt: { type: string, format: date-time }
+    TaskInput:
+      type: object
+      required: [title]
+      properties:
+        accountId: { type: ["string", "null"], format: uuid }
+        opportunityId: { type: ["string", "null"], format: uuid }
+        title: { type: string }
+        description: { type: ["string", "null"] }
+        type: { type: ["string", "null"] }
+        status: { type: string, enum: [open, in_progress, completed, cancelled] }
+        priority: { type: string, enum: [low, medium, high] }
+        assignedToUserId: { type: ["string", "null"], format: uuid }
+        dueDate: { type: ["string", "null"], format: date }
+        dueTime: { type: ["string", "null"] }
+    Task:
+      allOf:
+        - $ref: "#/components/schemas/TaskInput"
+        - type: object
+          required: [id, title, createdAt]
+          properties:
+            id: { type: string, format: uuid }
+            completedAt: { type: ["string", "null"], format: date-time }
+            createdAt: { type: string, format: date-time }
+    AgentInput:
+      type: object
+      required: [name, type]
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [lead_qualifier, follow_up_sequencer, renewal_monitor] }
+        systemPrompt: { type: ["string", "null"] }
+        config: { type: object, additionalProperties: true }
+        active: { type: boolean }
+        executionFrequency: { type: string, enum: [realtime, hourly, daily] }
+    PredictionFactor:
+      type: object
+      required: [factor, weight, detail]
+      properties:
+        factor: { type: string }
+        weight: { type: number }
+        detail: { type: string }
+    ChurnPrediction:
+      type: object
+      required: [id, orgId, accountId, version, riskScore, riskLevel, riskFactors, recommendedAction, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        accountId: { type: string, format: uuid }
+        version: { type: integer }
+        riskScore: { type: string }
+        riskLevel: { type: string, enum: [low, medium, high, critical] }
+        riskFactors: { type: array, items: { $ref: "#/components/schemas/PredictionFactor" } }
+        daysUntilChurn: { type: ["integer", "null"] }
+        recommendedAction: { type: string }
+        alertedAt: { type: ["string", "null"], format: date-time }
+        resolvedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ConversionPrediction:
+      type: object
+      required: [id, orgId, leadId, conversionProbability, factors, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        leadId: { type: string, format: uuid }
+        conversionProbability: { type: string }
+        predictedCloseDate: { type: ["string", "null"], format: date }
+        factors: { type: array, items: { $ref: "#/components/schemas/PredictionFactor" } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ClosePrediction:
+      type: object
+      required: [id, orgId, opportunityId, predictedProbability, baselineByStage, adjustmentFactors, confidence, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        opportunityId: { type: string, format: uuid }
+        predictedProbability: { type: string }
+        baselineByStage: { type: string }
+        adjustmentFactors: { type: array, items: { $ref: "#/components/schemas/PredictionFactor" } }
+        expectedCloseDate: { type: ["string", "null"], format: date }
+        confidence: { type: string }
+        updatedAt: { type: string, format: date-time }
+    NextActionRecommendation:
+      type: object
+      required: [action, rationale, confidence]
+      properties:
+        action: { type: string }
+        rationale: { type: string }
+        confidence: { type: number }
+    WorkflowActionResult:
+      type: object
+      required: [type, status]
+      properties:
+        type: { type: string, enum: [create_task, create_recommendation, create_opportunity, update_field] }
+        status: { type: string, enum: [planned, skipped, success, failed] }
+        result: { type: object, additionalProperties: true }
+        config: { type: object, additionalProperties: true }
+    WorkflowExecution:
+      type: object
+      required: [id, orgId, workflowId, idempotencyKey, triggerData, actionResults, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        workflowId: { type: string, format: uuid }
+        idempotencyKey: { type: string }
+        entityType: { type: ["string", "null"], enum: [lead, opportunity, account, null] }
+        entityId: { type: ["string", "null"], format: uuid }
+        triggerData: { type: object, additionalProperties: true }
+        actionResults: { type: array, items: { $ref: "#/components/schemas/WorkflowActionResult" } }
+        status: { type: string, enum: [pending, running, success, failed] }
+        errorMessage: { type: ["string", "null"] }
+        claimedAt: { type: ["string", "null"], format: date-time }
+        executedAt: { type: ["string", "null"], format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+    WorkflowDryRun:
+      type: object
+      required: [dryRun, sideEffects, conditionsMatched, plannedActions]
+      properties:
+        dryRun: { type: boolean }
+        sideEffects: { type: integer }
+        conditionsMatched: { type: boolean }
+        plannedActions: { type: array, items: { $ref: "#/components/schemas/WorkflowActionResult" } }
+    AiAgent:
+      type: object
+      required: [id, orgId, name, type, config, tools, active, executionFrequency, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        name: { type: string }
+        type: { type: string, enum: [lead_qualifier, follow_up_sequencer, renewal_monitor] }
+        systemPrompt: { type: ["string", "null"] }
+        config: { type: object, additionalProperties: true }
+        tools: { type: array, items: { type: string } }
+        active: { type: boolean }
+        executionFrequency: { type: string, enum: [realtime, hourly, daily] }
+        createdBy: { type: ["string", "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AgentExecutionAction:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string }
+        status: { type: string }
+        score: { type: number }
+        taskId: { type: ["string", "null"], format: uuid }
+        opportunityId: { type: ["string", "null"], format: uuid }
+        recommendationId: { type: ["string", "null"], format: uuid }
+        sent: { type: boolean }
+    AgentExecution:
+      type: object
+      required: [id, orgId, agentId, idempotencyKey, input, actions, status, tokensUsed, executedAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        agentId: { type: string, format: uuid }
+        idempotencyKey: { type: string }
+        entityType: { type: ["string", "null"] }
+        entityId: { type: ["string", "null"], format: uuid }
+        input: { type: object, additionalProperties: true }
+        decisionRationale: { type: ["string", "null"] }
+        actions: { type: array, items: { $ref: "#/components/schemas/AgentExecutionAction" } }
+        output: { type: ["string", "null"] }
+        status: { type: string, enum: [running, success, partial, failed] }
+        tokensUsed: { type: integer }
+        executedAt: { type: string, format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+    ParsedCommandAction:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [query_largest_open_deal, schedule_call_task] }
+        date: { type: string, format: date }
+        time: { type: string }
+    CommandInterpretation:
+      type: object
+      required: [commands]
+      properties:
+        commands: { type: array, items: { $ref: "#/components/schemas/ParsedCommandAction" } }
+    CommandDeal:
+      type: object
+      required: [id, name, value, stage]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        value: { type: ["string", "null"] }
+        stage: { type: string }
+    CommandResult:
+      type: object
+      required: [largestOpenDeal]
+      properties:
+        largestOpenDeal: { anyOf: [{ $ref: "#/components/schemas/CommandDeal" }, { type: "null" }] }
+        scheduledTask: { $ref: "#/components/schemas/Task" }
+    CommandPendingResponse:
+      type: object
+      required: [commandId, requiresConfirmation, interpretation]
+      properties:
+        commandId: { type: string, format: uuid }
+        requiresConfirmation: { type: boolean }
+        interpretation: { $ref: "#/components/schemas/CommandInterpretation" }
+    CommandResultResponse:
+      type: object
+      required: [commandId, confirmationRequired, result]
+      properties:
+        commandId: { type: string, format: uuid }
+        confirmationRequired: { type: boolean }
+        result: { $ref: "#/components/schemas/CommandResult" }
+    CommandHistoryEntry:
+      type: object
+      required: [id, orgId, userId, transcript, status, confirmationRequired, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        transcript: { type: string }
+        interpretation: { anyOf: [{ $ref: "#/components/schemas/CommandInterpretation" }, { type: "null" }] }
+        action: { type: ["string", "null"] }
+        status: { type: string, enum: [processing, awaiting_confirmation, executing, completed, failed] }
+        confirmationRequired: { type: boolean }
+        result: { anyOf: [{ $ref: "#/components/schemas/CommandResult" }, { type: "null" }] }
+        errorMessage: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+    EntityRunRequest:
+      type: object
+      required: [entityType, entityId]
+      properties:
+        entityType: { type: string, enum: [lead, opportunity, account] }
+        entityId: { type: string, format: uuid }
+    ToggleRequest:
+      type: object
+      required: [active]
+      properties:
+        active: { type: boolean }
+    CopilotSummarizeRequest:
+      type: object
+      required: [entityType, entityId]
+      properties:
+        entityType: { type: string, enum: [account, opportunity, email_thread] }
+        entityId: { type: string, format: uuid }
+        style: { type: string, enum: [short, long], default: short }
+    AccountIdRequest:
+      type: object
+      required: [accountId]
+      properties:
+        accountId: { type: string, format: uuid }
+    EmailDraftRequest:
+      type: object
+      required: [accountId, context]
+      properties:
+        accountId: { type: string, format: uuid }
+        context: { type: string }
+        tone: { type: string, enum: [professional, casual] }
+    AgentRunRequest:
+      type: object
+      required: [entityType, entityId]
+      properties:
+        entityType: { type: string, enum: [lead, account, opportunity] }
+        entityId: { type: string, format: uuid }
+    CommandRequest:
+      type: object
+      required: [transcript]
+      properties:
+        transcript: { type: string }
     HealthStatus:
       type: object
       properties:
@@ -1824,12 +2391,6 @@ components:
         value: { type: ["string", "null"] }
         expectedCloseDate: { type: ["string", "null"] }
         forecastCategory: { type: ["string", "null"] }
-        createdAt: { type: ["string", "null"] }
-    WorkflowStub:
-      type: object
-      required: [id]
-      properties:
-        id: { type: string }
         createdAt: { type: ["string", "null"] }
     FeatureGateError:
       type: object
@@ -2384,6 +2945,8 @@ components:
         state: { type: ["string", "null"] }
         productInterest: { type: ["string", "null"] }
         source: { type: ["string", "null"] }
+        assignedToUserId: { type: ["string", "null"], format: uuid }
+        territoryId: { type: ["string", "null"], format: uuid }
     LeadUpdate:
       type: object
       properties:

@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface WorkflowStub {
+export interface CommandDeal {
   id: string;
+  name: string;
   /** @nullable */
-  createdAt?: string | null;
+  value: string | null;
+  stage: string;
 }

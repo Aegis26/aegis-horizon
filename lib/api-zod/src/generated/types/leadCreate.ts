@@ -39,4 +39,8 @@ export interface LeadCreate {
   productInterest?: string | null;
   /** @nullable */
   source?: string | null;
+  /** @nullable */
+  assignedToUserId?: string | null;
+  /** @nullable */
+  territoryId?: string | null;
 }

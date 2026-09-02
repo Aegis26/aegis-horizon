@@ -161,6 +161,24 @@ export async function attachOrg(
     return;
   }
 
+  // Keep grandfathered paid organizations aligned with their plan's included
+  // catalog features. This is plan reconciliation (not a feature-gate bypass):
+  // custom plans remain untouched and AI still requires explicit consent.
+  if (org.plan !== "custom") {
+    const included = featuresForPlan(org.plan);
+    const missing = included.filter((feature) => !org.enabledFeatures.includes(feature));
+    if (missing.length > 0) {
+      const [updated] = await db
+        .update(organizations)
+        .set({ enabledFeatures: [...new Set([...org.enabledFeatures, ...missing])] })
+        .where(eq(organizations.id, org.id))
+        .returning();
+      req.currentOrg = updated;
+      req.currentMembership = membership;
+      next();
+      return;
+    }
+  }
   req.currentOrg = org;
   req.currentMembership = membership;
   next();

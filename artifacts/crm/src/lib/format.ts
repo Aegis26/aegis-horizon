@@ -32,3 +32,14 @@ export function getInitials(name: string | null | undefined, email: string) {
   }
   return email.substring(0, 2).toUpperCase();
 }
+
+/**
+ * Formats API prediction/confidence values (0.0 to 1.0) into a percentage string (e.g. 50%).
+ */
+export function formatPredictionPercentage(value: number | string | null | undefined): string {
+  if (value == null) return "N/A";
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  if (isNaN(num)) return "N/A";
+  const clamped = Math.max(0, Math.min(1, num));
+  return `${Math.round(clamped * 100)}%`;
+}

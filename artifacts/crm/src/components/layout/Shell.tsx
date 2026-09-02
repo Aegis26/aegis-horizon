@@ -21,6 +21,7 @@ import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { CommandCenter } from "@/components/ai/CommandCenter";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -143,7 +144,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       </main>
       
-      {/* Mobile Tab Bar could go here */}
+      <CommandCenter />
     </div>
   );
 }

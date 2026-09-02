@@ -5,8 +5,10 @@ import {
   useListLeadScoringRules, getListLeadScoringRulesQueryKey,
   useCreateLeadScoringRule, useUpdateLeadScoringRule, useDeleteLeadScoringRule,
   getListOpportunitiesQueryKey, getListAccountsQueryKey,
+  useGetConversionPrediction, getGetConversionPredictionQueryKey,
+  useRecomputeConversionPrediction
 } from "@workspace/api-client-react";
-import type { Lead, LeadScoringRule, SegmentCondition } from "@workspace/api-client-react";
+import type { Lead, LeadScoringRule, SegmentCondition, ConversionPrediction } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOrgStore } from "@/store/org-store";
 import { useLocation } from "wouter";
@@ -22,7 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, UserPlus, Sparkles, Trash2, Pencil, ArrowUpRight, RefreshCw } from "lucide-react";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatPredictionPercentage } from "@/lib/format";
 
 const STATUS_COLORS: Record<string, string> = {
   new: "border-primary/40 text-primary",
@@ -254,6 +256,7 @@ export default function Leads() {
 
       {(createOpen || editLead) && (
         <LeadFormDialog
+          orgId={orgId}
           lead={editLead}
           pending={createLead.isPending || updateLead.isPending}
           onClose={() => { setCreateOpen(false); setEditLead(null); }}
@@ -284,7 +287,8 @@ export default function Leads() {
   );
 }
 
-function LeadFormDialog({ lead, onClose, onSave, pending }: {
+function LeadFormDialog({ orgId, lead, onClose, onSave, pending }: {
+  orgId: string;
   lead: Lead | null;
   onClose: () => void;
   onSave: (data: Record<string, unknown>) => void;
@@ -338,7 +342,14 @@ function LeadFormDialog({ lead, onClose, onSave, pending }: {
             </div>
           )}
         </div>
-        <DialogFooter>
+
+        {lead && (
+          <div className="mt-6 border-t border-primary/10 pt-4">
+            <LeadConversionPrediction orgId={orgId} leadId={lead.id} />
+          </div>
+        )}
+
+        <DialogFooter className="mt-4">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button
             disabled={!form.firstName || !form.lastName || !form.email || pending}
@@ -453,5 +464,84 @@ function RuleFormDialog({ rule, onClose, onSave, pending }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function LeadConversionPrediction({ orgId, leadId }: { orgId: string; leadId: string }) {
+  const queryClient = useQueryClient();
+  const { data: prediction, isLoading } = useGetConversionPrediction(orgId, leadId, {
+    query: { queryKey: getGetConversionPredictionQueryKey(orgId, leadId) }
+  });
+
+  const recompute = useRecomputeConversionPrediction();
+
+  const handleRecompute = () => {
+    recompute.mutate(
+      { orgId, leadId },
+      {
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetConversionPredictionQueryKey(orgId, leadId) })
+      }
+    );
+  };
+
+  if (isLoading) {
+    return <div className="h-20 skeleton rounded-md w-full"></div>;
+  }
+
+  if (!prediction) {
+    return (
+      <div className="bg-primary/5 rounded-md p-4 text-center border border-primary/10">
+        <p className="text-sm text-muted-foreground mb-2">No AI prediction available yet.</p>
+        <Button size="sm" variant="outline" onClick={handleRecompute} disabled={recompute.isPending} className="gap-2">
+          <Sparkles className="h-3.5 w-3.5" /> Generate Prediction
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-background border border-primary/20 rounded-md p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold font-display flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" /> AI Conversion Prediction
+        </h4>
+        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={handleRecompute} disabled={recompute.isPending}>
+          <RefreshCw className={`h-3 w-3 mr-1 ${recompute.isPending ? "animate-spin" : ""}`} />
+          Recompute
+        </Button>
+      </div>
+
+      <div className="flex items-center gap-6">
+        <div className="text-center bg-card rounded-md border border-primary/10 p-3 flex-1">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Probability</p>
+          <p className="text-2xl font-mono font-bold text-foreground">{formatPredictionPercentage(prediction.conversionProbability)}</p>
+        </div>
+        {prediction.predictedCloseDate && (
+          <div className="text-center bg-card rounded-md border border-primary/10 p-3 flex-1">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Expected Close</p>
+            <p className="text-xl font-mono font-medium text-foreground">{formatDate(prediction.predictedCloseDate)}</p>
+          </div>
+        )}
+      </div>
+
+      {prediction.factors && prediction.factors.length > 0 && (
+        <div className="space-y-2 mt-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Key Factors</p>
+          <div className="space-y-2">
+            {prediction.factors.map((f, i) => (
+              <div key={i} className="flex justify-between items-start text-sm bg-card/50 p-2 rounded border border-border/50">
+                <div>
+                  <p className="font-medium text-foreground">{f.factor}</p>
+                  <p className="text-xs text-muted-foreground">{f.detail}</p>
+                </div>
+                <span className={`font-mono text-xs font-bold px-1.5 py-0.5 rounded ${f.weight > 0 ? "text-success bg-success/10" : "text-destructive bg-destructive/10"}`}>
+                  {f.weight > 0 ? "+" : ""}{f.weight}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

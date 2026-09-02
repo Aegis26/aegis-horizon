@@ -1,21 +1,29 @@
-import { useListWorkflows, getListWorkflowsQueryKey } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Lock, Plus, Workflow as WorkflowIcon } from "lucide-react";
+import { Lock, Plus, Workflow as WorkflowIcon, Bot, CheckSquare, Activity } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useGetAiBudgetStatus, getGetAiBudgetStatusQueryKey, useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
+import { WorkflowsTab } from "@/components/automation/WorkflowsTab";
+import { AgentsTab } from "@/components/automation/AgentsTab";
+import { TasksTab } from "@/components/automation/TasksTab";
 
 export default function Automation() {
   const { selectedOrgId } = useOrgStore();
-  
-  const { data: workflows, error, isLoading } = useListWorkflows(selectedOrgId || "", {
+
+  const { data: me } = useGetMe({ query: { queryKey: getGetMeQueryKey() } });
+  const role = me?.orgs.find(o => o.org.id === selectedOrgId)?.role || "user";
+  const canManage = ["owner", "admin", "manager"].includes(role);
+
+  const { data: budget, error, isLoading } = useGetAiBudgetStatus(selectedOrgId || "", {
     query: {
       enabled: !!selectedOrgId,
       retry: false,
-      queryKey: getListWorkflowsQueryKey(selectedOrgId || "")
+      queryKey: getGetAiBudgetStatusQueryKey(selectedOrgId || "")
     }
   });
 
-  if (error && error.status === 403) {
+  if (error && (error as any).status === 403) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center max-w-md mx-auto">
         <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-6">
@@ -23,8 +31,8 @@ export default function Automation() {
         </div>
         <h2 className="text-2xl font-bold tracking-tight mb-2 font-display">Automation Locked</h2>
         <p className="text-muted-foreground mb-8">
-          The Automation feature set is not enabled for your organization. 
-          Upgrade your plan or customize your features to build workflows.
+          The Automation & AI feature set is not enabled for your organization.
+          Upgrade your plan or customize your features to build workflows and AI agents.
         </p>
         <Link href="/billing">
           <Button size="lg" className="font-display">Manage Features</Button>
@@ -41,35 +49,53 @@ export default function Automation() {
     <div>
       <header className="px-8 py-6 border-b border-primary/10 flex items-center justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-40">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight font-display mb-1">Automation</h1>
-          <p className="text-sm text-muted-foreground">Visual workflows and triggers.</p>
+          <h1 className="text-3xl font-bold tracking-tight font-display mb-1">Automation Hub</h1>
+          <p className="text-sm text-muted-foreground">Workflows, AI Agents, and Tasks.</p>
         </div>
-        <Button className="gap-2"><Plus className="h-4 w-4"/> Create workflow</Button>
-      </header>
-
-      <div className="p-8">
-        {workflows?.length === 0 ? (
-          <div className="flex flex-col items-center justify-center min-h-[384px] px-6 py-20 bg-background/30 rounded-lg border border-primary/10 text-center">
-            <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-6">
-              <WorkflowIcon className="h-10 w-10 text-primary opacity-50" />
-            </div>
-            <h3 className="font-display text-2xl font-bold mb-2">No workflows yet</h3>
-            <p className="text-muted-foreground max-w-sm mb-6">
-              Automate repetitive tasks like sending emails when an opportunity closes or updating account health scores.
-            </p>
-            <Button variant="outline" className="gap-2 bg-transparent text-foreground border-primary/20 hover:bg-primary/10 hover:border-primary/50">
-              <Plus className="h-4 w-4" /> Start from Template
-            </Button>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {workflows?.map(wf => (
-              <div key={wf.id} className="p-4 border rounded-lg bg-card">
-                Workflow {wf.id}
-              </div>
-            ))}
+        {budget && (
+          <div className="flex flex-col items-end text-xs font-mono">
+            <span className="text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+              <Activity className="h-3 w-3" /> Token Budget
+            </span>
+            <span className={budget.remaining < 5000 ? "text-destructive" : "text-primary"}>
+              {budget.used.toLocaleString()} / {budget.budget.toLocaleString()}
+            </span>
           </div>
         )}
+      </header>
+
+      <div className="p-8 max-w-7xl mx-auto">
+        {!budget?.consentEnabled && (
+          <div className="mb-6 bg-warning/10 border border-warning/30 p-4 rounded-lg flex items-start gap-3 animate-slideUpReveal">
+            <Lock className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-bold text-warning font-display">AI Features Disabled</h3>
+              <p className="text-sm text-warning-foreground mt-1">
+                Your organization has not consented to AI processing. Workflows will run, but AI Agents and AI-based actions will fail. Enable in Settings.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <Tabs defaultValue="workflows" className="w-full">
+          <TabsList className="bg-card border border-primary/10 mb-6 h-12 w-full justify-start overflow-x-auto shadow-sm">
+            <TabsTrigger value="workflows" className="gap-2 font-display data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><WorkflowIcon className="h-4 w-4"/> Workflows</TabsTrigger>
+            <TabsTrigger value="agents" className="gap-2 font-display data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><Bot className="h-4 w-4"/> AI Agents</TabsTrigger>
+            <TabsTrigger value="tasks" className="gap-2 font-display data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><CheckSquare className="h-4 w-4"/> Tasks</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="workflows" className="mt-0 outline-none">
+            <WorkflowsTab orgId={selectedOrgId!} canManage={canManage} />
+          </TabsContent>
+
+          <TabsContent value="agents" className="mt-0 outline-none">
+            <AgentsTab orgId={selectedOrgId!} canManage={canManage} />
+          </TabsContent>
+
+          <TabsContent value="tasks" className="mt-0 outline-none">
+            <TasksTab orgId={selectedOrgId!} canManage={canManage} />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

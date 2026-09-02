@@ -23,7 +23,6 @@ import {
   opportunities,
   segments,
   users,
-  workflows,
   type Account,
   type Contact,
   type Activity,
@@ -31,7 +30,6 @@ import {
 } from "@workspace/db";
 import {
   ListAccountsResponse,
-  ListWorkflowsResponse,
   CreateAccountBody,
   UpdateAccountBody,
   CreateAccountResponse,
@@ -1081,26 +1079,6 @@ router.post(
       parsed.data.conditions as Condition[],
     );
     res.json(PreviewSegmentConditionsResponse.parse(rows.map(accountSummary)));
-  },
-);
-
-/* --------------------------- existing endpoints -------------------------- */
-
-router.get(
-  "/orgs/:orgId/workflows",
-  attachUser,
-  attachOrg,
-  requireFeature("automation"),
-  async (req, res): Promise<void> => {
-    const rows = await db
-      .select()
-      .from(workflows)
-      .where(eq(workflows.orgId, req.currentOrg!.id));
-    res.json(
-      ListWorkflowsResponse.parse(
-        rows.map((w) => ({ id: w.id, createdAt: w.createdAt.toISOString() })),
-      ),
-    );
   },
 );
 

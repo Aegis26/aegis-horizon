@@ -126,6 +126,7 @@ export const PLANS: PlanDef[] = [
       "sales",
       "tasks",
       "analytics",
+      "ai_copilot",
       "automation",
       "territories",
       "documents",

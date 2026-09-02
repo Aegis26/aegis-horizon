@@ -193,7 +193,7 @@ async function upsertEmail(
   const subject = header(first, "subject") || String(first.subject ?? fallback.subject ?? "");
   const snippet = String(last.snippet ?? last.bodyPreview ?? fallback.snippet ?? "");
   const analysis = (await aiEnabled(orgId))
-    ? await analyzeConversation(rawMessages.map((m) => String(m.snippet ?? m.bodyPreview ?? "")).join("\n"))
+    ? await analyzeConversation(orgId, rawMessages.map((m) => String(m.snippet ?? m.bodyPreview ?? "")).join("\n"))
     : null;
   const [thread] = await db.insert(emailThreads).values({
     orgId, accountId: contact.accountId, contactId: contact.id, provider,

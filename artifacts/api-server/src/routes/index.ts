@@ -8,6 +8,7 @@ import salesRouter from "./sales";
 import dashboardRouter from "./dashboard";
 import storageRouter from "./storage";
 import communicationsRouter from "./communications";
+import automationRouter from "./automation";
 
 const router: IRouter = Router();
 
@@ -21,6 +22,7 @@ router.use(communicationsRouter);
 router.use(salesRouter);
 router.use(storageRouter);
 router.use(dashboardRouter);
+router.use(automationRouter);
 router.use(orgsRouter);
 
 export default router;

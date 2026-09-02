@@ -6,8 +6,10 @@ import {
   useCreateOpportunity, useUpdateOpportunity, useConvertOpportunityToCustomer,
   useGetOpportunity, getGetOpportunityQueryKey,
   useCreateQuote, getListQuotesQueryKey,
+  useGetClosePrediction, getGetClosePredictionQueryKey,
+  useRecomputeClosePrediction,
 } from "@workspace/api-client-react";
-import type { Opportunity } from "@workspace/api-client-react";
+import type { Opportunity, ClosePrediction } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOrgStore } from "@/store/org-store";
 import { Link, useLocation } from "wouter";
@@ -20,8 +22,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Lock, Plus, Target, LayoutGrid, List, FileText, Trophy, History } from "lucide-react";
-import { formatDollars, formatDate } from "@/lib/format";
+import { Lock, Plus, Target, LayoutGrid, List, FileText, Trophy, History, Sparkles, RefreshCw } from "lucide-react";
+import { formatDollars, formatDate, formatPredictionPercentage } from "@/lib/format";
 
 function LockedState() {
   return (
@@ -429,6 +431,12 @@ function OpportunityDetailDialog({
               </div>
             </div>
           )}
+
+          {!isClosed && (
+            <div className="border-t border-primary/10 pt-4">
+              <OpportunityClosePrediction orgId={orgId} opportunityId={opportunityId} />
+            </div>
+          )}
         </div>
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <Button
@@ -474,5 +482,90 @@ function OpportunityDetailDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function OpportunityClosePrediction({ orgId, opportunityId }: { orgId: string; opportunityId: string }) {
+  const queryClient = useQueryClient();
+  const { data: prediction, isLoading } = useGetClosePrediction(orgId, opportunityId, {
+    query: { queryKey: getGetClosePredictionQueryKey(orgId, opportunityId) }
+  });
+
+  const recompute = useRecomputeClosePrediction();
+
+  const handleRecompute = () => {
+    recompute.mutate(
+      { orgId, opportunityId },
+      {
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetClosePredictionQueryKey(orgId, opportunityId) })
+      }
+    );
+  };
+
+  if (isLoading) {
+    return <div className="h-20 skeleton rounded-md w-full"></div>;
+  }
+
+  if (!prediction) {
+    return (
+      <div className="bg-primary/5 rounded-md p-4 text-center border border-primary/10">
+        <p className="text-sm text-muted-foreground mb-2">No close prediction available yet.</p>
+        <Button size="sm" variant="outline" onClick={handleRecompute} disabled={recompute.isPending} className="gap-2">
+          <Sparkles className="h-3.5 w-3.5" /> Analyze Deal
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-background border border-primary/20 rounded-md p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold font-display flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" /> Deal Prediction
+        </h4>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-[10px] font-mono capitalize">
+            Confidence: {formatPredictionPercentage(prediction.confidence)}
+          </Badge>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={handleRecompute} disabled={recompute.isPending}>
+            <RefreshCw className={`h-3 w-3 mr-1 ${recompute.isPending ? "animate-spin" : ""}`} />
+            Recompute
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-6">
+        <div className="text-center bg-card rounded-md border border-primary/10 p-3 flex-1 relative">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Win Probability</p>
+          <p className="text-2xl font-mono font-bold text-foreground">{formatPredictionPercentage(prediction.predictedProbability)}</p>
+          <p className="text-[10px] text-muted-foreground mt-1 absolute bottom-1 right-2">Base: {formatPredictionPercentage(prediction.baselineByStage)}</p>
+        </div>
+        {prediction.expectedCloseDate && (
+          <div className="text-center bg-card rounded-md border border-primary/10 p-3 flex-1">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Expected Close</p>
+            <p className="text-xl font-mono font-medium text-foreground">{formatDate(prediction.expectedCloseDate)}</p>
+          </div>
+        )}
+      </div>
+
+      {prediction.adjustmentFactors && prediction.adjustmentFactors.length > 0 && (
+        <div className="space-y-2 mt-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Analysis Factors</p>
+          <div className="space-y-2">
+            {prediction.adjustmentFactors.map((f, i) => (
+              <div key={i} className="flex justify-between items-start text-sm bg-card/50 p-2 rounded border border-border/50">
+                <div>
+                  <p className="font-medium text-foreground">{f.factor}</p>
+                  <p className="text-xs text-muted-foreground">{f.detail}</p>
+                </div>
+                <span className={`font-mono text-xs font-bold px-1.5 py-0.5 rounded ${f.weight > 0 ? "text-success bg-success/10" : "text-destructive bg-destructive/10"}`}>
+                  {f.weight > 0 ? "+" : ""}{f.weight}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

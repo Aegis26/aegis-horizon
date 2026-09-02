@@ -18,7 +18,6 @@ function stub(tableName: string) {
 export const cases = stub("cases");
 export const contracts = stub("contracts");
 export const documents = stub("documents");
-export const workflows = stub("workflows");
 export const aiPredictions = stub("ai_predictions");
 export const recommendations = stub("recommendations");
 export const integrations = stub("integrations");

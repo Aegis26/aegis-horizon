@@ -2,7 +2,7 @@ import { useRoute } from "wouter";
 import { useOrgStore } from "@/store/org-store";
 import { useGetAccount, getGetAccountQueryKey } from "@workspace/api-client-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, UserCircle, Clock, FileText, Target, ArrowLeft } from "lucide-react";
+import { Building2, UserCircle, Clock, FileText, Target, ArrowLeft, Bot, AlertTriangle } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ProfileTab } from "@/components/accounts/ProfileTab";
@@ -11,6 +11,8 @@ import { TimelineTab } from "@/components/accounts/TimelineTab";
 import { FilesTab } from "@/components/accounts/FilesTab";
 import { MessageSquare } from "lucide-react";
 import { Workspace as CommunicationsWorkspace } from "./Communications";
+import { AccountCopilotTab } from "@/components/accounts/AccountCopilotTab";
+import { useGetAiBudgetStatus, getGetAiBudgetStatusQueryKey, useListChurnPredictions, getListChurnPredictionsQueryKey } from "@workspace/api-client-react";
 
 export default function AccountDetail() {
   const [match, params] = useRoute("/accounts/:accountId");
@@ -23,6 +25,15 @@ export default function AccountDetail() {
       queryKey: getGetAccountQueryKey(selectedOrgId || "", accountId || "")
     }
   });
+
+  const { data: churnPredictions } = useListChurnPredictions(selectedOrgId || "", {
+    query: {
+      enabled: !!selectedOrgId,
+      queryKey: getListChurnPredictionsQueryKey(selectedOrgId || "")
+    }
+  });
+
+  const accountChurn = churnPredictions?.find(p => p.accountId === accountId && !p.resolvedAt && (p.riskLevel === 'high' || p.riskLevel === 'critical'));
 
   if (isLoading) {
     return <div className="p-8 flex justify-center"><div className="spinner" /></div>;
@@ -51,7 +62,16 @@ export default function AccountDetail() {
               <Building2 className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight font-display text-foreground leading-none">{account.name}</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold tracking-tight font-display text-foreground leading-none">{account.name}</h1>
+                {accountChurn && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-mono uppercase font-bold flex items-center gap-1 ${
+                    accountChurn.riskLevel === 'critical' ? 'bg-destructive text-destructive-foreground' : 'bg-warning text-warning-foreground'
+                  }`}>
+                    <AlertTriangle className="h-3 w-3" /> {accountChurn.riskLevel} Churn Risk
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
                 {account.website && <a href={account.website} target="_blank" rel="noreferrer" className="hover:text-primary transition-colors">{account.website}</a>}
                 {account.website && account.industry && <span>•</span>}
@@ -71,6 +91,7 @@ export default function AccountDetail() {
             <TabsTrigger value="files" className="gap-2 font-display data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><FileText className="h-4 w-4"/> Files</TabsTrigger>
             <TabsTrigger value="opportunities" className="gap-2 font-display data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><Target className="h-4 w-4"/> Opportunities</TabsTrigger>
             <TabsTrigger value="communications" className="gap-2 font-display data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><MessageSquare className="h-4 w-4"/> Communications</TabsTrigger>
+            <TabsTrigger value="copilot" className="gap-2 font-display data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><Bot className="h-4 w-4"/> Copilot</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="mt-0 outline-none">
@@ -134,6 +155,10 @@ export default function AccountDetail() {
             <div className="bg-card border border-primary/10 rounded-lg shadow-md overflow-hidden h-[600px] flex flex-col">
               <CommunicationsWorkspace accountId={account.id} orgId={selectedOrgId!} />
             </div>
+          </TabsContent>
+
+          <TabsContent value="copilot" className="mt-0 outline-none">
+            <AccountCopilotTab accountId={account.id} orgId={selectedOrgId!} />
           </TabsContent>
         </Tabs>
       </div>

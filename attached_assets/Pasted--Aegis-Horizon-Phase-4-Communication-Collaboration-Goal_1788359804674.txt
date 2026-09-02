@@ -1,0 +1,602 @@
+# Aegis Horizon — Phase 4: Communication & Collaboration
+
+**Goal:** All customer communication flows through Horizon. Every email, call, calendar event, and internal note is unified on the timeline. Teams collaborate in-app with real-time mentions and Slack notifications.
+
+**Deliverables:** Gmail + Outlook email sync and logging, Twilio call recording + transcription, Google Calendar + Outlook sync, Internal notes with @-mentions, Slack integration for notifications, Conversation intelligence (summaries, sentiment, keywords).
+
+**Acceptance Criteria:**
+1. Gmail synced; emails to/from contacts auto-log to account timeline (not manual copy-paste).
+2. Call via Twilio gets recorded, transcribed, and appears on timeline with sentiment analysis.
+3. Google Calendar events synced; meeting attendees matched to contacts.
+4. Internal note with @-mention notifies rep in Slack.
+5. Email thread summary: "Customer expressed 2 objections, leaning toward yes" auto-generated.
+6. All communications (emails, calls, meetings) visible in unified timeline by date.
+
+---
+
+## Stack
+
+| Component | Choice | Why |
+|---|---|---|
+| Email Sync | Gmail API + Outlook Graph API | Industry standard, covers 95% of users |
+| Call Recording | Twilio + Cloudflare R2 | You know Twilio; recordings stored in R2 |
+| Transcription | AssemblyAI (via Resend email template triggers) | Fast, accurate, supports sentiment |
+| Calendar Sync | Google Calendar API + MS Graph | Native to Gmail and Outlook |
+| Slack Integration | Slack Bolt SDK | Real-time mentions, instant notifications |
+| Sentiment Analysis | Claude API (Sonnet) | You're already using Claude; no new vendor |
+| Email Parsing | Parsemail (open-source) | Extract sender, recipients, reply chains |
+
+---
+
+## Database Schema Additions
+
+### Email Sync Table
+
+```typescript
+export const emailSyncAccounts = pgTable('email_sync_accounts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  provider: text('provider').notNull(), // 'gmail' | 'outlook'
+  providerAccountId: text('provider_account_id').notNull(), // Gmail/Outlook account ID
+  accessToken: text('access_token_encrypted'), // Encrypted
+  refreshToken: text('refresh_token_encrypted'), // Encrypted
+  syncedUntil: timestamp('synced_until'), // Last sync timestamp
+  isActive: boolean('is_active').default(true),
+  connectedAt: timestamp('connected_at').defaultNow(),
+});
+
+export const emailThreads = pgTable('email_threads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  threadId: text('thread_id').notNull(), // Gmail/Outlook thread ID
+  subject: text('subject').notNull(),
+  lastMessageAt: timestamp('last_message_at'),
+  messageCount: integer('message_count').default(0),
+  participants: jsonb('participants').default([]), // {email, name, role}
+  summary: text('summary'), // AI-generated summary
+  sentiment: text('sentiment'), // 'positive' | 'neutral' | 'negative' | 'mixed'
+  keywords: text('keywords').array().default([]),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Update activities table to include email metadata
+// ALTER TABLE activities ADD COLUMN threadId uuid;
+// ALTER TABLE activities ADD COLUMN transcriptId uuid;
+```
+
+### Call Recording Table
+
+```typescript
+export const callRecordings = pgTable('call_recordings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  callSid: text('call_sid').notNull(), // Twilio call ID
+  recordingUrl: text('recording_url'), // R2 URL
+  transcriptText: text('transcript_text'),
+  transcriptSentences: jsonb('transcript_sentences').default([]), // [{text, start, end, speaker}]
+  sentiment: text('sentiment'), // 'positive' | 'neutral' | 'negative'
+  sentimentScore: decimal('sentiment_score', { precision: 3, scale: 2 }), // 0.0 - 1.0
+  keywords: text('keywords').array().default([]),
+  duration: integer('duration'), // seconds
+  participants: jsonb('participants').default([]), // {name, phone, role}
+  recordedAt: timestamp('recorded_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const calendarEvents = pgTable('calendar_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  eventId: text('event_id').notNull(), // Google/Outlook event ID
+  title: text('title').notNull(),
+  description: text('description'),
+  startTime: timestamp('start_time'),
+  endTime: timestamp('end_time'),
+  attendees: jsonb('attendees').default([]), // {email, name, response_status}
+  meetingNotes: text('meeting_notes'), // User-provided notes after meeting
+  recordingUrl: text('recording_url'), // If recorded
+  syncedAt: timestamp('synced_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const internalNotes = pgTable('internal_notes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  authorUserId: uuid('author_user_id').notNull().references(() => users.id),
+  content: text('content').notNull(),
+  mentions: uuid('mentions').array().default([]), // User IDs mentioned with @
+  visibility: text('visibility').default('team'), // 'team' | 'private'
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const slackIntegrations = pgTable('slack_integrations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  teamId: text('team_id').notNull(), // Slack workspace ID
+  botToken: text('bot_token_encrypted'),
+  isActive: boolean('is_active').default(true),
+  connectedAt: timestamp('connected_at').defaultNow(),
+});
+```
+
+---
+
+## Core API Routes
+
+### Email Sync
+
+**Setup & OAuth**
+- `GET /api/auth/email/gmail/oauth` — OAuth flow, store encrypted tokens
+- `GET /api/auth/email/outlook/oauth` — Outlook OAuth flow
+- `GET /api/email-sync/accounts` — List synced email accounts for user
+- `DELETE /api/email-sync/accounts/:id` — Disconnect email account
+
+**Email Retrieval**
+- `GET /api/email-threads` — List all synced email threads for account (paginated)
+- `GET /api/email-threads/:threadId` — Full thread with all messages
+- `POST /api/email-sync/force-sync` — Force immediate sync (useful for testing)
+
+**Send Email**
+- `POST /api/emails/send` — Send email from CRM (using Resend, not Gmail API)
+  ```typescript
+  {
+    to: "customer@example.com",
+    subject: "Quote - Aegis Horizon Setup",
+    body: "...",
+    accountId: "...", // Links email to account
+    attachments: [{filename, url}]
+  }
+  ```
+
+---
+
+### Call Recording
+
+**Initiate & Record**
+- `POST /api/calls/initiate` — Start Twilio call with recording enabled
+  ```typescript
+  {
+    to: "+1-xxx-xxx-xxxx",
+    accountId: "...",
+    contactId: "..."
+  }
+  ```
+- `POST /api/calls/webhook` — Twilio recording complete webhook (transcribe + sentiment)
+
+**Retrieve Calls**
+- `GET /api/calls` — List all recorded calls for account
+- `GET /api/calls/:id` — Call detail with transcript, sentiment, keywords
+
+---
+
+### Calendar Sync
+
+**Setup & OAuth**
+- `GET /api/auth/calendar/google/oauth` — Google Calendar OAuth
+- `GET /api/auth/calendar/outlook/oauth` — Outlook Calendar OAuth
+- `DELETE /api/calendar-sync/:accountId` — Disconnect calendar
+
+**Events**
+- `GET /api/calendar-events` — Synced calendar events (next 30 days)
+- `POST /api/calendar-events/:eventId/notes` — Add meeting notes after call
+- `POST /api/calendar-events/:eventId/log-activity` — Auto-create activity from meeting
+
+---
+
+### Internal Notes & Mentions
+
+**Notes**
+- `POST /api/accounts/:accountId/internal-notes` — Create note
+  ```typescript
+  {
+    content: "Called Sarah today. She mentioned budget constraints. @john might have insight.",
+    mentions: ["john-user-id"], // Extracted from @mentions
+  }
+  ```
+- `GET /api/accounts/:accountId/internal-notes` — List notes (team only)
+- `PATCH /api/internal-notes/:id` — Edit (author or admin only)
+- `DELETE /api/internal-notes/:id` — Delete (author or admin)
+
+**Mention Notifications**
+- On create, detect @-mentions and send Slack DM to mentioned user
+
+---
+
+### Slack Integration
+
+**Setup**
+- `GET /api/integrations/slack/oauth` — OAuth flow for Slack workspace
+- `POST /api/integrations/slack/webhook` — Slack event webhook (for interactive messages)
+
+**Notifications**
+- Internal note with @-mention → Slack DM
+- Email to account → Slack notification in shared channel (if configured)
+- Call completed → Slack notification with transcript excerpt
+
+---
+
+## Backend Services
+
+### EmailSyncService
+
+```typescript
+// src/services/emailSync.ts
+export class EmailSyncService {
+  // Gmail sync
+  async syncGmail(userId: string, accountId: string) {
+    // 1. Get access token (decrypt from DB)
+    // 2. Call Gmail API for messages since last sync
+    // 3. Parse email threads
+    // 4. Extract participants, subject, body
+    // 5. Log as activities on account timeline
+    // 6. Detect @mentions in body? No—that's internal notes only
+  }
+
+  // Outlook sync
+  async syncOutlook(userId: string, accountId: string) {
+    // Similar to Gmail but use MS Graph API
+  }
+
+  // Parse email body and extract key info
+  async parseEmailContent(raw: string) {
+    // Extract: from, to, cc, subject, body, attachments
+    // Build thread reply chain
+  }
+
+  // Match email sender to contact
+  async matchEmailToContact(fromEmail: string, accountId: string) {
+    // Find contact by email in this account
+  }
+}
+```
+
+### ConversationIntelligenceService
+
+```typescript
+// src/services/conversationIntelligence.ts
+export class ConversationIntelligenceService {
+  // Summarize email thread using Claude
+  async summarizeEmailThread(threadId: string) {
+    // 1. Fetch all emails in thread
+    // 2. Send to Claude Sonnet: "Summarize this customer conversation"
+    // 3. Extract: sentiment, key topics, action items
+    // 4. Store summary + sentiment on emailThreads table
+  }
+
+  // Analyze call transcript
+  async analyzeTranscript(transcriptText: string) {
+    // Send to Claude: "Analyze sentiment, extract objections, topics"
+    // Return: sentiment, keywords, summary
+  }
+
+  // Extract keywords from text
+  extractKeywords(text: string): string[] {
+    // Simple TF-IDF or use Claude
+  }
+}
+```
+
+### CalendarSyncService
+
+```typescript
+// src/services/calendarSync.ts
+export class CalendarSyncService {
+  async syncGoogleCalendar(userId: string) {
+    // 1. Get access token
+    // 2. Fetch events for next 90 days
+    // 3. Match attendee emails to contacts
+    // 4. Log on account timeline
+  }
+
+  async syncOutlookCalendar(userId: string) {
+    // Similar to Google
+  }
+
+  // Match attendee email to contact
+  async matchAttendeeToContact(email: string, accountId: string) {
+    // Find contact by email
+  }
+}
+```
+
+### TwilioCallService
+
+```typescript
+// src/services/twilio.ts
+export class TwilioCallService {
+  async initiateCall(to: string, accountId: string) {
+    // 1. Create Twilio call with recording enabled
+    // 2. Store call metadata in callRecordings
+    // 3. Return call SID
+  }
+
+  async handleRecordingComplete(callSid: string) {
+    // 1. Get recording URL from Twilio
+    // 2. Download recording
+    // 3. Upload to Cloudflare R2
+    // 4. Transcribe with AssemblyAI
+    // 5. Analyze sentiment + extract keywords
+    // 6. Log as activity on account
+  }
+
+  async transcribeWithAssemblyAI(audioUrl: string) {
+    // Send to AssemblyAI API
+    // Get transcript + confidence scores
+    // Return: full text + sentence-by-sentence breakdown
+  }
+}
+```
+
+### SlackService
+
+```typescript
+// src/services/slack.ts
+export class SlackService {
+  async sendDMToUser(userId: string, message: string) {
+    // 1. Find Slack user ID for this user
+    // 2. Send DM via Slack API
+  }
+
+  async postNotificationToChannel(orgId: string, channel: string, message: string) {
+    // Post notification (e.g., "New email from customer")
+  }
+
+  async handleSlackOAuth(code: string, orgId: string) {
+    // Exchange code for bot token
+    // Store encrypted in DB
+  }
+}
+```
+
+---
+
+## Frontend Components
+
+### Email Thread Viewer
+
+```typescript
+// components/EmailThreadViewer.tsx
+export function EmailThreadViewer({ accountId }: { accountId: string }) {
+  const { data: threads } = useQuery(
+    ['email-threads', accountId],
+    () => fetch(`/api/email-threads?accountId=${accountId}`).then(r => r.json())
+  );
+
+  return (
+    <div className="space-y-4">
+      {threads?.map((thread) => (
+        <div key={thread.id} className="card p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h4 className="font-display text-label text-white">{thread.subject}</h4>
+              <p className="text-small text-text-light text-opacity-60">
+                {thread.participants.length} participants • {thread.messageCount} messages
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`badge badge-${thread.sentiment}`}>
+                {thread.sentiment}
+              </span>
+            </div>
+          </div>
+
+          {thread.summary && (
+            <div className="p-4 bg-primary bg-opacity-10 rounded-lg mb-4">
+              <p className="text-small font-display text-primary mb-2">AI Summary</p>
+              <p className="text-body text-text-light">{thread.summary}</p>
+            </div>
+          )}
+
+          {thread.keywords.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {thread.keywords.map((kw) => (
+                <span key={kw} className="badge badge-info text-tiny">
+                  {kw}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Calendar Events Widget
+
+```typescript
+// components/CalendarEventsWidget.tsx
+export function CalendarEventsWidget({ accountId }: { accountId: string }) {
+  const { data: events } = useQuery(
+    ['calendar-events', accountId],
+    () => fetch(`/api/calendar-events?accountId=${accountId}`).then(r => r.json())
+  );
+
+  return (
+    <div className="space-y-3">
+      {events?.map((event) => (
+        <div key={event.id} className="card p-4">
+          <h4 className="font-display text-label text-white mb-2">{event.title}</h4>
+          <div className="text-small text-text-light text-opacity-60 mb-3">
+            {new Date(event.startTime).toLocaleString()}
+          </div>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {event.attendees.map((att) => (
+              <span key={att.email} className="badge badge-info text-tiny">
+                {att.name || att.email}
+              </span>
+            ))}
+          </div>
+          {event.meetingNotes && (
+            <p className="text-small text-text-light">{event.meetingNotes}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Internal Notes with Mentions
+
+```typescript
+// components/InternalNotesEditor.tsx
+export function InternalNotesEditor({ accountId }: { accountId: string }) {
+  const [content, setContent] = useState('');
+  const [mentions, setMentions] = useState<string[]>([]);
+  const { data: teamMembers } = useQuery(['team-members'], fetchTeamMembers);
+
+  const handleMention = (userId: string) => {
+    // User selected a @-mention
+    setMentions([...mentions, userId]);
+  };
+
+  const handleSubmit = async () => {
+    await fetch(`/api/accounts/${accountId}/internal-notes`, {
+      method: 'POST',
+      body: JSON.stringify({ content, mentions }),
+    });
+
+    setContent('');
+    setMentions([]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        placeholder="Type @ to mention a team member..."
+        className="input-base w-full h-24"
+      />
+
+      {/* @-mention autocomplete */}
+      {content.includes('@') && (
+        <div className="card p-3 space-y-2">
+          {teamMembers?.map((member) => (
+            <button
+              key={member.id}
+              onClick={() => handleMention(member.id)}
+              className="w-full text-left px-3 py-2 rounded hover:bg-primary hover:bg-opacity-10 transition-all"
+            >
+              @{member.fullName}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <button onClick={handleSubmit} className="btn-primary">
+        Post Note
+      </button>
+    </div>
+  );
+}
+```
+
+---
+
+## Critical Implementation Details
+
+### Email Token Encryption
+
+Tokens must be encrypted at rest:
+
+```typescript
+import crypto from 'crypto';
+
+const encryptToken = (token: string) => {
+  const cipher = crypto.createCipher('aes-256-cbc', process.env.ENCRYPTION_KEY!);
+  let encrypted = cipher.update(token);
+  encrypted += cipher.final();
+  return encrypted.toString('hex');
+};
+
+const decryptToken = (encrypted: string) => {
+  const decipher = crypto.createDecipher('aes-256-cbc', process.env.ENCRYPTION_KEY!);
+  let decrypted = decipher.update(encrypted, 'hex');
+  decrypted += decipher.final();
+  return decrypted.toString();
+};
+```
+
+### Rate Limiting on Sync
+
+Gmail/Outlook APIs are rate-limited. Implement backoff:
+
+```typescript
+async function syncWithBackoff(provider: 'gmail' | 'outlook') {
+  const maxRetries = 3;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await performSync(provider);
+    } catch (error) {
+      if (error.status === 429) {
+        await sleep(Math.pow(2, i) * 1000); // Exponential backoff
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+```
+
+### Activity Timeline Updates
+
+When syncing emails/calls/calendar, create activities automatically:
+
+```typescript
+await db.insert(activities).values({
+  orgId,
+  accountId,
+  type: 'email',
+  subject: emailThread.subject,
+  body: emailThread.latestMessage,
+  direction: 'inbound', // or 'outbound'
+  createdByUserId: userId,
+  createdAt: new Date(),
+  threadId: emailThread.id, // Link back to email
+});
+```
+
+---
+
+## Acceptance Checklist
+
+- [ ] Gmail OAuth works; emails sync to timeline
+- [ ] Outlook OAuth works; emails sync to timeline
+- [ ] Email thread summary auto-generated via Claude
+- [ ] Sentiment detected (positive/negative/mixed)
+- [ ] Call initiated via Twilio with recording
+- [ ] Recording transcribed with AssemblyAI
+- [ ] Sentiment + keywords extracted from transcript
+- [ ] Google Calendar events synced
+- [ ] Calendar attendees matched to contacts
+- [ ] Internal note with @-mention sent Slack DM to mentioned user
+- [ ] All communications visible on unified account timeline
+- [ ] Email tokens encrypted at rest
+- [ ] Rate limiting on API syncs
+- [ ] All endpoints validate org membership
+
+---
+
+## Definition of Done
+
+Phase 4 is complete when:
+
+1. ✅ User connects Gmail/Outlook → Emails auto-sync to timeline
+2. ✅ User initiates call → Recorded, transcribed, sentiment analyzed, logged
+3. ✅ User connects Google/Outlook Calendar → Events synced, attendees matched
+4. ✅ Team member writes internal note with @-mention → Slack DM sent
+5. ✅ Email thread summary auto-generated and visible
+6. ✅ All communications searchable, organized by date
+7. ✅ No data leaks between orgs (tenant isolation verified)
+8. ✅ Rate limiting prevents API quota burnout
+
+**Once verified, Phase 4 ships. Move to Phase 5 (AI, Automation, Agents).**

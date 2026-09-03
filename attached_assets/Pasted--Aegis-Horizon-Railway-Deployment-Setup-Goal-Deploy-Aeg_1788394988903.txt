@@ -1,0 +1,337 @@
+# Aegis Horizon — Railway Deployment Setup
+
+**Goal:** Deploy Aegis Horizon to Railway production environment at aegishz.com with PostgreSQL, automatic CI/CD, and environment configuration.
+
+**Context:**
+- Code is pushed to GitHub: https://github.com/Aegis26/aegis-horizon (main branch)
+- Domain registered: aegishz.com (DNS not yet configured)
+- All Phase 0-6 code is production-ready
+- Railway will auto-deploy on every GitHub push to main
+
+---
+
+## Tasks
+
+### 1. Verify Railway Account & Create Project
+
+**Steps:**
+1. Go to https://railway.app
+2. Sign in with GitHub (if not already)
+3. Click **New Project**
+4. Select **GitHub Repo**
+5. Choose `Aegis26/aegis-horizon` from list
+6. Railway auto-detects Node.js app
+7. Click **Deploy** (initial placeholder deployment)
+
+**Expected output:**
+- Project created: `aegis-horizon`
+- Initial deployment starts (may fail due to missing DB/env vars—this is OK)
+
+### 2. Add PostgreSQL Database
+
+**In Railway dashboard:**
+1. Go to your `aegis-horizon` project
+2. Click **+ New** (add service)
+3. Select **PostgreSQL**
+4. Railway provisions a Postgres instance
+5. Copy the `DATABASE_URL` from PostgreSQL service details
+
+**Expected:**
+- PostgreSQL service added to project
+- Connection string ready (looks like: `postgresql://user:pass@host:port/db`)
+
+### 3. Configure Environment Variables
+
+**In Railway, go to your main service (aegis-horizon) → Variables tab:**
+
+Add these variables (replace with actual values):
+
+```
+# Database (from PostgreSQL service)
+DATABASE_URL=postgresql://user:password@container-hostname:5432/aegis_horizon
+
+# Authentication (Clerk)
+CLERK_PUBLISHABLE_KEY=pk_live_your_key_here
+CLERK_SECRET_KEY=sk_live_your_key_here
+
+# NextAuth
+NEXTAUTH_SECRET=generate-a-random-32-character-string
+NEXTAUTH_URL=https://aegishz.com
+
+# Stripe
+STRIPE_PUBLISHABLE_KEY=pk_live_your_key_here
+STRIPE_SECRET_KEY=sk_live_your_key_here
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_here
+
+# Cloudflare R2
+CLOUDFLARE_R2_ACCESS_KEY_ID=your_access_key
+CLOUDFLARE_R2_SECRET_ACCESS_KEY=your_secret_key
+CLOUDFLARE_R2_BUCKET_NAME=aegis-horizon
+CLOUDFLARE_R2_ACCOUNT_ID=your_account_id
+
+# Email (Resend)
+RESEND_API_KEY=re_your_api_key_here
+
+# AI (Anthropic)
+ANTHROPIC_API_KEY=sk-ant-your_api_key_here
+
+# Environment
+NODE_ENV=production
+NEXT_PUBLIC_APP_URL=https://aegishz.com
+NEXT_PUBLIC_ENVIRONMENT=production
+```
+
+**Note:** Do NOT commit these to GitHub. They stay in Railway only.
+
+### 4. Configure Build & Start Commands
+
+**In Railway, go to service → Settings:**
+
+- **Root Directory:** `.` (current directory)
+- **Build Command:** `npm run build`
+- **Start Command:** `npm start`
+- **Node Version:** 20 (or latest LTS)
+
+### 5. Run Database Migrations
+
+**Option A: Via Railway CLI (if installed locally)**
+```bash
+railway run npm run db:push
+railway run npm run db:seed
+```
+
+**Option B: Via Railway Deployments**
+1. After configuring variables, trigger a new deployment
+2. In deployment logs, Railway will run the build command
+3. Once live, SSH into the container and run migrations:
+```bash
+railway run bash
+npm run db:push
+npm run db:seed
+exit
+```
+
+**Expected:**
+- Database schema created
+- (Optional) Seed data inserted
+
+### 6. Configure Custom Domain (aegishz.com)
+
+**In Railway, go to service → Networking:**
+
+1. Click **+ Add Custom Domain**
+2. Enter: `aegishz.com`
+3. Railway generates DNS records (CNAME or A record)
+4. Note the target value (e.g., `example.railway.app`)
+
+**Copy the CNAME or A record to configure in your domain registrar (Namecheap).**
+
+### 7. Verify Deployment Status
+
+**In Railway Deployments tab:**
+- Watch for green checkmark (✅ deployment successful)
+- Check logs for any errors
+- Verify no build errors or runtime issues
+
+**Expected:**
+- Service running
+- No error logs
+- Ready for traffic
+
+### 8. Test Health Endpoint
+
+Once deployed, test:
+```bash
+curl https://aegishz.com/api/health
+```
+
+**Expected response:**
+```json
+{ "status": "ok" }
+```
+
+### 9. Verify Database Connection
+
+In Railway logs, confirm:
+```
+Database connection successful
+Migrations completed
+```
+
+### 10. Verify Authentication
+
+1. Go to https://aegishz.com
+2. You should see Aegis Horizon landing page
+3. Try signing up with a test account
+4. Verify Clerk authentication works
+5. Confirm you can create an org
+
+---
+
+## DNS Configuration (Namecheap)
+
+Once Railway gives you the CNAME or A record, configure your domain:
+
+**Namecheap example:**
+1. Log in to Namecheap → Dashboard
+2. Find aegishz.com → Click **Manage**
+3. Go to **Advanced DNS** tab
+4. Add the Railway CNAME or A record from step 6 above
+5. Save
+6. Wait 5-10 minutes for DNS propagation
+
+**Check DNS propagation:**
+```bash
+nslookup aegishz.com
+# Should resolve to Railway's IP/CNAME
+```
+
+---
+
+## Automatic Deployments
+
+Once configured, every push to GitHub triggers automatic deployment:
+
+```bash
+# Local development
+git add .
+git commit -m "feat: description"
+git push origin main
+
+# Railway automatically:
+# 1. Detects push to GitHub
+# 2. Pulls latest code
+# 3. Runs npm install
+# 4. Runs npm run build
+# 5. Deploys new version
+# 6. Restarts service (no downtime with Railway's deployment strategy)
+```
+
+---
+
+## Monitoring & Health
+
+**In Railway dashboard:**
+
+- **Deployments** tab: Watch build/deploy progress
+- **Logs** tab: Real-time application logs
+- **Metrics** tab: CPU, Memory, Network usage
+- **Monitoring** tab: Set up alerts for errors/high resource usage
+
+---
+
+## Rollback Procedure
+
+If something breaks:
+
+1. Go to Railway **Deployments** tab
+2. Find the previous working deployment
+3. Click **Rollback**
+4. Service immediately reverts to that version
+
+---
+
+## Webhook Configuration (Optional)
+
+For integrations that need to call your API:
+
+In Railway, go to **Webhooks** tab:
+- Create webhook for deployment events
+- Useful for CI/CD notifications
+
+---
+
+## Verification Checklist
+
+Before considering launch complete:
+
+- [ ] PostgreSQL created and connected
+- [ ] All environment variables set (no blanks)
+- [ ] Build command succeeds (check logs)
+- [ ] Start command works (no startup errors)
+- [ ] Database migrations ran (check logs)
+- [ ] Health endpoint responds (`/api/health` returns 200)
+- [ ] Authentication works (can sign up)
+- [ ] Custom domain added to Railway
+- [ ] DNS configured in Namecheap
+- [ ] HTTPS working (green lock icon)
+- [ ] No errors in deployment logs
+- [ ] Metrics show normal resource usage
+
+---
+
+## Troubleshooting
+
+**If deployment fails:**
+
+1. Check **Logs** tab for error message
+2. Common issues:
+   - Missing environment variables → Add to Variables tab
+   - Database connection error → Verify DATABASE_URL
+   - Build error → Check build logs
+   - Missing Node modules → Ensure package.json is committed
+
+**If domain isn't resolving:**
+1. Verify DNS records are in Namecheap
+2. Wait 10 minutes for propagation
+3. Check with `nslookup aegishz.com`
+
+**If database migrations fail:**
+1. SSH into container via Railway CLI
+2. Run `npm run db:push` manually
+3. Check for schema conflicts
+
+---
+
+## Success Confirmation
+
+Once complete, report:
+
+```
+✅ Railway Deployment Complete
+
+Project: https://aegis-horizon.up.railway.app
+Domain: https://aegishz.com
+Database: PostgreSQL connected
+Status: Production ready
+
+Health check: /api/health ✅
+Authentication: Working ✅
+Database migrations: Complete ✅
+```
+
+---
+
+## Post-Deployment
+
+Once live:
+
+1. **Test critical flows:**
+   - Sign up → Create org → Create lead
+   - Create opportunity → AI copilot summarize
+   - Create workflow → Dry-run → Activate
+   - Check dashboard → Revenue forecast
+
+2. **Monitor for issues:**
+   - Watch logs for errors
+   - Check metrics for resource spikes
+   - Verify email sending (Resend)
+   - Test file uploads (R2)
+
+3. **Configure integrations:**
+   - Add Stripe webhook endpoints
+   - Set up Slack notifications
+   - Configure email forwarding
+   - Test API with partner integrations
+
+---
+
+## Final Notes
+
+- Railway bills per service/database usage (very affordable for early stage)
+- PostgreSQL auto-backs up daily
+- You can add team members in Railway dashboard
+- Enable deploy notifications (email on failure)
+- Consider setting up uptime monitoring (e.g., Uptime Robot)
+
+**Aegis Horizon is now live at https://aegishz.com** 🚀

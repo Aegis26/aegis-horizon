@@ -73,6 +73,7 @@ router.post("/orgs/:orgId/documents/:documentId/signature-requests", ...gate, as
     expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : undefined,
     createdByUserId: req.currentUser!.id,
   }).returning();
+  const configuredAppUrl = process.env.APP_URL?.trim().replace(/\/+$/, "");
   const domain = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim();
   const issued: { email: string; signingUrl: string; notificationStatus: "sent" | "failed" | "not_configured" }[] = [];
 
@@ -87,7 +88,7 @@ router.post("/orgs/:orgId/documents/:documentId/signature-requests", ...gate, as
       tokenHash: createHash("sha256").update(token).digest("hex"),
     }).returning();
     const signingPath = `/signatures/${token}`;
-    const url = domain ? `https://${domain}${signingPath}` : signingPath;
+    const url = configuredAppUrl ? `${configuredAppUrl}${signingPath}` : domain ? `https://${domain}${signingPath}` : signingPath;
     let notificationStatus: "sent" | "failed" | "not_configured" = "not_configured";
     if (domain && process.env.RESEND_API_KEY) {
       try {

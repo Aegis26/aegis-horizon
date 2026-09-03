@@ -4,8 +4,10 @@ import {
   useSummarizeWithCopilot,
   useGetCopilotNextAction,
   useDraftCopilotEmail,
+  useUpdateCommunicationSettings,
 } from "@workspace/api-client-react";
 import type { CopilotSummary, NextActionRecommendation, DraftCopilotEmail200 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,11 +19,13 @@ import { formatPredictionPercentage } from "@/lib/format";
 
 export function AccountCopilotTab({ orgId, accountId }: { orgId: string; accountId: string }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const { data: budget, error: budgetError } = useGetAiBudgetStatus(orgId, {
+  const { data: budget, error: budgetError, refetch: refetchBudget } = useGetAiBudgetStatus(orgId, {
     query: { queryKey: getGetAiBudgetStatusQueryKey(orgId), retry: false }
   });
 
+  const enableAi = useUpdateCommunicationSettings();
   const summarize = useSummarizeWithCopilot();
   const getNextAction = useGetCopilotNextAction();
   const draftEmail = useDraftCopilotEmail();
@@ -63,17 +67,54 @@ export function AccountCopilotTab({ orgId, accountId }: { orgId: string; account
     );
   }
 
+  if (budgetError) {
+    return (
+      <div className="flex min-h-[400px] flex-col items-center justify-center rounded-lg border border-destructive/30 bg-card p-8 text-center">
+        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+          <AlertTriangle className="h-8 w-8 text-destructive" />
+        </div>
+        <h3 className="mb-2 font-display text-xl font-bold">Could not load Copilot</h3>
+        <p className="mb-6 max-w-md text-muted-foreground">
+          {(budgetError as Error).message || "The AI service status could not be loaded."}
+        </p>
+        <Button variant="outline" onClick={() => void refetchBudget()}>Try Again</Button>
+      </div>
+    );
+  }
+
   if (budget && !isConsentEnabled) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center bg-card border border-primary/10 rounded-lg p-8">
         <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-6">
           <Lock className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h3 className="text-xl font-bold font-display mb-2">AI Features Disabled</h3>
+        <h3 className="text-xl font-bold font-display mb-2">AI Processing Consent Required</h3>
         <p className="text-muted-foreground max-w-md mb-6">
-          Organization consent is required to process data with AI models.
-          An administrator must enable this in Settings.
+          Enable AI processing to use summaries, drafts, and next-action recommendations.
+          Selected CRM content will be sent to Anthropic when you request these features.
         </p>
+        <Button
+          disabled={enableAi.isPending}
+          onClick={() =>
+            enableAi.mutate(
+              { orgId, data: { aiAnalysisEnabled: true } },
+              {
+                onSuccess: () => {
+                  void queryClient.invalidateQueries({ queryKey: getGetAiBudgetStatusQueryKey(orgId) });
+                  toast({ title: "AI features enabled", description: "Copilot is ready to use." });
+                },
+                onError: (error) =>
+                  toast({
+                    title: "Could not enable AI",
+                    description: (error as Error).message,
+                    variant: "destructive",
+                  }),
+              },
+            )
+          }
+        >
+          {enableAi.isPending ? "Enabling..." : "Enable AI"}
+        </Button>
       </div>
     );
   }

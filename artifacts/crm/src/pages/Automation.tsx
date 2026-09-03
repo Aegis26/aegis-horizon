@@ -1,21 +1,32 @@
 import { useOrgStore } from "@/store/org-store";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Lock, Plus, Workflow as WorkflowIcon, Bot, CheckSquare, Activity } from "lucide-react";
+import { Lock, Plus, Workflow as WorkflowIcon, Bot, CheckSquare, Activity, AlertTriangle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useGetAiBudgetStatus, getGetAiBudgetStatusQueryKey, useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
+import {
+  useGetAiBudgetStatus,
+  getGetAiBudgetStatusQueryKey,
+  useGetMe,
+  getGetMeQueryKey,
+  useUpdateCommunicationSettings,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import { WorkflowsTab } from "@/components/automation/WorkflowsTab";
 import { AgentsTab } from "@/components/automation/AgentsTab";
 import { TasksTab } from "@/components/automation/TasksTab";
 
 export default function Automation() {
   const { selectedOrgId } = useOrgStore();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const enableAi = useUpdateCommunicationSettings();
 
   const { data: me } = useGetMe({ query: { queryKey: getGetMeQueryKey() } });
   const role = me?.orgs.find(o => o.org.id === selectedOrgId)?.role || "user";
   const canManage = ["owner", "admin", "manager"].includes(role);
 
-  const { data: budget, error, isLoading } = useGetAiBudgetStatus(selectedOrgId || "", {
+  const { data: budget, error, isLoading, refetch } = useGetAiBudgetStatus(selectedOrgId || "", {
     query: {
       enabled: !!selectedOrgId,
       retry: false,
@@ -37,6 +48,21 @@ export default function Automation() {
         <Link href="/billing">
           <Button size="lg" className="font-display">Manage Features</Button>
         </Link>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-[60vh] max-w-md flex-col items-center justify-center text-center mx-auto">
+        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+          <AlertTriangle className="h-8 w-8 text-destructive" />
+        </div>
+        <h2 className="mb-2 font-display text-2xl font-bold tracking-tight">Could not load AI status</h2>
+        <p className="mb-8 text-muted-foreground">
+          {(error as Error).message || "The AI service status could not be loaded."}
+        </p>
+        <Button variant="outline" onClick={() => void refetch()}>Try Again</Button>
       </div>
     );
   }
@@ -65,15 +91,50 @@ export default function Automation() {
       </header>
 
       <div className="p-8 max-w-7xl mx-auto">
-        {!budget?.consentEnabled && (
+        {budget && !budget.consentEnabled && (
           <div className="mb-6 bg-warning/10 border border-warning/30 p-4 rounded-lg flex items-start gap-3 animate-slideUpReveal">
             <Lock className="h-5 w-5 text-warning shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-bold text-warning font-display">AI Features Disabled</h3>
+            <div className="flex-1">
+              <h3 className="font-bold text-warning font-display">AI Processing Consent Required</h3>
               <p className="text-sm text-warning-foreground mt-1">
-                Your organization has not consented to AI processing. Workflows will run, but AI Agents and AI-based actions will fail. Enable in Settings.
+                Enable AI processing to use Copilot summaries, drafts, next actions, and AI agents.
+                Selected CRM content will be sent to Anthropic when you request these features.
               </p>
             </div>
+            {canManage ? (
+              <Button
+                size="sm"
+                disabled={enableAi.isPending}
+                onClick={() => {
+                  if (!selectedOrgId) return;
+                  enableAi.mutate(
+                    { orgId: selectedOrgId, data: { aiAnalysisEnabled: true } },
+                    {
+                      onSuccess: () => {
+                        void queryClient.invalidateQueries({
+                          queryKey: getGetAiBudgetStatusQueryKey(selectedOrgId),
+                        });
+                        toast({
+                          title: "AI features enabled",
+                          description: "Copilot and AI agents are now available for this organization.",
+                        });
+                      },
+                      onError: (updateError) => {
+                        toast({
+                          title: "Could not enable AI",
+                          description: (updateError as Error).message,
+                          variant: "destructive",
+                        });
+                      },
+                    },
+                  );
+                }}
+              >
+                {enableAi.isPending ? "Enabling..." : "Enable AI"}
+              </Button>
+            ) : (
+              <span className="text-xs text-warning-foreground">Ask an organization manager to enable AI.</span>
+            )}
           </div>
         )}
 

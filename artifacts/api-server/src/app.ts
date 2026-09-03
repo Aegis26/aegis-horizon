@@ -51,12 +51,10 @@ app.use(express.urlencoded({ extended: true }));
 // CLERK_PUBLISHABLE_KEY when the host doesn't map to a custom domain.
 app.use(
   clerkMiddleware((req) => ({
-    publishableKey: process.env.CLERK_PROXY_URL
-      ? publishableKeyFromHost(
-          getClerkProxyHost(req) ?? "",
-          process.env.CLERK_PUBLISHABLE_KEY,
-        )
-      : process.env.CLERK_PUBLISHABLE_KEY,
+    publishableKey: publishableKeyFromHost(
+      getClerkProxyHost(req) ?? "",
+      process.env.CLERK_PUBLISHABLE_KEY,
+    ),
   })),
 );
 

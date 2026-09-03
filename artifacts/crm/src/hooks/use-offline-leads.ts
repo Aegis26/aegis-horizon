@@ -29,7 +29,7 @@ export function useOfflineLeads(orgId?: string) {
     const unsubscribe = subscribeToLeadQueue(() => void refresh());
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
-    if (navigator.onLine) void syncLeadQueue();
+    void syncLeadQueue();
     return () => {
       unsubscribe();
       window.removeEventListener("online", onOnline);

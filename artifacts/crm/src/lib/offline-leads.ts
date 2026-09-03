@@ -94,11 +94,10 @@ async function deleteQueuedLead(id: string): Promise<void> {
 
 export function syncLeadQueue(): Promise<void> {
   if (syncPromise) return syncPromise;
-  if (!navigator.onLine) return Promise.resolve();
 
   syncPromise = (async () => {
     notify();
-    while (navigator.onLine) {
+    while (true) {
       const [record] = await listQueuedLeads();
       if (!record) break;
       try {

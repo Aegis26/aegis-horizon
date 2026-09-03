@@ -53,11 +53,27 @@ export default function Leads() {
   const [editRule, setEditRule] = useState<LeadScoringRule | null>(null);
   const [ruleOpen, setRuleOpen] = useState(false);
 
-  const { data: leads, isLoading } = useListLeads(orgId, undefined, {
-    query: { enabled: !!orgId, retry: false, queryKey: getListLeadsQueryKey(orgId) },
+  const {
+    data: leads,
+    isLoading,
+    isError: leadsFailed,
+    error: leadsError,
+    refetch: refetchLeads,
+  } = useListLeads(orgId, undefined, {
+    query: {
+      enabled: !!orgId,
+      retry: false,
+      networkMode: "always",
+      queryKey: getListLeadsQueryKey(orgId),
+    },
   });
   const { data: rules } = useListLeadScoringRules(orgId, {
-    query: { enabled: !!orgId, retry: false, queryKey: getListLeadScoringRulesQueryKey(orgId) },
+    query: {
+      enabled: !!orgId,
+      retry: false,
+      networkMode: "always",
+      queryKey: getListLeadScoringRulesQueryKey(orgId),
+    },
   });
 
   const { pendingLeads, online, syncing, queueLead, syncNow } = useOfflineLeads(orgId);
@@ -88,7 +104,10 @@ export default function Leads() {
   const onError = (title: string) => (e: unknown) =>
     toast({ title, description: (e as Error).message, variant: "destructive" });
 
-  if (isLoading && online && pendingLeads.length === 0) return <div className="p-4 sm:p-8"><div className="skeleton h-64 rounded-xl"></div></div>;
+  const apiConnected = !leadsFailed && leads !== undefined;
+  const connectionAvailable = online || apiConnected;
+
+  if (isLoading && pendingLeads.length === 0) return <div className="p-4 sm:p-8"><div className="skeleton h-64 rounded-xl"></div></div>;
 
   return (
     <div>
@@ -101,7 +120,7 @@ export default function Leads() {
           <Button
             variant="outline"
             className="gap-2 flex-1 sm:flex-none"
-            disabled={rescore.isPending || !online}
+            disabled={rescore.isPending || !connectionAvailable}
             onClick={() =>
               rescore.mutate({ orgId }, {
                 onSuccess: (r) => { invalidateLeads(); toast({ title: "Leads rescored", description: `${r.leadsRescored} leads rescored and routed.` }); },
@@ -118,17 +137,17 @@ export default function Leads() {
       </header>
 
       <div className="p-4 sm:p-8">
-        <div className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm ${online ? "border-primary/20 bg-primary/5" : "border-amber-500/30 bg-amber-500/10"}`}>
+        <div className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm ${connectionAvailable ? "border-primary/20 bg-primary/5" : "border-amber-500/30 bg-amber-500/10"}`}>
           <div className="flex items-center gap-2">
-            {online ? <Cloud className="h-4 w-4 text-primary" /> : <CloudOff className="h-4 w-4 text-amber-400" />}
-            <span>{online ? "Online" : "Offline"}</span>
+            {connectionAvailable ? <Cloud className="h-4 w-4 text-primary" /> : <CloudOff className="h-4 w-4 text-amber-400" />}
+            <span>{connectionAvailable ? "Connected" : "Offline"}</span>
             {pendingLeads.length > 0 && (
               <span className="text-muted-foreground">
                 · {pendingLeads.length} lead{pendingLeads.length === 1 ? "" : "s"} pending sync
               </span>
             )}
           </div>
-          {pendingLeads.length > 0 && online && (
+          {pendingLeads.length > 0 && connectionAvailable && (
             <Button size="sm" variant="ghost" className="h-7 gap-1.5" disabled={syncing} onClick={() => void syncNow()}>
               <LoaderCircle className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
               {syncing ? "Syncing" : "Sync now"}
@@ -158,7 +177,26 @@ export default function Leads() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pendingLeads.length === 0 && (!leads || leads.length === 0) ? (
+                    {leadsFailed && pendingLeads.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="p-0">
+                          <div className="flex min-h-[320px] flex-col items-center justify-center bg-background/30 px-6 py-16 text-center">
+                            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-destructive/10">
+                              <CloudOff className="h-10 w-10 text-destructive opacity-70" />
+                            </div>
+                            <h3 className="mb-2 font-display text-2xl font-bold">Could not load leads</h3>
+                            <p className="mb-6 max-w-md text-muted-foreground">
+                              {leadsError instanceof Error
+                                ? leadsError.message
+                                : "Check your connection and try again."}
+                            </p>
+                            <Button variant="outline" className="gap-2" onClick={() => void refetchLeads()}>
+                              <RefreshCw className="h-4 w-4" /> Try again
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : pendingLeads.length === 0 && (!leads || leads.length === 0) ? (
                       <TableRow>
                         <TableCell colSpan={8} className="p-0">
                           <div className="flex flex-col items-center justify-center min-h-[320px] px-6 py-16 bg-background/30 text-center">

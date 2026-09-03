@@ -14,7 +14,6 @@ import {
   type User,
 } from "@workspace/db";
 import { featuresForPlan } from "../lib/catalog";
-import { seedDemoData } from "../lib/seedDemoData";
 import { getClientIp, isIpAllowed } from "../lib/clientIp";
 
 declare global {
@@ -116,7 +115,6 @@ export async function attachUser(
       featureKey: "platform",
       action: "org.created",
     });
-    await seedDemoData(org.id, user.id);
   }
 
   req.currentUser = user;

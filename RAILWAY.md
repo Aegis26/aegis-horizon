@@ -74,6 +74,11 @@ In Clerk, add these production origins and redirect URLs:
 Use the same production publishable key for
 `CLERK_PUBLISHABLE_KEY` and `VITE_CLERK_PUBLISHABLE_KEY`.
 
+For a directly managed external Clerk instance, leave `CLERK_PROXY_URL` and
+`VITE_CLERK_PROXY_URL` unset so the browser connects to that Clerk instance
+directly. Replit-managed production auth uses those proxy variables when they
+are provisioned by Replit.
+
 ## Replit-managed dependency blockers
 
 The following capabilities are not portable merely by setting Railway

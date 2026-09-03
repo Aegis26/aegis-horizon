@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, lt, or, sql } from "drizzle-orm";
 import {
   db,
   accounts,
@@ -1532,7 +1532,21 @@ router.get("/orgs/:orgId/forecast/weighted", ...gate, async (req, res): Promise<
     const key = bucketFor(d);
     if (!buckets.has(key)) buckets.set(key, { periodStart: key, weightedRevenue: 0, opportunityCount: 0 });
   }
-  const rows = await db.select().from(opportunities).where(eq(opportunities.orgId, req.currentOrg!.id));
+  const startDate = start.toISOString().slice(0, 10);
+  const endDate = end.toISOString().slice(0, 10);
+  const rows = await db
+    .select({
+      expectedCloseDate: opportunities.expectedCloseDate,
+      forecastCategory: opportunities.forecastCategory,
+      probability: opportunities.probability,
+      value: opportunities.value,
+    })
+    .from(opportunities)
+    .where(and(
+      eq(opportunities.orgId, req.currentOrg!.id),
+      gte(opportunities.expectedCloseDate, startDate),
+      lt(opportunities.expectedCloseDate, endDate),
+    ));
   for (const opportunity of rows) {
     if (opportunity.forecastCategory === "closed_lost" || !opportunity.expectedCloseDate) continue;
     const close = new Date(`${opportunity.expectedCloseDate}T00:00:00.000Z`);

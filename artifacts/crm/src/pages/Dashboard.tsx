@@ -1,70 +1,25 @@
-import { useState } from "react";
-import {
-  useGetOrgDashboard, getGetOrgDashboardQueryKey,
-  useListChurnPredictions, getListChurnPredictionsQueryKey,
-  useListAccounts, getListAccountsQueryKey,
-  useGetWeightedRevenueForecast, getGetWeightedRevenueForecastQueryKey
-} from "@workspace/api-client-react";
+import { lazy, Suspense } from "react";
+import { useGetOrgDashboard, getGetOrgDashboardQueryKey } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Building2, Users, Target, Activity, AlertTriangle, ArrowRight, TrendingUp } from "lucide-react";
-import { formatDistanceToNow, parseISO, format } from "date-fns";
-import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
-import { formatPredictionPercentage } from "@/lib/format";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Building2, Users, Target, Activity } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 
-const CHART_COLORS = {
-  blue: "#00B4D8",
-  purple: "#795EFF",
-  green: "#009118",
-  red: "#A60808",
-  pink: "#ec4899",
-};
+const DashboardInsights = lazy(() => import("@/components/dashboard/DashboardInsights"));
 
 export default function Dashboard() {
   const { selectedOrgId } = useOrgStore();
-  const [groupBy, setGroupBy] = useState<"weekly" | "monthly">("monthly");
 
-  const { data: dashboard, isLoading: dashboardLoading, isFetching: dashboardFetching } = useGetOrgDashboard(selectedOrgId || "", {
+  const { data: dashboard, isLoading: dashboardLoading } = useGetOrgDashboard(selectedOrgId || "", {
     query: {
       enabled: !!selectedOrgId,
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
       queryKey: getGetOrgDashboardQueryKey(selectedOrgId || "")
     }
   });
 
-  const { data: forecast, isLoading: forecastLoading, isFetching: forecastFetching } = useGetWeightedRevenueForecast(selectedOrgId || "", undefined, {
-    query: {
-      enabled: !!selectedOrgId,
-      queryKey: getGetWeightedRevenueForecastQueryKey(selectedOrgId || "")
-    }
-  });
-
-  const { data: churnPredictions, isLoading: churnLoading } = useListChurnPredictions(selectedOrgId || "", {
-    query: {
-      enabled: !!selectedOrgId,
-      queryKey: getListChurnPredictionsQueryKey(selectedOrgId || "")
-    }
-  });
-
-  const { data: accounts } = useListAccounts(selectedOrgId || "", undefined, {
-    query: {
-      enabled: !!selectedOrgId,
-      queryKey: getListAccountsQueryKey(selectedOrgId || "")
-    }
-  });
-
-  const isLoading = dashboardLoading || dashboardFetching || forecastLoading || forecastFetching || churnLoading;
-
-  const getAccountName = (id: string) => accounts?.find(a => a.id === id)?.name || "Unknown Account";
-
-  // Filter for active risks (unresolved and high/critical)
-  const atRiskAccounts = churnPredictions?.filter(p =>
-    !p.resolvedAt && (p.riskLevel === 'high' || p.riskLevel === 'critical')
-  ).slice(0, 5) || [];
-
-  if (isLoading || !dashboard) {
+  if (dashboardLoading || !dashboard) {
     return <div className="p-8 space-y-6">
       <div className="skeleton h-8 w-48 rounded"></div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -73,12 +28,6 @@ export default function Dashboard() {
       <div className="skeleton h-[400px] rounded-xl"></div>
     </div>;
   }
-
-  // Handle mock grouping if backend doesn't support grouping query param but returns daily/weekly
-  // The hook does support `groupBy` via params technically, but let's fake a toggle for visuals if needed
-  // We'll just pass it if the API supports it. The schema says `GetWeightedRevenueForecastParams = { groupBy }`
-  // Actually, let's just use the returned periods.
-  const formatCurrency = (val: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(val);
 
   return (
     <div>
@@ -143,157 +92,9 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        <Card className="col-span-full border-primary/20 shadow-[0_0_16px_rgba(0,180,216,0.05)] bg-gradient-to-b from-card to-background">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2 font-display text-xl text-primary">
-                <TrendingUp className="h-5 w-5" />
-                90-Day Weighted Revenue Forecast
-              </CardTitle>
-              <CardDescription>Predicted recognized revenue based on historical conversion rates and current pipeline velocity.</CardDescription>
-            </div>
-            <div className="w-32">
-              <Select value={groupBy} onValueChange={(v: any) => setGroupBy(v)}>
-                <SelectTrigger className="bg-background/50 border-primary/20 focus:ring-primary h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {forecast && forecast.periods && forecast.periods.length > 0 ? (
-              <div className="h-[350px] w-full mt-4">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={forecast.periods} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={CHART_COLORS.blue} stopOpacity={0.4} />
-                        <stop offset="95%" stopColor={CHART_COLORS.blue} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                    <XAxis
-                      dataKey="periodStart"
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(val) => {
-                        try { return format(parseISO(val), groupBy === 'weekly' ? 'MMM d' : 'MMM yyyy'); }
-                        catch(e) { return val; }
-                      }}
-                      dy={10}
-                    />
-                    <YAxis
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(val) => `$${(val / 1000)}k`}
-                      dx={-10}
-                    />
-                    <RechartsTooltip
-                      content={({ active, payload, label }) => {
-                        if (active && payload && payload.length) {
-                          return (
-                            <div className="bg-popover border border-border rounded-lg shadow-xl p-3">
-                              <p className="text-sm text-muted-foreground mb-1">
-                                {(() => {
-                                  try { return format(parseISO(label), groupBy === 'weekly' ? 'MMM d, yyyy' : 'MMMM yyyy'); }
-                                  catch(e) { return label; }
-                                })()}
-                              </p>
-                              <p className="text-lg font-bold text-primary font-mono">
-                                {formatCurrency(payload[0].value as number)}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {payload[0].payload.opportunityCount} active opportunities
-                              </p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                      cursor={{ fill: 'rgba(0,180,216,0.05)', stroke: 'none' }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="weightedRevenue"
-                      stroke={CHART_COLORS.blue}
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#colorRevenue)"
-                      activeDot={{ r: 6, fill: CHART_COLORS.blue, stroke: '#1A1F3A', strokeWidth: 2 }}
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-[350px] w-full flex items-center justify-center text-muted-foreground border border-dashed border-border/50 rounded-xl mt-4">
-                No forecast data available
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {atRiskAccounts.length > 0 && (
-          <div className="animate-slideUpReveal">
-            <Card className="border-destructive/30 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
-              <CardHeader className="border-b border-destructive/10 bg-destructive/5">
-                <CardTitle className="flex items-center justify-between font-display text-xl text-destructive">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5" />
-                    Accounts at Risk
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="divide-y divide-border/50">
-                  {atRiskAccounts.map(pred => (
-                    <div key={pred.id} className="p-6 flex flex-col md:flex-row gap-6 justify-between items-start md:items-center hover:bg-card/50 transition-colors">
-                      <div className="space-y-2 max-w-xl">
-                        <div className="flex items-center gap-3">
-                          <Link href={`/accounts/${pred.accountId}`}>
-                            <h3 className="text-lg font-bold font-display hover:text-primary transition-colors cursor-pointer">{getAccountName(pred.accountId)}</h3>
-                          </Link>
-                          <span className={`text-xs px-2 py-0.5 rounded font-mono uppercase font-bold ${
-                            pred.riskLevel === 'critical' ? 'bg-destructive text-destructive-foreground' : 'bg-warning/20 text-warning'
-                          }`}>
-                            {pred.riskLevel} Risk
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          <span className="font-semibold text-foreground">Action needed:</span> {pred.recommendedAction}
-                        </p>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {pred.riskFactors.map((f, i) => (
-                            <span key={i} className="text-xs border border-border bg-background px-2 py-1 rounded">
-                              {f.factor}: {f.detail}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="shrink-0 flex items-center gap-4 text-sm font-mono text-muted-foreground">
-                        <div className="text-right">
-                          <p className="uppercase text-[10px] tracking-wider mb-1">Score</p>
-                          <p className="text-lg font-bold text-foreground">{formatPredictionPercentage(pred.riskScore)}</p>
-                        </div>
-                        <Link href={`/accounts/${pred.accountId}`}>
-                          <Button size="sm" variant="outline" className="gap-2 border-primary/20 hover:border-primary/50">
-                            Review <ArrowRight className="h-3 w-3" />
-                          </Button>
-                        </Link>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+        <Suspense fallback={<div className="h-[460px] skeleton rounded-xl" />}>
+          <DashboardInsights orgId={selectedOrgId!} />
+        </Suspense>
 
         <Card className="col-span-full">
           <CardHeader>

@@ -1,6 +1,9 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import path from "node:path";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import {
@@ -56,5 +59,36 @@ app.use(
 );
 
 app.use("/api", router);
+
+if (process.env.NODE_ENV === "production") {
+  const defaultCrmDistDir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../crm/dist/public",
+  );
+  const crmDistDir = path.resolve(
+    process.env.CRM_DIST_DIR ?? defaultCrmDistDir,
+  );
+  const crmIndexPath = path.join(crmDistDir, "index.html");
+
+  if (!existsSync(crmIndexPath)) {
+    throw new Error(
+      `CRM production build not found at "${crmIndexPath}". Run the CRM build before starting the API server.`,
+    );
+  }
+
+  app.use(express.static(crmDistDir, { index: false }));
+  app.use((req, res, next) => {
+    if (
+      (req.method !== "GET" && req.method !== "HEAD") ||
+      req.path.startsWith("/api/") ||
+      req.path === "/api"
+    ) {
+      next();
+      return;
+    }
+
+    res.sendFile(crmIndexPath);
+  });
+}
 
 export default app;

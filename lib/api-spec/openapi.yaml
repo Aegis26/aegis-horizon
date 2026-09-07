@@ -2457,6 +2457,8 @@ components:
         state: { type: ["string", "null"] }
         healthScore: { type: ["string", "null"] }
         riskLevel: { type: ["string", "null"] }
+        ownerUserId: { type: ["string", "null"], format: uuid }
+        createdByUserId: { type: ["string", "null"], format: uuid }
         createdAt: { type: ["string", "null"] }
     Opportunity:
       type: object
@@ -2470,6 +2472,8 @@ components:
         value: { type: ["string", "null"] }
         expectedCloseDate: { type: ["string", "null"] }
         forecastCategory: { type: ["string", "null"] }
+        ownerUserId: { type: ["string", "null"], format: uuid }
+        createdByUserId: { type: ["string", "null"], format: uuid }
         createdAt: { type: ["string", "null"] }
     FeatureGateError:
       type: object
@@ -2507,6 +2511,8 @@ components:
         ltv: { type: ["string", "null"] }
         nextRenewalDate: { type: ["string", "null"] }
         isActive: { type: boolean }
+        ownerUserId: { type: ["string", "null"], format: uuid }
+        createdByUserId: { type: ["string", "null"], format: uuid }
         metadata: { type: object, additionalProperties: true }
         files:
           type: array
@@ -2547,6 +2553,7 @@ components:
         riskLevel: { type: ["string", "null"] }
         nextRenewalDate: { type: ["string", "null"] }
         metadata: { type: object, additionalProperties: true }
+        ownerUserId: { type: ["string", "null"], format: uuid }
     AccountUpdate:
       type: object
       properties:
@@ -2565,6 +2572,7 @@ components:
         riskLevel: { type: ["string", "null"] }
         nextRenewalDate: { type: ["string", "null"] }
         metadata: { type: object, additionalProperties: true }
+        ownerUserId: { type: ["string", "null"], format: uuid }
     Contact:
       type: object
       required: [id, accountId, firstName, lastName, isActive]
@@ -2581,6 +2589,8 @@ components:
         reportsToContactId: { type: ["string", "null"] }
         isActive: { type: boolean }
         metadata: { type: object, additionalProperties: true }
+        ownerUserId: { type: ["string", "null"], format: uuid }
+        createdByUserId: { type: ["string", "null"], format: uuid }
         createdAt: { type: ["string", "null"] }
     ContactCreate:
       type: object
@@ -2595,6 +2605,7 @@ components:
         seniority: { type: ["string", "null"] }
         reportsToContactId: { type: ["string", "null"] }
         metadata: { type: object, additionalProperties: true }
+        ownerUserId: { type: ["string", "null"], format: uuid }
     ContactUpdate:
       type: object
       properties:
@@ -2607,6 +2618,7 @@ components:
         seniority: { type: ["string", "null"] }
         reportsToContactId: { type: ["string", "null"] }
         metadata: { type: object, additionalProperties: true }
+        ownerUserId: { type: ["string", "null"], format: uuid }
     BulkImportRequest:
       type: object
       required: [accounts]
@@ -2930,6 +2942,7 @@ components:
         value: { type: ["string", "null"] }
         expectedCloseDate: { type: ["string", "null"] }
         nextAction: { type: ["string", "null"] }
+        ownerUserId: { type: ["string", "null"], format: uuid }
     OpportunityUpdate:
       type: object
       properties:
@@ -2970,6 +2983,7 @@ components:
         lossReason: { type: ["string", "null"] }
         nextAction: { type: ["string", "null"] }
         ownerUserId: { type: ["string", "null"] }
+        createdByUserId: { type: ["string", "null"], format: uuid }
         ownerName: { type: ["string", "null"] }
         stageHistory:
           type: array
@@ -3001,6 +3015,7 @@ components:
           enum: [new, working, qualified, disqualified]
         score: { type: integer }
         assignedToUserId: { type: ["string", "null"] }
+        createdByUserId: { type: ["string", "null"], format: uuid }
         assignedToName: { type: ["string", "null"] }
         territoryId: { type: ["string", "null"] }
         territoryName: { type: ["string", "null"] }

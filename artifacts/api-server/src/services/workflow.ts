@@ -7,12 +7,14 @@ import {
   leads,
   opportunities,
   opportunityStageHistory,
+  orgUsers,
   tasks,
   workflowExecutions,
   workflows,
   type Workflow,
 } from "@workspace/db";
 import { logger } from "../lib/logger";
+import { appendAuditEvent } from "./audit";
 
 export type WorkflowTrigger = {
   type: "record_created" | "field_change" | "time_based";
@@ -89,9 +91,14 @@ async function executeAction(
   entityType: string,
   entity: Record<string, unknown>,
   action: WorkflowAction,
+  executionId: string,
   actorUserId?: string,
 ) {
   const config = action.config;
+  const candidateOwner = (entity.ownerUserId ?? entity.assignedToUserId ?? actorUserId) as string | undefined;
+  const ownerUserId = candidateOwner && (await db.select({ id: orgUsers.id }).from(orgUsers)
+    .where(and(eq(orgUsers.orgId, workflow.orgId), eq(orgUsers.userId, candidateOwner)))).length
+    ? candidateOwner : undefined;
   if (action.type === "create_task") {
     const accountId = entityType === "account" ? String(entity.id) : (entity.accountId ? String(entity.accountId) : null);
     const opportunityId = entityType === "opportunity" ? String(entity.id) : null;
@@ -102,17 +109,22 @@ async function executeAction(
       title: String(config.title ?? "Follow up"),
       description: typeof config.description === "string" ? config.description : `Created by workflow: ${workflow.name ?? workflow.id}`,
       type: String(config.type ?? "follow_up"),
-      assignedToUserId: (entity.ownerUserId ?? entity.assignedToUserId ?? actorUserId) as string | undefined,
+      assignedToUserId: ownerUserId,
       dueDate: typeof config.dueDate === "string" ? config.dueDate : new Date(Date.now() + 86400000).toISOString().slice(0, 10),
       createdByUserId: actorUserId,
     }).returning();
+    await appendAuditEvent({
+      orgId: workflow.orgId, action: "task.created", entityType: "task",
+      entityId: task.id, actorUserId: ownerUserId ?? null,
+      metadata: { source: "workflow", workflowId: workflow.id, executionId, targetEntityType: entityType, targetEntityId: String(entity.id), ownerUserId: ownerUserId ?? null },
+    });
     return { taskId: task.id };
   }
   if (action.type === "create_recommendation") {
     const sourceKey = `workflow:${workflow.id}:${entity.id}:${workflow.version}:${String(config.key ?? "recommendation")}`;
     const [row] = await db.insert(aiRecommendations).values({
       orgId: workflow.orgId,
-      userId: (entity.ownerUserId ?? entity.assignedToUserId ?? actorUserId) as string | undefined,
+      userId: ownerUserId,
       accountId: entityType === "account" ? String(entity.id) : (entity.accountId ? String(entity.accountId) : undefined),
       opportunityId: entityType === "opportunity" ? String(entity.id) : undefined,
       type: String(config.recommendationType ?? "next_action"),
@@ -122,6 +134,11 @@ async function executeAction(
       source: "workflow",
       sourceKey,
     }).onConflictDoNothing().returning();
+    if (row) await appendAuditEvent({
+      orgId: workflow.orgId, action: "recommendation.created", entityType: "recommendation",
+      entityId: row.id, actorUserId: ownerUserId ?? null,
+      metadata: { source: "workflow", workflowId: workflow.id, executionId, targetEntityType: entityType, targetEntityId: String(entity.id), ownerUserId: ownerUserId ?? null },
+    });
     return { recommendationId: row?.id ?? null };
   }
   if (action.type === "create_opportunity") {
@@ -134,8 +151,10 @@ async function executeAction(
       const [account] = await db.insert(accounts).values({
         orgId: workflow.orgId,
         name: String(entity.company ?? `${entity.firstName ?? ""} ${entity.lastName ?? ""}`).trim(),
-        ownerUserId: (entity.assignedToUserId ?? actorUserId) as string | undefined,
+        ownerUserId,
+        createdByUserId: ownerUserId,
       }).returning();
+      await appendAuditEvent({ orgId: workflow.orgId, action: "account.created", entityType: "account", entityId: account.id, actorUserId: ownerUserId ?? null, metadata: { source: "workflow", workflowId: workflow.id } });
       accountId = account.id;
     }
     const [opportunity] = await db.insert(opportunities).values({
@@ -144,9 +163,11 @@ async function executeAction(
       name: String(config.name ?? `${entity.company ?? "Lead"} - New Business`),
       stage: "prospecting",
       probability: 10,
-      ownerUserId: (entity.assignedToUserId ?? actorUserId) as string | undefined,
+      ownerUserId,
+      createdByUserId: ownerUserId,
       value: config.value == null ? undefined : String(config.value),
     }).returning();
+    await appendAuditEvent({ orgId: workflow.orgId, action: "opportunity.created", entityType: "opportunity", entityId: opportunity.id, actorUserId: ownerUserId ?? null, metadata: { source: "workflow", workflowId: workflow.id } });
     await db.insert(opportunityStageHistory).values({
       orgId: workflow.orgId, opportunityId: opportunity.id, fromStage: null,
       toStage: opportunity.stage, changedByUserId: actorUserId,
@@ -160,6 +181,7 @@ async function executeAction(
     if (entityType === "lead") await db.update(leads).set({ [field]: value }).where(and(eq(leads.orgId, workflow.orgId), eq(leads.id, String(entity.id))));
     if (entityType === "opportunity") await db.update(opportunities).set({ [field]: value }).where(and(eq(opportunities.orgId, workflow.orgId), eq(opportunities.id, String(entity.id))));
     if (entityType === "account") await db.update(accounts).set({ [field]: value }).where(and(eq(accounts.orgId, workflow.orgId), eq(accounts.id, String(entity.id))));
+    await appendAuditEvent({ orgId: workflow.orgId, action: `${entityType}.updated`, entityType, entityId: String(entity.id), actorUserId: ownerUserId ?? null, metadata: { source: "workflow", workflowId: workflow.id, field } });
     return { updatedField: field };
   }
   throw new Error("Unsupported workflow action");
@@ -196,7 +218,7 @@ export async function executeWorkflow(
     const results: unknown[] = [];
     if (plan.conditionsMatched) {
       for (const action of (workflow.actions ?? []) as WorkflowAction[]) {
-        results.push({ type: action.type, status: "success", result: await executeAction(workflow, entityType, plan.entity as unknown as Record<string, unknown>, action, actorUserId) });
+        results.push({ type: action.type, status: "success", result: await executeAction(workflow, entityType, plan.entity as unknown as Record<string, unknown>, action, execution.id, actorUserId) });
       }
     }
     await db.update(workflowExecutions).set({ status: "success", actionResults: results, completedAt: new Date() }).where(eq(workflowExecutions.id, execution.id));

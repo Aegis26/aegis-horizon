@@ -1,5 +1,5 @@
-import { Router, type IRouter } from "express";
-import { count, desc, eq } from "drizzle-orm";
+import { Router, type IRouter, type Request } from "express";
+import { and, count, desc, eq } from "drizzle-orm";
 import {
   db,
   accounts,
@@ -13,18 +13,22 @@ import {
   ListUsageLogsResponse,
 } from "@workspace/api-zod";
 import { attachUser, attachOrg } from "../middlewares/auth";
+import { hasCrmManagementAccess, withCrmVisibility } from "../services/crmAccess";
 
 const router: IRouter = Router();
 
 router.use("/orgs/:orgId/dashboard", attachUser, attachOrg);
 router.use("/orgs/:orgId/usage", attachUser, attachOrg);
 
-async function recentActivity(orgId: string, limit: number) {
+async function recentActivity(req: Request, limit: number) {
   const rows = await db
     .select({ log: usageLogs, userEmail: users.email })
     .from(usageLogs)
     .leftJoin(users, eq(users.id, usageLogs.userId))
-    .where(eq(usageLogs.orgId, orgId))
+    .where(and(
+      eq(usageLogs.orgId, req.currentOrg!.id),
+      ...(hasCrmManagementAccess(req) ? [] : [eq(usageLogs.userId, req.currentUser!.id)]),
+    ))
     .orderBy(desc(usageLogs.createdAt))
     .limit(limit);
   return rows.map((r) => ({
@@ -40,12 +44,18 @@ router.get("/orgs/:orgId/dashboard", async (req, res): Promise<void> => {
   const org = req.currentOrg!;
   const [[members], [accountCount], [oppCount], activity] = await Promise.all([
     db.select({ value: count() }).from(orgUsers).where(eq(orgUsers.orgId, org.id)),
-    db.select({ value: count() }).from(accounts).where(eq(accounts.orgId, org.id)),
+    db.select({ value: count() }).from(accounts).where(and(
+      eq(accounts.orgId, org.id),
+      ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+    )),
     db
       .select({ value: count() })
       .from(opportunities)
-      .where(eq(opportunities.orgId, org.id)),
-    recentActivity(org.id, 10),
+      .where(and(
+        eq(opportunities.orgId, org.id),
+        ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+      )),
+    recentActivity(req, 10),
   ]);
 
   res.json(
@@ -64,7 +74,7 @@ router.get("/orgs/:orgId/dashboard", async (req, res): Promise<void> => {
 
 router.get("/orgs/:orgId/usage", async (req, res): Promise<void> => {
   res.json(
-    ListUsageLogsResponse.parse(await recentActivity(req.currentOrg!.id, 50)),
+    ListUsageLogsResponse.parse(await recentActivity(req, 50)),
   );
 });
 

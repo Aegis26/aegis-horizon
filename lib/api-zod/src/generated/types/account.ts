@@ -22,5 +22,9 @@ export interface Account {
   /** @nullable */
   riskLevel?: string | null;
   /** @nullable */
+  ownerUserId?: string | null;
+  /** @nullable */
+  createdByUserId?: string | null;
+  /** @nullable */
   createdAt?: string | null;
 }

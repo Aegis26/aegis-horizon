@@ -27,5 +27,9 @@ export interface Contact {
   isActive: boolean;
   metadata?: ContactMetadata;
   /** @nullable */
+  ownerUserId?: string | null;
+  /** @nullable */
+  createdByUserId?: string | null;
+  /** @nullable */
   createdAt?: string | null;
 }

@@ -8,6 +8,7 @@ import {
   churnPredictions,
   commandHistory,
   db,
+  emailThreads,
   opportunities,
   orgUsers,
   tasks,
@@ -21,6 +22,7 @@ import { calculateChurn, calculateClose, calculateConversion } from "../services
 import { executeWorkflow, planWorkflow, type WorkflowAction, type WorkflowCondition, type WorkflowTrigger } from "../services/workflow";
 import { runAgent } from "../services/agents";
 import { isOrgAccountId, isOrgMemberId, isOrgOpportunityId } from "../services/orgValidation";
+import { canAccessCrmRecord } from "../services/crmAccess";
 
 const router: IRouter = Router();
 const base = [attachUser, attachOrg] as const;
@@ -42,6 +44,13 @@ function fail(res: Response, error: unknown) {
   const status = Number((error as { status?: number }).status) || (/not found/i.test((error as Error).message) ? 404 : 500);
   res.status(status).json({ error: (error as Error).message });
 }
+async function requireVisible(
+  req: Request, res: Response, type: "account" | "lead" | "opportunity", id: string,
+): Promise<boolean> {
+  if (await canAccessCrmRecord(req, type, id)) return true;
+  res.status(404).json({ error: `${type[0].toUpperCase()}${type.slice(1)} not found` });
+  return false;
+}
 
 router.get("/orgs/:orgId/ai/copilot/budget", ...aiGate, async (req, res) => {
   res.json(await getAiBudgetStatus(req.currentOrg!.id));
@@ -51,6 +60,15 @@ router.post("/orgs/:orgId/ai/copilot/summarize", ...aiConsentGate, async (req, r
   const parsed = z.object({ entityType: z.enum(["account", "opportunity", "email_thread"]), entityId: uuid, style: z.enum(["short", "long"]).default("short") }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message }); return; }
   try {
+    if (parsed.data.entityType !== "email_thread" && !(await requireVisible(req, res, parsed.data.entityType, parsed.data.entityId))) return;
+    if (parsed.data.entityType === "email_thread") {
+      const [thread] = await db.select({ accountId: emailThreads.accountId }).from(emailThreads)
+        .where(and(eq(emailThreads.orgId, req.currentOrg!.id), eq(emailThreads.id, parsed.data.entityId)));
+      if (!thread || !(await canAccessCrmRecord(req, "account", thread.accountId))) {
+        res.status(404).json({ error: "Email thread not found" });
+        return;
+      }
+    }
     const row = await summarize(req.currentOrg!.id, req.currentUser!.id, parsed.data.entityType, parsed.data.entityId);
     res.json({ summaryShort: row.summaryShort, summaryLong: row.summaryLong, nextBestAction: row.nextBestAction, topics: row.topics, sentiment: row.sentiment, cached: row.cached, generatedAt: row.generatedAt.toISOString() });
   } catch (error) { fail(res, error); }
@@ -59,36 +77,36 @@ router.post("/orgs/:orgId/ai/copilot/summarize", ...aiConsentGate, async (req, r
 router.post("/orgs/:orgId/ai/copilot/next-action", ...aiConsentGate, async (req, res): Promise<void> => {
   const parsed = z.object({ accountId: uuid }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Valid accountId is required" }); return; }
-  try { res.json(await nextAction(req.currentOrg!.id, req.currentUser!.id, parsed.data.accountId)); } catch (error) { fail(res, error); }
+  try { if (!(await requireVisible(req, res, "account", parsed.data.accountId))) return; res.json(await nextAction(req.currentOrg!.id, req.currentUser!.id, parsed.data.accountId)); } catch (error) { fail(res, error); }
 });
 
 router.post("/orgs/:orgId/ai/copilot/draft-email", ...aiConsentGate, async (req, res): Promise<void> => {
   const parsed = z.object({ accountId: uuid, context: z.string().min(1).max(20_000), tone: z.enum(["professional", "casual"]).optional() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message }); return; }
-  try { res.json(await draftEmail(req.currentOrg!.id, req.currentUser!.id, parsed.data.accountId, parsed.data.context, parsed.data.tone)); } catch (error) { fail(res, error); }
+  try { if (!(await requireVisible(req, res, "account", parsed.data.accountId))) return; res.json(await draftEmail(req.currentOrg!.id, req.currentUser!.id, parsed.data.accountId, parsed.data.context, parsed.data.tone)); } catch (error) { fail(res, error); }
 });
 
 router.get("/orgs/:orgId/predictions/churn", ...aiConsentGate, async (req, res) => {
   const rows = await db.select().from(churnPredictions).where(eq(churnPredictions.orgId, req.currentOrg!.id)).orderBy(desc(churnPredictions.riskScore));
-  res.json(rows);
+  res.json((await Promise.all(rows.map(async (row) => (await canAccessCrmRecord(req, "account", row.accountId)) ? row : undefined))).filter(Boolean));
 });
 router.get("/orgs/:orgId/predictions/churn/:accountId", ...aiConsentGate, async (req, res): Promise<void> => {
-  try { res.json(await calculateChurn(req.currentOrg!.id, String(req.params.accountId))); } catch (error) { fail(res, error); }
+  try { if (!(await requireVisible(req, res, "account", String(req.params.accountId)))) return; res.json(await calculateChurn(req.currentOrg!.id, String(req.params.accountId))); } catch (error) { fail(res, error); }
 });
 router.post("/orgs/:orgId/predictions/churn/:accountId/recompute", ...aiConsentGate, async (req, res): Promise<void> => {
-  try { res.json(await calculateChurn(req.currentOrg!.id, String(req.params.accountId))); } catch (error) { fail(res, error); }
+  try { if (!(await requireVisible(req, res, "account", String(req.params.accountId)))) return; res.json(await calculateChurn(req.currentOrg!.id, String(req.params.accountId))); } catch (error) { fail(res, error); }
 });
 router.get("/orgs/:orgId/predictions/conversion/:leadId", ...aiConsentGate, async (req, res): Promise<void> => {
-  try { res.json(await calculateConversion(req.currentOrg!.id, String(req.params.leadId))); } catch (error) { fail(res, error); }
+  try { if (!(await requireVisible(req, res, "lead", String(req.params.leadId)))) return; res.json(await calculateConversion(req.currentOrg!.id, String(req.params.leadId))); } catch (error) { fail(res, error); }
 });
 router.post("/orgs/:orgId/predictions/conversion/:leadId/recompute", ...aiConsentGate, async (req, res): Promise<void> => {
-  try { res.json(await calculateConversion(req.currentOrg!.id, String(req.params.leadId))); } catch (error) { fail(res, error); }
+  try { if (!(await requireVisible(req, res, "lead", String(req.params.leadId)))) return; res.json(await calculateConversion(req.currentOrg!.id, String(req.params.leadId))); } catch (error) { fail(res, error); }
 });
 router.get("/orgs/:orgId/predictions/close/:opportunityId", ...aiConsentGate, async (req, res): Promise<void> => {
-  try { res.json(await calculateClose(req.currentOrg!.id, String(req.params.opportunityId))); } catch (error) { fail(res, error); }
+  try { if (!(await requireVisible(req, res, "opportunity", String(req.params.opportunityId)))) return; res.json(await calculateClose(req.currentOrg!.id, String(req.params.opportunityId))); } catch (error) { fail(res, error); }
 });
 router.post("/orgs/:orgId/predictions/close/:opportunityId/recompute", ...aiConsentGate, async (req, res): Promise<void> => {
-  try { res.json(await calculateClose(req.currentOrg!.id, String(req.params.opportunityId))); } catch (error) { fail(res, error); }
+  try { if (!(await requireVisible(req, res, "opportunity", String(req.params.opportunityId)))) return; res.json(await calculateClose(req.currentOrg!.id, String(req.params.opportunityId))); } catch (error) { fail(res, error); }
 });
 
 const workflowShapeBase = z.object({

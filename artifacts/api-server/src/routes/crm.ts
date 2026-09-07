@@ -57,6 +57,13 @@ import {
   PreviewSegmentConditionsResponse,
 } from "@workspace/api-zod";
 import { attachUser, attachOrg, requireFeature } from "../middlewares/auth";
+import { appendAuditEvent, auditContext } from "../services/audit";
+import {
+  hasCrmManagementAccess,
+  canAccessCrmRecord,
+  withCrmVisibility,
+} from "../services/crmAccess";
+import { isOrgMemberId } from "../services/orgValidation";
 import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
 import {
   getObjectAclPolicy,
@@ -126,6 +133,8 @@ function accountSummary(a: Account) {
     state: a.state,
     healthScore: a.healthScore,
     riskLevel: a.riskLevel,
+    ownerUserId: a.ownerUserId,
+    createdByUserId: a.createdByUserId,
     createdAt: a.createdAt.toISOString(),
   };
 }
@@ -149,6 +158,8 @@ function accountDetail(a: Account) {
     ltv: a.ltv,
     nextRenewalDate: a.nextRenewalDate,
     isActive: a.isActive,
+    ownerUserId: a.ownerUserId,
+    createdByUserId: a.createdByUserId,
     metadata: (a.metadata ?? {}) as Record<string, unknown>,
     files: (a.files ?? []) as {
       objectPath: string;
@@ -175,6 +186,8 @@ function contactOut(c: Contact) {
     seniority: c.seniority,
     reportsToContactId: c.reportsToContactId,
     isActive: c.isActive,
+    ownerUserId: c.ownerUserId,
+    createdByUserId: c.createdByUserId,
     metadata: (c.metadata ?? {}) as Record<string, unknown>,
     createdAt: c.createdAt.toISOString(),
   };
@@ -353,7 +366,7 @@ function conditionsToWhere(conds: Condition[]): SQL[] {
 }
 
 async function queryAccountsByConditions(
-  orgId: string,
+  req: Request,
   conds: Condition[],
 ): Promise<Account[]> {
   return db
@@ -361,8 +374,9 @@ async function queryAccountsByConditions(
     .from(accounts)
     .where(
       and(
-        eq(accounts.orgId, orgId),
+        eq(accounts.orgId, req.currentOrg!.id),
         eq(accounts.isActive, true),
+        ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
         ...conditionsToWhere(conds),
       ),
     )
@@ -370,6 +384,43 @@ async function queryAccountsByConditions(
 }
 
 /* ------------------------------- accounts ------------------------------ */
+
+function accountAudit(a: Account) {
+  return {
+    name: a.name,
+    industry: a.industry,
+    ownerUserId: a.ownerUserId,
+    createdByUserId: a.createdByUserId,
+    isActive: a.isActive,
+  };
+}
+
+function contactAudit(c: Contact) {
+  return {
+    accountId: c.accountId,
+    firstName: c.firstName,
+    lastName: c.lastName,
+    ownerUserId: c.ownerUserId,
+    createdByUserId: c.createdByUserId,
+    isActive: c.isActive,
+  };
+}
+
+async function requestedOwner(
+  req: Request,
+  requested: string | null | undefined,
+  field: string,
+): Promise<{ owner: string | null; error?: string }> {
+  const currentUserId = req.currentUser!.id;
+  if (requested === undefined) return { owner: currentUserId };
+  if (!hasCrmManagementAccess(req) && requested !== currentUserId) {
+    return { owner: currentUserId, error: `Only management may assign ${field} to another user or leave it unassigned` };
+  }
+  if (requested !== null && !(await isOrgMemberId(req.currentOrg!.id, requested))) {
+    return { owner: currentUserId, error: `${field} must reference a member of this organization` };
+  }
+  return { owner: requested };
+}
 
 router.get(
   "/orgs/:orgId/accounts",
@@ -385,6 +436,7 @@ router.get(
     };
 
     const where: SQL[] = [eq(accounts.orgId, req.currentOrg!.id)];
+    where.push(...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId));
     if (includeInactive !== "true") {
       where.push(eq(accounts.isActive, true));
     }
@@ -441,16 +493,30 @@ router.post(
       res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid body" });
       return;
     }
-    const { metadata, ...rest } = parsed.data;
+    const { metadata, ownerUserId, ...rest } = parsed.data;
+    const assignment = await requestedOwner(req, ownerUserId, "ownerUserId");
+    if (assignment.error) {
+      res.status(403).json({ error: assignment.error });
+      return;
+    }
     const [row] = await db
       .insert(accounts)
       .values({
         ...rest,
         metadata: metadata ?? {},
         orgId: req.currentOrg!.id,
-        ownerUserId: req.currentUser!.id,
+        ownerUserId: assignment.owner,
+        createdByUserId: req.currentUser!.id,
       })
       .returning();
+    await appendAuditEvent({
+      orgId: row.orgId,
+      action: "account.created",
+      entityType: "account",
+      entityId: row.id,
+      ...auditContext(req),
+      metadata: { after: accountAudit(row) },
+    });
     res.status(201).json(CreateAccountResponse.parse(accountDetail(row)));
   },
 );
@@ -482,16 +548,35 @@ router.post(
             metadata: metadata ?? {},
             orgId,
             ownerUserId: userId,
+            createdByUserId: userId,
           })
           .returning();
+        await appendAuditEvent({
+          orgId,
+          action: "account.created",
+          entityType: "account",
+          entityId: acc.id,
+          ...auditContext(req),
+          metadata: { source: "bulk_import", after: accountAudit(acc) },
+        });
         accountsCreated += 1;
         for (const c of nestedContacts ?? []) {
           const { metadata: cMeta, ...contactFields } = c;
-          await db.insert(contacts).values({
+          const [contact] = await db.insert(contacts).values({
             ...contactFields,
             metadata: cMeta ?? {},
             orgId,
             accountId: acc.id,
+            ownerUserId: userId,
+            createdByUserId: userId,
+          }).returning();
+          await appendAuditEvent({
+            orgId,
+            action: "contact.created",
+            entityType: "contact",
+            entityId: contact.id,
+            ...auditContext(req),
+            metadata: { source: "bulk_import", after: contactAudit(contact) },
           });
           contactsCreated += 1;
         }
@@ -514,6 +599,7 @@ async function findAccount(req: Request): Promise<Account | undefined> {
       and(
         eq(accounts.id, req.params.accountId as string),
         eq(accounts.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
       ),
     );
   return row;
@@ -538,13 +624,19 @@ router.get(
           and(
             eq(contacts.accountId, account.id),
             eq(contacts.isActive, true),
+            eq(contacts.orgId, req.currentOrg!.id),
+            ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
           ),
         )
         .orderBy(contacts.lastName),
       db
         .select()
         .from(opportunities)
-        .where(eq(opportunities.accountId, account.id))
+        .where(and(
+          eq(opportunities.accountId, account.id),
+          eq(opportunities.orgId, req.currentOrg!.id),
+          ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+        ))
         .orderBy(desc(opportunities.createdAt)),
     ]);
     res.json(
@@ -560,6 +652,8 @@ router.get(
           value: o.value,
           expectedCloseDate: o.expectedCloseDate,
           forecastCategory: o.forecastCategory,
+          ownerUserId: o.ownerUserId,
+          createdByUserId: o.createdByUserId,
           createdAt: o.createdAt.toISOString(),
         })),
       }),
@@ -583,11 +677,31 @@ router.patch(
       res.status(404).json({ error: "Account not found" });
       return;
     }
+    const { ownerUserId, ...rest } = parsed.data;
+    const updates: Partial<typeof accounts.$inferInsert> = rest;
+    if (ownerUserId !== undefined) {
+      const assignment = await requestedOwner(req, ownerUserId, "ownerUserId");
+      if (assignment.error) {
+        res.status(403).json({ error: assignment.error });
+        return;
+      }
+      updates.ownerUserId = assignment.owner;
+    }
     const [row] = await db
       .update(accounts)
-      .set(parsed.data)
-      .where(eq(accounts.id, account.id))
+      .set(updates)
+      .where(and(eq(accounts.id, account.id), eq(accounts.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId)))
       .returning();
+    if (!row) { res.status(404).json({ error: "Account not found" }); return; }
+    await appendAuditEvent({
+      orgId: row.orgId,
+      action: "account.updated",
+      entityType: "account",
+      entityId: row.id,
+      ...auditContext(req),
+      metadata: { before: accountAudit(account), after: accountAudit(row) },
+    });
     res.json(UpdateAccountResponse.parse(accountDetail(row)));
   },
 );
@@ -603,10 +717,21 @@ router.delete(
       res.status(404).json({ error: "Account not found" });
       return;
     }
-    await db
+    const [deleted] = await db
       .update(accounts)
       .set({ isActive: false })
-      .where(eq(accounts.id, account.id));
+      .where(and(eq(accounts.id, account.id), eq(accounts.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId)))
+      .returning();
+    if (!deleted) { res.status(404).json({ error: "Account not found" }); return; }
+    await appendAuditEvent({
+      orgId: account.orgId,
+      action: "account.deleted",
+      entityType: "account",
+      entityId: account.id,
+      ...auditContext(req),
+      metadata: { before: accountAudit(account), after: accountAudit(deleted) },
+    });
     res.status(204).end();
   },
 );
@@ -627,7 +752,12 @@ router.get(
     const rows = await db
       .select()
       .from(contacts)
-      .where(and(eq(contacts.accountId, account.id), eq(contacts.isActive, true)))
+      .where(and(
+        eq(contacts.accountId, account.id),
+        eq(contacts.orgId, req.currentOrg!.id),
+        eq(contacts.isActive, true),
+        ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
+      ))
       .orderBy(contacts.lastName);
     res.json(ListContactsResponse.parse(rows.map(contactOut)));
   },
@@ -649,31 +779,45 @@ router.post(
       res.status(404).json({ error: "Account not found" });
       return;
     }
-    const { metadata, ...rest } = parsed.data;
-    if (rest.reportsToContactId) {
-      const [manager] = await db
-        .select({ id: contacts.id })
-        .from(contacts)
-        .where(
-          and(
-            eq(contacts.id, rest.reportsToContactId),
-            eq(contacts.accountId, account.id),
-          ),
-        );
-      if (!manager) {
-        res.status(400).json({ error: "reportsToContactId must reference a contact on the same account" });
-        return;
-      }
+    const { metadata, ownerUserId, ...rest } = parsed.data;
+    const assignment = await requestedOwner(req, ownerUserId, "ownerUserId");
+    if (assignment.error) {
+      res.status(403).json({ error: assignment.error });
+      return;
     }
-    const [row] = await db
-      .insert(contacts)
-      .values({
+    const row = await db.transaction(async (tx) => {
+      const [lockedAccount] = await tx.select({ id: accounts.id }).from(accounts).where(and(
+        eq(accounts.id, account.id), eq(accounts.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+      )).for("update");
+      if (!lockedAccount) return undefined;
+      if (rest.reportsToContactId) {
+        const [manager] = await tx.select({ id: contacts.id }).from(contacts).where(and(
+          eq(contacts.id, rest.reportsToContactId), eq(contacts.accountId, lockedAccount.id),
+          eq(contacts.orgId, req.currentOrg!.id),
+          ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
+        )).for("update");
+        if (!manager) return undefined;
+      }
+      const [created] = await tx.insert(contacts).values({
         ...rest,
         metadata: metadata ?? {},
         orgId: req.currentOrg!.id,
-        accountId: account.id,
-      })
-      .returning();
+        accountId: lockedAccount.id,
+        ownerUserId: assignment.owner,
+        createdByUserId: req.currentUser!.id,
+      }).returning();
+      return created;
+    });
+    if (!row) { res.status(404).json({ error: "Account or reporting contact not found" }); return; }
+    await appendAuditEvent({
+      orgId: row.orgId,
+      action: "contact.created",
+      entityType: "contact",
+      entityId: row.id,
+      ...auditContext(req),
+      metadata: { after: contactAudit(row) },
+    });
     res.status(201).json(CreateContactResponse.parse(contactOut(row)));
   },
 );
@@ -686,6 +830,7 @@ async function findContact(req: Request): Promise<Contact | undefined> {
       and(
         eq(contacts.id, req.params.contactId as string),
         eq(contacts.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
       ),
     );
   return row;
@@ -717,35 +862,60 @@ router.patch(
       res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid body" });
       return;
     }
-    const contact = await findContact(req);
-    if (!contact) {
-      res.status(404).json({ error: "Contact not found" });
-      return;
-    }
     if (parsed.data.reportsToContactId) {
-      if (parsed.data.reportsToContactId === contact.id) {
+      if (parsed.data.reportsToContactId === req.params.contactId) {
         res.status(400).json({ error: "A contact cannot report to themselves" });
         return;
       }
-      const [manager] = await db
-        .select({ id: contacts.id })
-        .from(contacts)
-        .where(
-          and(
-            eq(contacts.id, parsed.data.reportsToContactId),
-            eq(contacts.accountId, contact.accountId),
-          ),
-        );
-      if (!manager) {
-        res.status(400).json({ error: "reportsToContactId must reference a contact on the same account" });
+    }
+    const { ownerUserId, ...rest } = parsed.data;
+    const updates: Partial<typeof contacts.$inferInsert> = rest;
+    if (ownerUserId !== undefined) {
+      const assignment = await requestedOwner(req, ownerUserId, "ownerUserId");
+      if (assignment.error) {
+        res.status(403).json({ error: assignment.error });
         return;
       }
+      updates.ownerUserId = assignment.owner;
     }
-    const [row] = await db
-      .update(contacts)
-      .set(parsed.data)
-      .where(eq(contacts.id, contact.id))
-      .returning();
+    const result = await db.transaction(async (tx) => {
+      const [contact] = await tx.select().from(contacts).where(and(
+        eq(contacts.id, req.params.contactId as string),
+        eq(contacts.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
+      )).for("update");
+      if (!contact) return undefined;
+      if (rest.reportsToContactId) {
+        const [manager] = await tx.select({ id: contacts.id }).from(contacts).where(and(
+          eq(contacts.id, rest.reportsToContactId),
+          eq(contacts.accountId, contact.accountId),
+          eq(contacts.orgId, req.currentOrg!.id),
+          ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
+        )).for("update");
+        if (!manager) return { error: "manager" as const };
+      }
+      const [row] = await tx.update(contacts).set(updates).where(and(
+        eq(contacts.id, contact.id),
+        eq(contacts.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
+      )).returning();
+      if (!row) return undefined;
+      return { contact, row };
+    });
+    if (!result) { res.status(404).json({ error: "Contact not found" }); return; }
+    if ("error" in result) {
+      res.status(400).json({ error: "reportsToContactId must reference a visible contact on the same account" });
+      return;
+    }
+    const { contact, row } = result;
+    await appendAuditEvent({
+      orgId: row.orgId,
+      action: "contact.updated",
+      entityType: "contact",
+      entityId: row.id,
+      ...auditContext(req),
+      metadata: { before: contactAudit(contact), after: contactAudit(row) },
+    });
     res.json(UpdateContactResponse.parse(contactOut(row)));
   },
 );
@@ -761,10 +931,21 @@ router.delete(
       res.status(404).json({ error: "Contact not found" });
       return;
     }
-    await db
+    const [deleted] = await db
       .update(contacts)
       .set({ isActive: false })
-      .where(eq(contacts.id, contact.id));
+      .where(and(eq(contacts.id, contact.id), eq(contacts.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId)))
+      .returning();
+    if (!deleted) { res.status(404).json({ error: "Contact not found" }); return; }
+    await appendAuditEvent({
+      orgId: contact.orgId,
+      action: "contact.deleted",
+      entityType: "contact",
+      entityId: contact.id,
+      ...auditContext(req),
+      metadata: { before: contactAudit(contact), after: contactAudit(deleted) },
+    });
     res.status(204).end();
   },
 );
@@ -788,31 +969,6 @@ router.post(
       return;
     }
     const { attachments, ...rest } = parsed.data;
-    if (rest.contactId) {
-      const [contact] = await db
-        .select({ id: contacts.id })
-        .from(contacts)
-        .where(and(eq(contacts.id, rest.contactId), eq(contacts.accountId, account.id)));
-      if (!contact) {
-        res.status(400).json({ error: "contactId must reference a contact on this account" });
-        return;
-      }
-    }
-    if (rest.opportunityId) {
-      const [opp] = await db
-        .select({ id: opportunities.id })
-        .from(opportunities)
-        .where(
-          and(
-            eq(opportunities.id, rest.opportunityId),
-            eq(opportunities.accountId, account.id),
-          ),
-        );
-      if (!opp) {
-        res.status(400).json({ error: "opportunityId must reference an opportunity on this account" });
-        return;
-      }
-    }
     for (const att of attachments ?? []) {
       const err = await secureAttachmentPath(att.objectPath, req);
       if (err) {
@@ -820,16 +976,38 @@ router.post(
         return;
       }
     }
-    const [row] = await db
-      .insert(activities)
-      .values({
+    const row = await db.transaction(async (tx) => {
+      const [lockedAccount] = await tx.select({ id: accounts.id }).from(accounts).where(and(
+        eq(accounts.id, account.id), eq(accounts.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+      )).for("update");
+      if (!lockedAccount) return undefined;
+      if (rest.contactId) {
+        const [contact] = await tx.select({ id: contacts.id }).from(contacts).where(and(
+          eq(contacts.id, rest.contactId), eq(contacts.accountId, lockedAccount.id),
+          eq(contacts.orgId, req.currentOrg!.id),
+          ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
+        )).for("update");
+        if (!contact) return undefined;
+      }
+      if (rest.opportunityId) {
+        const [opp] = await tx.select({ id: opportunities.id }).from(opportunities).where(and(
+          eq(opportunities.id, rest.opportunityId), eq(opportunities.accountId, lockedAccount.id),
+          eq(opportunities.orgId, req.currentOrg!.id),
+          ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+        )).for("update");
+        if (!opp) return undefined;
+      }
+      const [created] = await tx.insert(activities).values({
         ...rest,
         attachments: attachments ?? [],
         orgId: req.currentOrg!.id,
-        accountId: account.id,
+        accountId: lockedAccount.id,
         createdByUserId: req.currentUser!.id,
-      })
-      .returning();
+      }).returning();
+      return created;
+    });
+    if (!row) { res.status(404).json({ error: "Account or related CRM record not found" }); return; }
     res
       .status(201)
       .json(
@@ -889,6 +1067,10 @@ router.post(
       res.status(404).json({ error: "Activity not found" });
       return;
     }
+    if (!(await canAccessCrmRecord(req, "account", activity.accountId))) {
+      res.status(404).json({ error: "Activity not found" });
+      return;
+    }
     const aclErr = await secureAttachmentPath(parsed.data.objectPath, req);
     if (aclErr) {
       res.status(400).json({ error: aclErr });
@@ -908,8 +1090,18 @@ router.post(
     const [row] = await db
       .update(activities)
       .set({ attachments: nextAttachments })
-      .where(eq(activities.id, activity.id))
+      .where(and(
+        eq(activities.id, activity.id),
+        eq(activities.orgId, req.currentOrg!.id),
+        sql`exists (
+          select 1 from ${accounts}
+          where ${accounts.id} = ${activities.accountId}
+            and ${accounts.orgId} = ${req.currentOrg!.id}
+            ${hasCrmManagementAccess(req) ? sql`` : sql`and ${accounts.ownerUserId} is not null and (${accounts.ownerUserId} = ${req.currentUser!.id} or ${accounts.createdByUserId} = ${req.currentUser!.id})`}
+        )`,
+      ))
       .returning();
+    if (!row) { res.status(404).json({ error: "Activity not found" }); return; }
 
     // Also surface the file on the parent account's files list so account
     // and opportunity records carry their attachments (per spec).
@@ -918,7 +1110,7 @@ router.post(
       .from(accounts)
       .where(eq(accounts.id, activity.accountId));
     if (account) {
-      await db
+      const [updatedAccount] = await db
         .update(accounts)
         .set({
           files: [
@@ -926,7 +1118,29 @@ router.post(
             attachment,
           ],
         })
-        .where(eq(accounts.id, account.id));
+        .where(and(
+          eq(accounts.id, account.id),
+          eq(accounts.orgId, req.currentOrg!.id),
+          ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+        ))
+        .returning({ id: accounts.id });
+      if (!updatedAccount) {
+        res.status(404).json({ error: "Account not found" });
+        return;
+      }
+      await appendAuditEvent({
+        orgId: req.currentOrg!.id,
+        action: "account.updated",
+        entityType: "account",
+        entityId: account.id,
+        ...auditContext(req),
+        metadata: {
+          operation: "activity_file_attached",
+          activityId: activity.id,
+          fileName: attachment.name,
+          contentType: attachment.contentType,
+        },
+      });
     }
 
     const userName = req.currentUser!.fullName ?? req.currentUser!.email;
@@ -951,7 +1165,7 @@ router.get(
     const withCounts = await Promise.all(
       rows.map(async (s) => {
         const matches = await queryAccountsByConditions(
-          req.currentOrg!.id,
+          req,
           (s.conditions ?? []) as Condition[],
         );
         return segmentOut(s, matches.length);
@@ -1056,7 +1270,7 @@ router.post(
       return;
     }
     const rows = await queryAccountsByConditions(
-      req.currentOrg!.id,
+      req,
       (segment.conditions ?? []) as Condition[],
     );
     res.json(PreviewSegmentResponse.parse(rows.map(accountSummary)));
@@ -1075,7 +1289,7 @@ router.post(
       return;
     }
     const rows = await queryAccountsByConditions(
-      req.currentOrg!.id,
+      req,
       parsed.data.conditions as Condition[],
     );
     res.json(PreviewSegmentConditionsResponse.parse(rows.map(accountSummary)));

@@ -810,6 +810,10 @@ export interface Account {
   /** @nullable */
   riskLevel?: string | null;
   /** @nullable */
+  ownerUserId?: string | null;
+  /** @nullable */
+  createdByUserId?: string | null;
+  /** @nullable */
   createdAt?: string | null;
 }
 
@@ -826,6 +830,10 @@ export interface Opportunity {
   expectedCloseDate?: string | null;
   /** @nullable */
   forecastCategory?: string | null;
+  /** @nullable */
+  ownerUserId?: string | null;
+  /** @nullable */
+  createdByUserId?: string | null;
   /** @nullable */
   createdAt?: string | null;
 }
@@ -880,6 +888,10 @@ export interface AccountDetail {
   /** @nullable */
   nextRenewalDate?: string | null;
   isActive: boolean;
+  /** @nullable */
+  ownerUserId?: string | null;
+  /** @nullable */
+  createdByUserId?: string | null;
   metadata?: AccountDetailMetadata;
   files?: FileAttachment[];
   /** @nullable */
@@ -909,6 +921,10 @@ export interface Contact {
   reportsToContactId?: string | null;
   isActive: boolean;
   metadata?: ContactMetadata;
+  /** @nullable */
+  ownerUserId?: string | null;
+  /** @nullable */
+  createdByUserId?: string | null;
   /** @nullable */
   createdAt?: string | null;
 }
@@ -950,6 +966,8 @@ export interface AccountCreate {
   /** @nullable */
   nextRenewalDate?: string | null;
   metadata?: AccountCreateMetadata;
+  /** @nullable */
+  ownerUserId?: string | null;
 }
 
 export type AccountUpdateMetadata = { [key: string]: unknown };
@@ -984,6 +1002,8 @@ export interface AccountUpdate {
   /** @nullable */
   nextRenewalDate?: string | null;
   metadata?: AccountUpdateMetadata;
+  /** @nullable */
+  ownerUserId?: string | null;
 }
 
 export type ContactCreateMetadata = { [key: string]: unknown };
@@ -1006,6 +1026,8 @@ export interface ContactCreate {
   /** @nullable */
   reportsToContactId?: string | null;
   metadata?: ContactCreateMetadata;
+  /** @nullable */
+  ownerUserId?: string | null;
 }
 
 export type ContactUpdateMetadata = { [key: string]: unknown };
@@ -1028,6 +1050,8 @@ export interface ContactUpdate {
   /** @nullable */
   reportsToContactId?: string | null;
   metadata?: ContactUpdateMetadata;
+  /** @nullable */
+  ownerUserId?: string | null;
 }
 
 export type BulkImportRequestAccountsItem = AccountCreate & {
@@ -1424,6 +1448,8 @@ export interface OpportunityCreate {
   expectedCloseDate?: string | null;
   /** @nullable */
   nextAction?: string | null;
+  /** @nullable */
+  ownerUserId?: string | null;
 }
 
 export interface OpportunityUpdate {
@@ -1489,6 +1515,8 @@ export interface OpportunityDetail {
   /** @nullable */
   ownerUserId?: string | null;
   /** @nullable */
+  createdByUserId?: string | null;
+  /** @nullable */
   ownerName?: string | null;
   stageHistory: StageHistoryEntry[];
   /** @nullable */
@@ -1539,6 +1567,8 @@ export interface Lead {
   score: number;
   /** @nullable */
   assignedToUserId?: string | null;
+  /** @nullable */
+  createdByUserId?: string | null;
   /** @nullable */
   assignedToName?: string | null;
   /** @nullable */

@@ -35,6 +35,9 @@ export const accounts = pgTable("accounts", {
   ownerUserId: uuid("owner_user_id").references(() => users.id, {
     onDelete: "set null",
   }),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   healthScore: text("health_score").default("green"),
   ltv: numeric("ltv"),
   riskLevel: text("risk_level").default("low"),
@@ -72,6 +75,12 @@ export const contacts = pgTable("contacts", {
   engagementLevel: integer("engagement_level"),
   relationshipStrength: integer("relationship_strength"),
   reportsToContactId: uuid("reports_to_contact_id"),
+  ownerUserId: uuid("owner_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   metadata: jsonb("metadata").default({}),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -97,6 +106,9 @@ export const opportunities = pgTable("opportunities", {
   expectedCloseDate: date("expected_close_date", { mode: "string" }),
   actualCloseDate: date("actual_close_date", { mode: "string" }),
   ownerUserId: uuid("owner_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, {
     onDelete: "set null",
   }),
   products: jsonb("products").default([]),
@@ -450,6 +462,9 @@ export const leads = pgTable("leads", {
   status: text("status").default("new").notNull(),
   score: integer("score").default(0).notNull(),
   assignedToUserId: uuid("assigned_to_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, {
     onDelete: "set null",
   }),
   territoryId: uuid("territory_id").references(() => territories.id, {

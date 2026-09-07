@@ -37,4 +37,6 @@ export interface AccountUpdate {
   /** @nullable */
   nextRenewalDate?: string | null;
   metadata?: AccountUpdateMetadata;
+  /** @nullable */
+  ownerUserId?: string | null;
 }

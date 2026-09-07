@@ -15,6 +15,7 @@ import {
 } from "@workspace/db";
 import { featuresForPlan } from "../lib/catalog";
 import { getClientIp, isIpAllowed } from "../lib/clientIp";
+import { isViewerMutation } from "../services/crmAccess";
 
 declare global {
   namespace Express {
@@ -151,6 +152,10 @@ export async function attachOrg(
     res.status(403).json({ error: "Not a member of this organization" });
     return;
   }
+  if (isViewerMutation(membership.role, req.method)) {
+    res.status(403).json({ error: "Viewers have read-only access" });
+    return;
+  }
 
   const [org] = await db
     .select()
@@ -170,6 +175,15 @@ export async function attachOrg(
     !isIpAllowed(getClientIp(req), securityPolicy.allowedCidrs)
   ) {
     res.status(403).json({ error: "Access denied by organization IP policy" });
+    return;
+  }
+
+  // Viewer requests must be strictly read-only, including GET middleware.
+  // Return the loaded context without plan-reconciliation writes.
+  if (membership.role === "viewer") {
+    req.currentOrg = org;
+    req.currentMembership = membership;
+    next();
     return;
   }
 

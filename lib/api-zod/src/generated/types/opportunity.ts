@@ -20,5 +20,9 @@ export interface Opportunity {
   /** @nullable */
   forecastCategory?: string | null;
   /** @nullable */
+  ownerUserId?: string | null;
+  /** @nullable */
+  createdByUserId?: string | null;
+  /** @nullable */
   createdAt?: string | null;
 }

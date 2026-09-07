@@ -8,11 +8,13 @@ import {
   leads,
   opportunities,
   organizations,
+  orgUsers,
   opportunityStageHistory,
   pipelines,
   tasks,
 } from "@workspace/db";
 import { AiConsentError, callClaude, getAiBudgetStatus, parseClaudeJson } from "./claude";
+import { appendAuditEvent } from "./audit";
 
 export async function ensureLeadQualifierAgent(orgId: string, userId: string) {
   const [existing] = await db.select().from(aiAgents).where(and(eq(aiAgents.orgId, orgId), eq(aiAgents.type, "lead_qualifier")));
@@ -77,10 +79,24 @@ export async function assertAgentAiAccess(orgId: string) {
   }
 }
 
+async function resolveEffectiveOwner(orgId: string, candidateUserId?: string): Promise<string> {
+  if (candidateUserId) {
+    const [member] = await db.select({ userId: orgUsers.userId }).from(orgUsers)
+      .where(and(eq(orgUsers.orgId, orgId), eq(orgUsers.userId, candidateUserId)));
+    if (member) return member.userId;
+  }
+  const [owner] = await db.select({ userId: orgUsers.userId }).from(orgUsers)
+    .where(and(eq(orgUsers.orgId, orgId), eq(orgUsers.role, "owner")))
+    .orderBy(orgUsers.createdAt).limit(1);
+  if (!owner) throw new Error("Agent cannot create CRM output because the organization has no valid owner");
+  return owner.userId;
+}
+
 async function runLeadQualifier(agent: typeof aiAgents.$inferSelect, executionId: string, entityType: string, entityId: string, actorUserId: string) {
   if (entityType !== "lead") throw new Error("Lead qualifier requires a lead");
   const [lead] = await db.select().from(leads).where(and(eq(leads.orgId, agent.orgId), eq(leads.id, entityId)));
   if (!lead) throw new Error("Lead not found");
+  const effectiveOwnerUserId = await resolveEffectiveOwner(agent.orgId, lead.assignedToUserId ?? actorUserId);
   const config = agent.config as Record<string, unknown>;
   const fit = leadFitScore(lead);
   const threshold = Number(config.qualificationThreshold ?? 50);
@@ -99,34 +115,48 @@ async function runLeadQualifier(agent: typeof aiAgents.$inferSelect, executionId
   const qualified = plan.qualify && plan.score >= threshold;
   const actions: Record<string, unknown>[] = [{ action: "score_lead", score: fit.score, status: "success" }];
   // Claude completed and its bounded decision was validated before this first mutation.
-  await db.update(leads).set({ score: Math.round(plan.score), status: qualified ? "qualified" : "working" }).where(eq(leads.id, lead.id));
+  const [updatedLead] = await db.update(leads).set({ score: Math.round(plan.score), status: qualified ? "qualified" : "working" })
+    .where(and(eq(leads.id, lead.id), eq(leads.orgId, agent.orgId))).returning({ id: leads.id });
+  if (!updatedLead) throw new Error("Lead no longer exists");
+  await appendAuditEvent({ orgId: agent.orgId, action: "lead.updated", entityType: "lead", entityId: lead.id, actorUserId: effectiveOwnerUserId, metadata: { source: "agent", agentId: agent.id, fields: ["score", "status"] } });
   if (qualified && plan.createOpportunity && !lead.convertedOpportunityId) {
     const companyName = lead.company ?? `${lead.firstName} ${lead.lastName}`;
     let [account] = await db.select().from(accounts).where(and(eq(accounts.orgId, agent.orgId), ilike(accounts.name, companyName)));
-    if (!account) [account] = await db.insert(accounts).values({
+    let createdAccount = false;
+    if (!account) {
+      [account] = await db.insert(accounts).values({
       orgId: agent.orgId, name: companyName, industry: lead.industry, employeeCount: lead.companySize,
-      ownerUserId: lead.assignedToUserId ?? actorUserId,
+      ownerUserId: effectiveOwnerUserId, createdByUserId: effectiveOwnerUserId,
     }).returning();
+      createdAccount = true;
+      await appendAuditEvent({ orgId: agent.orgId, action: "account.created", entityType: "account", entityId: account.id, actorUserId: effectiveOwnerUserId, metadata: { source: "agent", agentId: agent.id } });
+    }
     const [pipeline] = await db.select().from(pipelines).where(eq(pipelines.orgId, agent.orgId));
     const firstStage = ((pipeline?.stages ?? []) as { key: string; probability: number; forecastCategory: string }[])[0];
     const [opportunity] = await db.insert(opportunities).values({
       orgId: agent.orgId, accountId: account.id, name: `${companyName} - New Business`,
       pipelineId: pipeline?.id, stage: firstStage?.key ?? "prospecting", probability: firstStage?.probability ?? 10,
-      forecastCategory: firstStage?.forecastCategory ?? "pipeline", ownerUserId: lead.assignedToUserId ?? actorUserId,
+      forecastCategory: firstStage?.forecastCategory ?? "pipeline", ownerUserId: effectiveOwnerUserId,
+      createdByUserId: effectiveOwnerUserId,
     }).returning();
+    await appendAuditEvent({ orgId: agent.orgId, action: "opportunity.created", entityType: "opportunity", entityId: opportunity.id, actorUserId: effectiveOwnerUserId, metadata: { source: "agent", agentId: agent.id, createdAccount } });
     await db.insert(opportunityStageHistory).values({
       orgId: agent.orgId, opportunityId: opportunity.id, fromStage: null,
       toStage: opportunity.stage, changedByUserId: actorUserId,
     });
-    await db.update(leads).set({ convertedOpportunityId: opportunity.id }).where(eq(leads.id, lead.id));
+    const [convertedLead] = await db.update(leads).set({ convertedOpportunityId: opportunity.id })
+      .where(and(eq(leads.id, lead.id), eq(leads.orgId, agent.orgId))).returning({ id: leads.id });
+    if (!convertedLead) throw new Error("Lead no longer exists");
+    await appendAuditEvent({ orgId: agent.orgId, action: "lead.updated", entityType: "lead", entityId: lead.id, actorUserId: effectiveOwnerUserId, metadata: { source: "agent", agentId: agent.id, fields: ["convertedOpportunityId"] } });
     actions.push({ action: "create_opportunity", opportunityId: opportunity.id, status: "success" });
     if (outreachDraft) {
       const [recommendation] = await db.insert(aiRecommendations).values({
-        orgId: agent.orgId, userId: lead.assignedToUserId ?? actorUserId, accountId: account.id,
+        orgId: agent.orgId, userId: effectiveOwnerUserId, accountId: account.id,
         opportunityId: opportunity.id, type: "email_draft", title: `Outreach draft for ${lead.firstName}`,
         description: outreachDraft, suggestedAction: "Review, edit, and send manually.", confidence: "0.750",
         source: "agent", sourceKey: `agent:${agent.id}:lead:${lead.id}:outreach`,
       }).onConflictDoNothing().returning();
+      if (recommendation) await appendAuditEvent({ orgId: agent.orgId, action: "recommendation.created", entityType: "recommendation", entityId: recommendation.id, actorUserId: effectiveOwnerUserId, metadata: { source: "agent", agentId: agent.id, executionId, targetLeadId: lead.id, targetAccountId: account.id, targetOpportunityId: opportunity.id, ownerUserId: effectiveOwnerUserId } });
       actions.push({ action: "draft_email", recommendationId: recommendation?.id ?? null, status: "success", sent: false });
     }
     if (plan.scheduleFollowUp) {
@@ -134,9 +164,10 @@ async function runLeadQualifier(agent: typeof aiAgents.$inferSelect, executionId
       const [task] = await db.insert(tasks).values({
         orgId: agent.orgId, accountId: account.id, opportunityId: opportunity.id,
         title: "Follow up", type: "follow_up", dueDate: due,
-        assignedToUserId: lead.assignedToUserId ?? actorUserId, createdByUserId: actorUserId,
+        assignedToUserId: effectiveOwnerUserId, createdByUserId: effectiveOwnerUserId,
         description: `Follow up with ${lead.firstName} ${lead.lastName}.`,
       }).returning();
+      await appendAuditEvent({ orgId: agent.orgId, action: "task.created", entityType: "task", entityId: task.id, actorUserId: effectiveOwnerUserId, metadata: { source: "agent", agentId: agent.id, executionId, targetLeadId: lead.id, targetAccountId: account.id, targetOpportunityId: opportunity.id, ownerUserId: effectiveOwnerUserId } });
       actions.push({ action: "schedule_task", taskId: task.id, status: "success" });
     }
   }
@@ -155,6 +186,7 @@ async function runFollowUp(agent: typeof aiAgents.$inferSelect, executionId: str
   if (entityType !== "lead") throw new Error("Follow-up sequencer requires a lead");
   const [lead] = await db.select().from(leads).where(and(eq(leads.orgId, agent.orgId), eq(leads.id, entityId)));
   if (!lead) throw new Error("Lead not found");
+  const effectiveOwnerUserId = await resolveEffectiveOwner(agent.orgId, lead.assignedToUserId ?? actorUserId);
   const { text, tokensUsed } = await callClaude({
     orgId: agent.orgId, userId: actorUserId, purpose: "agent_follow_up_plan", maxTokens: 600,
     system: "Return JSON only: {\"createDraft\":boolean,\"draft\":string|null,\"rationale\":string}. Drafts are editable only; never send email.",
@@ -170,11 +202,12 @@ async function runFollowUp(agent: typeof aiAgents.$inferSelect, executionId: str
   const actions: Record<string, unknown>[] = [];
   if (plan.createDraft && followUpDraft) {
     const [recommendation] = await db.insert(aiRecommendations).values({
-      orgId: agent.orgId, userId: lead.assignedToUserId ?? actorUserId,
+      orgId: agent.orgId, userId: effectiveOwnerUserId,
       type: "email_draft", title: `Follow-up draft for ${lead.firstName}`, description: followUpDraft,
       suggestedAction: "Review, edit, and send manually.", confidence: "0.700", source: "agent",
       sourceKey: `agent:${agent.id}:follow-up:${lead.id}`,
     }).onConflictDoNothing().returning();
+    if (recommendation) await appendAuditEvent({ orgId: agent.orgId, action: "recommendation.created", entityType: "recommendation", entityId: recommendation.id, actorUserId: effectiveOwnerUserId, metadata: { source: "agent", agentId: agent.id, executionId, targetLeadId: lead.id, ownerUserId: effectiveOwnerUserId } });
     actions.push({ action: "draft_email", recommendationId: recommendation?.id ?? null, sent: false, status: "success" });
   }
   const [done] = await db.update(agentExecutions).set({
@@ -188,6 +221,7 @@ async function runRenewalMonitor(agent: typeof aiAgents.$inferSelect, executionI
   if (entityType !== "account") throw new Error("Renewal monitor requires an account");
   const [account] = await db.select().from(accounts).where(and(eq(accounts.orgId, agent.orgId), eq(accounts.id, entityId)));
   if (!account) throw new Error("Account not found");
+  const effectiveOwnerUserId = await resolveEffectiveOwner(agent.orgId, account.ownerUserId ?? actorUserId);
   const days = account.nextRenewalDate
     ? Math.ceil((new Date(`${account.nextRenewalDate}T00:00:00Z`).getTime() - Date.now()) / 86400000)
     : null;
@@ -205,11 +239,12 @@ async function runRenewalMonitor(agent: typeof aiAgents.$inferSelect, executionI
   // prevents an otherwise-valid model response from expanding the action scope.
   if (plan.createRecommendation && days !== null && days >= 0 && days <= 60) {
     const [recommendation] = await db.insert(aiRecommendations).values({
-      orgId: agent.orgId, userId: account.ownerUserId ?? actorUserId, accountId: account.id,
+      orgId: agent.orgId, userId: effectiveOwnerUserId, accountId: account.id,
       type: "risk_alert", title: `Renewal due in ${days} days`,
       description: `${account.name} has an upcoming renewal.`, suggestedAction: "Schedule a renewal review.",
       confidence: "0.900", source: "agent", sourceKey: `agent:${agent.id}:renewal:${account.id}:${account.nextRenewalDate}`,
     }).onConflictDoNothing().returning();
+    if (recommendation) await appendAuditEvent({ orgId: agent.orgId, action: "recommendation.created", entityType: "recommendation", entityId: recommendation.id, actorUserId: effectiveOwnerUserId, metadata: { source: "agent", agentId: agent.id, executionId, targetAccountId: account.id, ownerUserId: effectiveOwnerUserId } });
     actions.push({ action: "create_recommendation", recommendationId: recommendation?.id ?? null });
   }
   const [done] = await db.update(agentExecutions).set({

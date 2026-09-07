@@ -25,4 +25,6 @@ export interface ContactCreate {
   /** @nullable */
   reportsToContactId?: string | null;
   metadata?: ContactCreateMetadata;
+  /** @nullable */
+  ownerUserId?: string | null;
 }

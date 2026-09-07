@@ -40,6 +40,8 @@ export interface Lead {
   /** @nullable */
   assignedToUserId?: string | null;
   /** @nullable */
+  createdByUserId?: string | null;
+  /** @nullable */
   assignedToName?: string | null;
   /** @nullable */
   territoryId?: string | null;

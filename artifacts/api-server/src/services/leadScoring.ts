@@ -205,7 +205,7 @@ export async function scoreAndRouteLead(
   const [row] = await db
     .update(leads)
     .set(updates)
-    .where(eq(leads.id, lead.id))
+    .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId)))
     .returning();
   return row;
 }

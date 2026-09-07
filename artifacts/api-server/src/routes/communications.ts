@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
-import { Router, type IRouter, type Request } from "express";
-import { and, desc, eq, inArray, isNull, lt, lte, or } from "drizzle-orm";
+import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
+import { and, desc, eq, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import {
   accounts,
@@ -26,12 +26,21 @@ import { z } from "zod";
 import { attachOrg, attachUser, requireFeature, requireRole } from "../middlewares/auth";
 import { sendEmail } from "../lib/email";
 import { analyzeConversation } from "../services/conversationIntelligence";
+import { canAccessCrmRecord, hasCrmManagementAccess, withCrmVisibility } from "../services/crmAccess";
 
 const router: IRouter = Router();
 const gate = [attachUser, attachOrg, requireFeature("crm")] as const;
 const providers = ["gmail", "outlook", "google_calendar", "slack"] as const;
 type Provider = (typeof providers)[number];
 const providerParam = z.enum(providers);
+async function visibleAccount(req: Request, res: Response, next: NextFunction) {
+  const accountId = String(req.params.accountId ?? "");
+  if (!(await canAccessCrmRecord(req, "account", accountId))) {
+    res.status(404).json({ error: "Account not found" });
+    return;
+  }
+  next();
+}
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 class ProviderUnavailableError extends Error {
@@ -404,7 +413,7 @@ router.post("/orgs/:orgId/providers/:provider/sync", attachUser, attachOrg, requ
   }
 });
 
-router.get("/orgs/:orgId/accounts/:accountId/email-threads", ...gate, async (req, res): Promise<void> => {
+router.get("/orgs/:orgId/accounts/:accountId/email-threads", ...gate, visibleAccount, async (req, res): Promise<void> => {
   const accountId = z.string().uuid().safeParse(req.params.accountId);
   if (!accountId.success) { res.status(400).json({ error: "Invalid accountId" }); return; }
   const rows = await db.select().from(emailThreads).where(and(
@@ -417,12 +426,16 @@ router.get("/orgs/:orgId/email-threads/:threadId", ...gate, async (req, res): Pr
     eq(emailThreads.orgId, req.currentOrg!.id), eq(emailThreads.id, req.params.threadId as string),
   ));
   if (!thread) { res.status(404).json({ error: "Email thread not found" }); return; }
+  if (!(await canAccessCrmRecord(req, "account", thread.accountId))) {
+    res.status(404).json({ error: "Email thread not found" });
+    return;
+  }
   const messages = await db.select().from(emailMessages).where(and(
     eq(emailMessages.orgId, req.currentOrg!.id), eq(emailMessages.threadId, thread.id),
   )).orderBy(emailMessages.sentAt);
   res.json({ ...thread, messages });
 });
-router.get("/orgs/:orgId/accounts/:accountId/calendar-events", ...gate, async (req, res): Promise<void> => {
+router.get("/orgs/:orgId/accounts/:accountId/calendar-events", ...gate, visibleAccount, async (req, res): Promise<void> => {
   const accountId = z.string().uuid().safeParse(req.params.accountId);
   if (!accountId.success) { res.status(400).json({ error: "Invalid accountId" }); return; }
   res.json(await db.select().from(calendarEvents).where(and(
@@ -449,7 +462,7 @@ async function notifyMentions(req: Request, ids: string[], body: string) {
   });
 }
 
-router.get("/orgs/:orgId/accounts/:accountId/notes", ...gate, async (req, res): Promise<void> => {
+router.get("/orgs/:orgId/accounts/:accountId/notes", ...gate, visibleAccount, async (req, res): Promise<void> => {
   const orgId = req.currentOrg!.id;
   const rows = await db.select().from(internalNotes).where(and(
     eq(internalNotes.orgId, orgId), eq(internalNotes.accountId, req.params.accountId as string),
@@ -457,16 +470,25 @@ router.get("/orgs/:orgId/accounts/:accountId/notes", ...gate, async (req, res): 
   )).orderBy(desc(internalNotes.createdAt));
   res.json(rows);
 });
-router.post("/orgs/:orgId/accounts/:accountId/notes", ...gate, async (req, res): Promise<void> => {
+router.post("/orgs/:orgId/accounts/:accountId/notes", ...gate, visibleAccount, async (req, res): Promise<void> => {
   const parsed = CreateInternalNoteBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message }); return; }
   const orgId = req.currentOrg!.id;
-  const [account] = await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.id, req.params.accountId as string), eq(accounts.orgId, orgId), eq(accounts.isActive, true)));
-  if (!account) { res.status(404).json({ error: "Account not found" }); return; }
   const mentions = parsed.data.mentionedUserIds ?? [];
   if (!(await validateMentions(orgId, mentions))) { res.status(400).json({ error: "All mentions must be organization members" }); return; }
-  const [note] = await db.insert(internalNotes).values({ orgId, accountId: account.id, authorUserId: req.currentUser!.id, ...parsed.data, mentionedUserIds: mentions }).returning();
-  await db.insert(activities).values({ orgId, accountId: account.id, type: "note", body: note.body, createdByUserId: req.currentUser!.id });
+  const note = await db.transaction(async (tx) => {
+    const [account] = await tx.select({ id: accounts.id }).from(accounts).where(and(
+      eq(accounts.id, req.params.accountId as string),
+      eq(accounts.orgId, orgId),
+      eq(accounts.isActive, true),
+      ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+    )).for("update");
+    if (!account) return undefined;
+    const [created] = await tx.insert(internalNotes).values({ orgId, accountId: account.id, authorUserId: req.currentUser!.id, ...parsed.data, mentionedUserIds: mentions }).returning();
+    await tx.insert(activities).values({ orgId, accountId: account.id, type: "note", body: created.body, createdByUserId: req.currentUser!.id });
+    return created;
+  });
+  if (!note) { res.status(404).json({ error: "Account not found" }); return; }
   void notifyMentions(req, mentions, note.body).catch((error) => req.log.warn({ err: error }, "Slack mention notification failed"));
   res.status(201).json(note);
 });
@@ -478,24 +500,50 @@ async function editableNote(req: Request) {
     eq(internalNotes.accountId, req.params.accountId as string),
     eq(internalNotes.isDeleted, false),
   ));
-  const privileged = ["owner", "admin"].includes(req.currentMembership!.role);
+  const privileged = hasCrmManagementAccess(req);
   return note && (note.authorUserId === req.currentUser!.id || privileged) ? note : undefined;
 }
-router.patch("/orgs/:orgId/accounts/:accountId/notes/:noteId", ...gate, async (req, res): Promise<void> => {
+router.patch("/orgs/:orgId/accounts/:accountId/notes/:noteId", ...gate, visibleAccount, async (req, res): Promise<void> => {
   const parsed = UpdateInternalNoteBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message }); return; }
   const note = await editableNote(req);
   if (!note) { res.status(404).json({ error: "Note not found or not editable" }); return; }
   const mentions = parsed.data.mentionedUserIds;
   if (mentions && !(await validateMentions(req.currentOrg!.id, mentions))) { res.status(400).json({ error: "All mentions must be organization members" }); return; }
-  const [updated] = await db.update(internalNotes).set(parsed.data).where(eq(internalNotes.id, note.id)).returning();
+  const [updated] = await db.update(internalNotes).set(parsed.data).where(and(
+    eq(internalNotes.id, note.id),
+    eq(internalNotes.orgId, req.currentOrg!.id),
+    eq(internalNotes.accountId, req.params.accountId as string),
+    eq(internalNotes.isDeleted, false),
+    hasCrmManagementAccess(req) ? sql`true` : eq(internalNotes.authorUserId, req.currentUser!.id),
+    sql`exists (
+      select 1 from ${accounts}
+      where ${accounts.id} = ${internalNotes.accountId}
+        and ${accounts.orgId} = ${req.currentOrg!.id}
+        ${hasCrmManagementAccess(req) ? sql`` : sql`and ${accounts.ownerUserId} is not null and (${accounts.ownerUserId} = ${req.currentUser!.id} or ${accounts.createdByUserId} = ${req.currentUser!.id})`}
+    )`,
+  )).returning();
+  if (!updated) { res.status(404).json({ error: "Note not found or not editable" }); return; }
   if (mentions) void notifyMentions(req, mentions, updated.body).catch((error) => req.log.warn({ err: error }, "Slack mention notification failed"));
   res.json(updated);
 });
-router.delete("/orgs/:orgId/accounts/:accountId/notes/:noteId", ...gate, async (req, res): Promise<void> => {
+router.delete("/orgs/:orgId/accounts/:accountId/notes/:noteId", ...gate, visibleAccount, async (req, res): Promise<void> => {
   const note = await editableNote(req);
   if (!note) { res.status(404).json({ error: "Note not found or not editable" }); return; }
-  await db.update(internalNotes).set({ isDeleted: true }).where(eq(internalNotes.id, note.id));
+  const [deleted] = await db.update(internalNotes).set({ isDeleted: true }).where(and(
+    eq(internalNotes.id, note.id),
+    eq(internalNotes.orgId, req.currentOrg!.id),
+    eq(internalNotes.accountId, req.params.accountId as string),
+    eq(internalNotes.isDeleted, false),
+    hasCrmManagementAccess(req) ? sql`true` : eq(internalNotes.authorUserId, req.currentUser!.id),
+    sql`exists (
+      select 1 from ${accounts}
+      where ${accounts.id} = ${internalNotes.accountId}
+        and ${accounts.orgId} = ${req.currentOrg!.id}
+        ${hasCrmManagementAccess(req) ? sql`` : sql`and ${accounts.ownerUserId} is not null and (${accounts.ownerUserId} = ${req.currentUser!.id} or ${accounts.createdByUserId} = ${req.currentUser!.id})`}
+    )`,
+  )).returning({ id: internalNotes.id });
+  if (!deleted) { res.status(404).json({ error: "Note not found or not editable" }); return; }
   res.status(204).end();
 });
 
@@ -503,51 +551,82 @@ router.post("/orgs/:orgId/emails/send", ...gate, async (req, res): Promise<void>
   const parsed = SendCrmEmailBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message }); return; }
   const orgId = req.currentOrg!.id;
-  const [account] = await db.select().from(accounts).where(and(eq(accounts.id, parsed.data.accountId), eq(accounts.orgId, orgId)));
-  if (!account) { res.status(400).json({ error: "accountId must belong to this organization" }); return; }
-  if (parsed.data.contactId) {
-    const [contact] = await db.select({ id: contacts.id }).from(contacts).where(and(
-      eq(contacts.id, parsed.data.contactId), eq(contacts.orgId, orgId), eq(contacts.accountId, account.id),
-    ));
-    if (!contact) { res.status(400).json({ error: "contactId must belong to this account" }); return; }
-  }
-  let threadId = parsed.data.threadId;
-  if (threadId) {
-    const [thread] = await db.select().from(emailThreads).where(and(eq(emailThreads.id, threadId), eq(emailThreads.orgId, orgId), eq(emailThreads.accountId, account.id)));
-    if (!thread) { res.status(400).json({ error: "threadId must belong to this account" }); return; }
-  }
-  const sent = await sendEmail(parsed.data);
-  if (!threadId) {
-    const [thread] = await db.insert(emailThreads).values({
-      orgId,
-      accountId: account.id,
-      contactId: parsed.data.contactId,
-      provider: "resend",
-      externalThreadId: sent.id,
-      subject: parsed.data.subject,
-      snippet: parsed.data.html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 500),
-      participants: [parsed.data.to],
-      lastMessageAt: new Date(),
+  const claimKey = `email-claim:${randomBytes(16).toString("hex")}`;
+  const claim = await db.transaction(async (tx) => {
+    const [account] = await tx.select({ id: accounts.id }).from(accounts).where(and(
+      eq(accounts.id, parsed.data.accountId), eq(accounts.orgId, orgId), eq(accounts.isActive, true),
+      ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+    )).for("update");
+    if (!account) return undefined;
+    if (parsed.data.contactId) {
+      const [contact] = await tx.select({ id: contacts.id }).from(contacts).where(and(
+        eq(contacts.id, parsed.data.contactId), eq(contacts.orgId, orgId), eq(contacts.accountId, account.id),
+        ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
+      )).for("update");
+      if (!contact) return undefined;
+    }
+    let threadId = parsed.data.threadId;
+    if (threadId) {
+      const [thread] = await tx.select({ id: emailThreads.id }).from(emailThreads).where(and(
+        eq(emailThreads.id, threadId), eq(emailThreads.orgId, orgId), eq(emailThreads.accountId, account.id),
+      )).for("update");
+      if (!thread) return undefined;
+    }
+    const [activity] = await tx.insert(activities).values({
+      orgId, accountId: account.id, contactId: parsed.data.contactId, threadId,
+      type: "email_pending", direction: "outbound", subject: parsed.data.subject,
+      externalMessageId: claimKey, participants: [parsed.data.to], createdByUserId: req.currentUser!.id,
     }).returning();
-    threadId = thread.id;
-  }
-  await db.insert(emailMessages).values({
-    orgId,
-    threadId,
-    provider: "resend",
-    externalMessageId: sent.id,
-    recipients: [parsed.data.to],
-    subject: parsed.data.subject,
-    bodyText: parsed.data.html,
-    direction: "outbound",
-    sentAt: new Date(),
+    return { activity, threadId };
   });
-  const [activity] = await db.insert(activities).values({
-    orgId, accountId: account.id, contactId: parsed.data.contactId, threadId,
-    type: "email", direction: "outbound", subject: parsed.data.subject, body: parsed.data.html,
-    externalMessageId: `mail:resend:${sent.id}`, participants: [parsed.data.to], createdByUserId: req.currentUser!.id,
-  }).returning();
-  res.status(201).json({ id: sent.id, activityId: activity.id, threadId: activity.threadId });
+  if (!claim) { res.status(404).json({ error: "CRM record not found" }); return; }
+
+  let sent;
+  try {
+    sent = await sendEmail(parsed.data);
+  } catch (error) {
+    await db.update(activities).set({ type: "email_failed" }).where(and(
+      eq(activities.id, claim.activity.id), eq(activities.orgId, orgId), eq(activities.externalMessageId, claimKey),
+    ));
+    res.status(502).json({ error: error instanceof Error ? error.message : "Email delivery failed" });
+    return;
+  }
+
+  try {
+    const persisted = await db.transaction(async (tx) => {
+      let threadId = claim.threadId;
+      if (!threadId) {
+        const [thread] = await tx.insert(emailThreads).values({
+          orgId, accountId: claim.activity.accountId, contactId: claim.activity.contactId,
+          provider: "resend", externalThreadId: sent.id, subject: parsed.data.subject,
+          snippet: parsed.data.html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 500),
+          participants: [parsed.data.to], lastMessageAt: new Date(),
+        }).returning();
+        threadId = thread.id;
+      }
+      await tx.insert(emailMessages).values({
+        orgId, threadId, provider: "resend", externalMessageId: sent.id,
+        recipients: [parsed.data.to], subject: parsed.data.subject, bodyText: parsed.data.html,
+        direction: "outbound", sentAt: new Date(),
+      });
+      const [activity] = await tx.update(activities).set({
+        type: "email", threadId, body: parsed.data.html, externalMessageId: `mail:resend:${sent.id}`,
+      }).where(and(
+        eq(activities.id, claim.activity.id), eq(activities.orgId, orgId),
+        eq(activities.externalMessageId, claimKey), eq(activities.type, "email_pending"),
+      )).returning();
+      if (!activity) throw new Error("Outbound email claim was lost");
+      return activity;
+    });
+    res.status(201).json({ id: sent.id, activityId: persisted.id, threadId: persisted.threadId });
+  } catch (error) {
+    await db.update(activities).set({
+      type: "email_sent_persistence_failed",
+      externalMessageId: `mail:resend:${sent.id}`,
+    }).where(and(eq(activities.id, claim.activity.id), eq(activities.orgId, orgId)));
+    req.log.error({ err: error, activityId: claim.activity.id }, "Email sent but CRM persistence failed");
+    res.status(500).json({ error: "Email was sent, but CRM persistence failed; contact support before retrying" });
+  }
 });
 
 export default router;

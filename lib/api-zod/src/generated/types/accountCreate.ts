@@ -37,4 +37,6 @@ export interface AccountCreate {
   /** @nullable */
   nextRenewalDate?: string | null;
   metadata?: AccountCreateMetadata;
+  /** @nullable */
+  ownerUserId?: string | null;
 }

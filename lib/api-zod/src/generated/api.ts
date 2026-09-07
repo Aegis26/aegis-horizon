@@ -317,6 +317,8 @@ export const ListAccountsResponseItem = zod.object({
   "state": zod.string().nullish(),
   "healthScore": zod.string().nullish(),
   "riskLevel": zod.string().nullish(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "createdAt": zod.string().nullish()
 })
 export const ListAccountsResponse = zod.array(ListAccountsResponseItem)
@@ -347,7 +349,8 @@ export const CreateAccountBody = zod.object({
   "healthScore": zod.string().nullish(),
   "riskLevel": zod.string().nullish(),
   "nextRenewalDate": zod.string().nullish(),
-  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "ownerUserId": zod.string().uuid().nullish()
 })
 
 export const CreateAccountResponse = zod.object({
@@ -368,6 +371,8 @@ export const CreateAccountResponse = zod.object({
   "ltv": zod.string().nullish(),
   "nextRenewalDate": zod.string().nullish(),
   "isActive": zod.boolean(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "metadata": zod.record(zod.string(), zod.unknown()).optional(),
   "files": zod.array(zod.object({
   "objectPath": zod.string(),
@@ -411,7 +416,8 @@ export const BulkImportAccountsBody = zod.object({
   "healthScore": zod.string().nullish(),
   "riskLevel": zod.string().nullish(),
   "nextRenewalDate": zod.string().nullish(),
-  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "ownerUserId": zod.string().uuid().nullish()
 }).and(zod.object({
   "contacts": zod.array(zod.object({
   "firstName": zod.string().min(1),
@@ -422,7 +428,8 @@ export const BulkImportAccountsBody = zod.object({
   "department": zod.string().nullish(),
   "seniority": zod.string().nullish(),
   "reportsToContactId": zod.string().nullish(),
-  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "ownerUserId": zod.string().uuid().nullish()
 })).optional()
 }))).min(1).max(bulkImportAccountsBodyAccountsMax)
 })
@@ -460,6 +467,8 @@ export const GetAccountResponse = zod.object({
   "ltv": zod.string().nullish(),
   "nextRenewalDate": zod.string().nullish(),
   "isActive": zod.boolean(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "metadata": zod.record(zod.string(), zod.unknown()).optional(),
   "files": zod.array(zod.object({
   "objectPath": zod.string(),
@@ -484,6 +493,8 @@ export const GetAccountResponse = zod.object({
   "reportsToContactId": zod.string().nullish(),
   "isActive": zod.boolean(),
   "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "createdAt": zod.string().nullish()
 })),
   "opportunities": zod.array(zod.object({
@@ -495,6 +506,8 @@ export const GetAccountResponse = zod.object({
   "value": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
   "forecastCategory": zod.string().nullish(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "createdAt": zod.string().nullish()
 }))
 }))
@@ -526,7 +539,8 @@ export const UpdateAccountBody = zod.object({
   "healthScore": zod.string().nullish(),
   "riskLevel": zod.string().nullish(),
   "nextRenewalDate": zod.string().nullish(),
-  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "ownerUserId": zod.string().uuid().nullish()
 })
 
 export const UpdateAccountResponse = zod.object({
@@ -547,6 +561,8 @@ export const UpdateAccountResponse = zod.object({
   "ltv": zod.string().nullish(),
   "nextRenewalDate": zod.string().nullish(),
   "isActive": zod.boolean(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "metadata": zod.record(zod.string(), zod.unknown()).optional(),
   "files": zod.array(zod.object({
   "objectPath": zod.string(),
@@ -592,6 +608,8 @@ export const ListContactsResponseItem = zod.object({
   "reportsToContactId": zod.string().nullish(),
   "isActive": zod.boolean(),
   "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "createdAt": zod.string().nullish()
 })
 export const ListContactsResponse = zod.array(ListContactsResponseItem)
@@ -618,7 +636,8 @@ export const CreateContactBody = zod.object({
   "department": zod.string().nullish(),
   "seniority": zod.string().nullish(),
   "reportsToContactId": zod.string().nullish(),
-  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "ownerUserId": zod.string().uuid().nullish()
 })
 
 export const CreateContactResponse = zod.object({
@@ -634,6 +653,8 @@ export const CreateContactResponse = zod.object({
   "reportsToContactId": zod.string().nullish(),
   "isActive": zod.boolean(),
   "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "createdAt": zod.string().nullish()
 })
 
@@ -659,6 +680,8 @@ export const GetContactResponse = zod.object({
   "reportsToContactId": zod.string().nullish(),
   "isActive": zod.boolean(),
   "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "createdAt": zod.string().nullish()
 })
 
@@ -684,7 +707,8 @@ export const UpdateContactBody = zod.object({
   "department": zod.string().nullish(),
   "seniority": zod.string().nullish(),
   "reportsToContactId": zod.string().nullish(),
-  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+  "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "ownerUserId": zod.string().uuid().nullish()
 })
 
 export const UpdateContactResponse = zod.object({
@@ -700,6 +724,8 @@ export const UpdateContactResponse = zod.object({
   "reportsToContactId": zod.string().nullish(),
   "isActive": zod.boolean(),
   "metadata": zod.record(zod.string(), zod.unknown()).optional(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "createdAt": zod.string().nullish()
 })
 
@@ -961,6 +987,8 @@ export const PreviewSegmentResponseItem = zod.object({
   "state": zod.string().nullish(),
   "healthScore": zod.string().nullish(),
   "riskLevel": zod.string().nullish(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "createdAt": zod.string().nullish()
 })
 export const PreviewSegmentResponse = zod.array(PreviewSegmentResponseItem)
@@ -990,6 +1018,8 @@ export const PreviewSegmentConditionsResponseItem = zod.object({
   "state": zod.string().nullish(),
   "healthScore": zod.string().nullish(),
   "riskLevel": zod.string().nullish(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "createdAt": zod.string().nullish()
 })
 export const PreviewSegmentConditionsResponse = zod.array(PreviewSegmentConditionsResponseItem)
@@ -1355,6 +1385,8 @@ export const ListOpportunitiesResponseItem = zod.object({
   "value": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
   "forecastCategory": zod.string().nullish(),
+  "ownerUserId": zod.string().uuid().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "createdAt": zod.string().nullish()
 })
 export const ListOpportunitiesResponse = zod.array(ListOpportunitiesResponseItem)
@@ -1381,7 +1413,8 @@ export const CreateOpportunityBody = zod.object({
   "probability": zod.number().int().min(createOpportunityBodyProbabilityMin).max(createOpportunityBodyProbabilityMax).nullish(),
   "value": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
-  "nextAction": zod.string().nullish()
+  "nextAction": zod.string().nullish(),
+  "ownerUserId": zod.string().uuid().nullish()
 })
 
 export const CreateOpportunityResponse = zod.object({
@@ -1399,6 +1432,7 @@ export const CreateOpportunityResponse = zod.object({
   "lossReason": zod.string().nullish(),
   "nextAction": zod.string().nullish(),
   "ownerUserId": zod.string().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "ownerName": zod.string().nullish(),
   "stageHistory": zod.array(zod.object({
   "id": zod.string(),
@@ -1435,6 +1469,7 @@ export const GetOpportunityResponse = zod.object({
   "lossReason": zod.string().nullish(),
   "nextAction": zod.string().nullish(),
   "ownerUserId": zod.string().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "ownerName": zod.string().nullish(),
   "stageHistory": zod.array(zod.object({
   "id": zod.string(),
@@ -1491,6 +1526,7 @@ export const UpdateOpportunityResponse = zod.object({
   "lossReason": zod.string().nullish(),
   "nextAction": zod.string().nullish(),
   "ownerUserId": zod.string().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "ownerName": zod.string().nullish(),
   "stageHistory": zod.array(zod.object({
   "id": zod.string(),
@@ -1538,6 +1574,7 @@ export const ConvertOpportunityToCustomerResponse = zod.object({
   "lossReason": zod.string().nullish(),
   "nextAction": zod.string().nullish(),
   "ownerUserId": zod.string().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "ownerName": zod.string().nullish(),
   "stageHistory": zod.array(zod.object({
   "id": zod.string(),
@@ -1713,6 +1750,7 @@ export const ListLeadsResponseItem = zod.object({
   "status": zod.enum(['new', 'working', 'qualified', 'disqualified']),
   "score": zod.number().int(),
   "assignedToUserId": zod.string().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "assignedToName": zod.string().nullish(),
   "territoryId": zod.string().nullish(),
   "territoryName": zod.string().nullish(),
@@ -1774,6 +1812,7 @@ export const CreateLeadResponse = zod.object({
   "status": zod.enum(['new', 'working', 'qualified', 'disqualified']),
   "score": zod.number().int(),
   "assignedToUserId": zod.string().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "assignedToName": zod.string().nullish(),
   "territoryId": zod.string().nullish(),
   "territoryName": zod.string().nullish(),
@@ -1840,6 +1879,7 @@ export const UpdateLeadResponse = zod.object({
   "status": zod.enum(['new', 'working', 'qualified', 'disqualified']),
   "score": zod.number().int(),
   "assignedToUserId": zod.string().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "assignedToName": zod.string().nullish(),
   "territoryId": zod.string().nullish(),
   "territoryName": zod.string().nullish(),
@@ -1889,6 +1929,7 @@ export const QualifyLeadResponse = zod.object({
   "lossReason": zod.string().nullish(),
   "nextAction": zod.string().nullish(),
   "ownerUserId": zod.string().nullish(),
+  "createdByUserId": zod.string().uuid().nullish(),
   "ownerName": zod.string().nullish(),
   "stageHistory": zod.array(zod.object({
   "id": zod.string(),

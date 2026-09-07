@@ -40,6 +40,10 @@ export interface AccountDetail {
   /** @nullable */
   nextRenewalDate?: string | null;
   isActive: boolean;
+  /** @nullable */
+  ownerUserId?: string | null;
+  /** @nullable */
+  createdByUserId?: string | null;
   metadata?: AccountDetailMetadata;
   files?: FileAttachment[];
   /** @nullable */

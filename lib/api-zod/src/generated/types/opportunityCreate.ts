@@ -26,4 +26,6 @@ export interface OpportunityCreate {
   expectedCloseDate?: string | null;
   /** @nullable */
   nextAction?: string | null;
+  /** @nullable */
+  ownerUserId?: string | null;
 }

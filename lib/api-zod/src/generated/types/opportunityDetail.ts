@@ -33,6 +33,8 @@ export interface OpportunityDetail {
   /** @nullable */
   ownerUserId?: string | null;
   /** @nullable */
+  createdByUserId?: string | null;
+  /** @nullable */
   ownerName?: string | null;
   stageHistory: StageHistoryEntry[];
   /** @nullable */

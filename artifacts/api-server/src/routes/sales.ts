@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq, gte, ilike, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, isNull, lt, or, sql } from "drizzle-orm";
 import {
   db,
   accounts,
@@ -71,6 +71,12 @@ import { processNewLead } from "../services/agents";
 import { publishAutomationEvent } from "../services/workflow";
 import { isOrgMemberId, isOrgTerritoryId } from "../services/orgValidation";
 import { publishWebhookEvent } from "../services/webhooks";
+import { appendAuditEvent, auditContext } from "../services/audit";
+import {
+  hasCrmManagementAccess,
+  canAccessCrmRecord,
+  withCrmVisibility,
+} from "../services/crmAccess";
 
 const router: IRouter = Router();
 const gate = [attachUser, attachOrg, requireFeature("sales")] as const;
@@ -109,13 +115,14 @@ const DEFAULT_STAGES: PipelineStage[] = [
   { key: "closed_lost", name: "Closed Lost", probability: 0, forecastCategory: "closed_lost", order: 5 },
 ];
 
-async function ensureDefaultPipeline(orgId: string): Promise<Pipeline[]> {
+async function ensureDefaultPipeline(orgId: string, createIfMissing = true): Promise<Pipeline[]> {
   const rows = await db
     .select()
     .from(pipelines)
     .where(eq(pipelines.orgId, orgId))
     .orderBy(desc(pipelines.isDefault), pipelines.createdAt);
   if (rows.length > 0) return rows;
+  if (!createIfMissing) return [];
   const [created] = await db
     .insert(pipelines)
     .values({
@@ -145,7 +152,7 @@ function stagesOf(p: Pipeline | undefined): PipelineStage[] {
 }
 
 router.get("/orgs/:orgId/pipelines", ...gate, async (req, res): Promise<void> => {
-  const rows = await ensureDefaultPipeline(req.currentOrg!.id);
+  const rows = await ensureDefaultPipeline(req.currentOrg!.id, false);
   res.json(ListPipelinesResponse.parse(rows.map(pipelineOut)));
 });
 
@@ -199,6 +206,45 @@ router.patch(
 
 /* ---------------------------- opportunities ---------------------------- */
 
+function opportunityAudit(o: Opportunity) {
+  return {
+    accountId: o.accountId,
+    name: o.name,
+    stage: o.stage,
+    ownerUserId: o.ownerUserId,
+    createdByUserId: o.createdByUserId,
+  };
+}
+
+function leadAudit(l: Lead) {
+  return {
+    firstName: l.firstName,
+    lastName: l.lastName,
+    company: l.company,
+    status: l.status,
+    score: l.score,
+    assignedToUserId: l.assignedToUserId,
+    createdByUserId: l.createdByUserId,
+    isActive: l.isActive,
+  };
+}
+
+async function crmAssignee(
+  req: Request,
+  requested: string | null | undefined,
+  field: string,
+): Promise<{ value: string | null; error?: string }> {
+  const currentUserId = req.currentUser!.id;
+  if (requested === undefined) return { value: currentUserId };
+  if (!hasCrmManagementAccess(req) && requested !== currentUserId) {
+    return { value: currentUserId, error: `Only management may assign ${field} to another user or leave it unassigned` };
+  }
+  if (requested !== null && !(await isOrgMember(req.currentOrg!.id, requested))) {
+    return { value: currentUserId, error: `${field} must reference a member of this organization` };
+  }
+  return { value: requested };
+}
+
 function opportunitySummary(o: Opportunity) {
   return {
     id: o.id,
@@ -209,6 +255,8 @@ function opportunitySummary(o: Opportunity) {
     value: o.value,
     expectedCloseDate: o.expectedCloseDate,
     forecastCategory: o.forecastCategory,
+    ownerUserId: o.ownerUserId,
+    createdByUserId: o.createdByUserId,
     createdAt: o.createdAt.toISOString(),
   };
 }
@@ -251,6 +299,7 @@ async function opportunityDetail(o: Opportunity) {
     lossReason: o.lossReason,
     nextAction: o.nextAction,
     ownerUserId: o.ownerUserId,
+    createdByUserId: o.createdByUserId,
     ownerName: owner ? (owner.fullName ?? owner.email) : null,
     stageHistory: history.map((h) => ({
       id: h.entry.id,
@@ -272,6 +321,7 @@ async function findOpportunity(req: Request): Promise<Opportunity | undefined> {
       and(
         eq(opportunities.id, req.params.opportunityId as string),
         eq(opportunities.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
       ),
     );
   return row;
@@ -289,6 +339,7 @@ async function orgPipeline(
 router.get("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<void> => {
   const { pipelineId, stage } = req.query as { pipelineId?: string; stage?: string };
   const where = [eq(opportunities.orgId, req.currentOrg!.id)];
+  where.push(...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId));
   if (pipelineId) where.push(eq(opportunities.pipelineId, pipelineId));
   if (stage) where.push(eq(opportunities.stage, stage));
   const rows = await db
@@ -306,12 +357,21 @@ router.post("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<voi
     return;
   }
   const orgId = req.currentOrg!.id;
+  const assignment = await crmAssignee(req, parsed.data.ownerUserId, "ownerUserId");
+  if (assignment.error) {
+    res.status(403).json({ error: assignment.error });
+    return;
+  }
   const [account] = await db
     .select({ id: accounts.id })
     .from(accounts)
-    .where(and(eq(accounts.id, parsed.data.accountId), eq(accounts.orgId, orgId)));
+    .where(and(
+      eq(accounts.id, parsed.data.accountId),
+      eq(accounts.orgId, orgId),
+      ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+    ));
   if (!account) {
-    res.status(400).json({ error: "accountId must reference an account in this organization" });
+    res.status(404).json({ error: "Account not found" });
     return;
   }
   const pipeline = await orgPipeline(orgId, parsed.data.pipelineId);
@@ -326,11 +386,15 @@ router.post("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<voi
     res.status(400).json({ error: "stage is not part of the selected pipeline" });
     return;
   }
-  const [row] = await db
-    .insert(opportunities)
-    .values({
+  const row = await db.transaction(async (tx) => {
+    const [lockedAccount] = await tx.select({ id: accounts.id }).from(accounts).where(and(
+      eq(accounts.id, parsed.data.accountId), eq(accounts.orgId, orgId),
+      ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+    )).for("update");
+    if (!lockedAccount) return undefined;
+    const [created] = await tx.insert(opportunities).values({
       orgId,
-      accountId: parsed.data.accountId,
+      accountId: lockedAccount.id,
       name: parsed.data.name,
       pipelineId: pipeline.id,
       stage: stageKey,
@@ -339,15 +403,26 @@ router.post("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<voi
       expectedCloseDate: parsed.data.expectedCloseDate,
       nextAction: parsed.data.nextAction,
       forecastCategory: stageDef?.forecastCategory ?? "pipeline",
-      ownerUserId: req.currentUser!.id,
-    })
-    .returning();
-  await db.insert(opportunityStageHistory).values({
+      ownerUserId: assignment.value,
+      createdByUserId: req.currentUser!.id,
+    }).returning();
+    await tx.insert(opportunityStageHistory).values({
     orgId,
-    opportunityId: row.id,
+    opportunityId: created.id,
     fromStage: null,
     toStage: stageKey,
     changedByUserId: req.currentUser!.id,
+  });
+    return created;
+  });
+  if (!row) { res.status(404).json({ error: "Account not found" }); return; }
+  await appendAuditEvent({
+    orgId,
+    action: "opportunity.created",
+    entityType: "opportunity",
+    entityId: row.id,
+    ...auditContext(req),
+    metadata: { after: opportunityAudit(row) },
   });
   await publishAutomationEvent({
     orgId,
@@ -421,16 +496,30 @@ router.patch(
       res.status(400).json({ error: "pipelineId must reference a pipeline in this organization" });
       return;
     }
-    if (data.ownerUserId && !(await isOrgMember(orgId, data.ownerUserId))) {
-      res.status(400).json({ error: "ownerUserId must reference a member of this organization" });
-      return;
+    if (data.ownerUserId !== undefined) {
+      const assignment = await crmAssignee(req, data.ownerUserId, "ownerUserId");
+      if (assignment.error) {
+        res.status(403).json({ error: assignment.error });
+        return;
+      }
+      updates.ownerUserId = assignment.value;
     }
 
     const [row] = await db
       .update(opportunities)
       .set(updates)
-      .where(eq(opportunities.id, opp.id))
+      .where(and(eq(opportunities.id, opp.id), eq(opportunities.orgId, orgId),
+        ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId)))
       .returning();
+    if (!row) { res.status(404).json({ error: "Opportunity not found" }); return; }
+    await appendAuditEvent({
+      orgId,
+      action: "opportunity.updated",
+      entityType: "opportunity",
+      entityId: row.id,
+      ...auditContext(req),
+      metadata: { before: opportunityAudit(opp), after: opportunityAudit(row) },
+    });
     void publishWebhookEvent(orgId, "opportunity.updated", row.id, { id: row.id, name: row.name, stage: row.stage });
 
     if (stageChanged) {
@@ -464,7 +553,19 @@ router.delete(
       res.status(404).json({ error: "Opportunity not found" });
       return;
     }
-    await db.delete(opportunities).where(eq(opportunities.id, opp.id));
+    const [deleted] = await db.delete(opportunities)
+      .where(and(eq(opportunities.id, opp.id), eq(opportunities.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId)))
+      .returning();
+    if (!deleted) { res.status(404).json({ error: "Opportunity not found" }); return; }
+    await appendAuditEvent({
+      orgId: opp.orgId,
+      action: "opportunity.deleted",
+      entityType: "opportunity",
+      entityId: opp.id,
+      ...auditContext(req),
+      metadata: { before: opportunityAudit(deleted ?? opp) },
+    });
     res.status(204).end();
   },
 );
@@ -494,8 +595,22 @@ router.post(
         forecastCategory: "closed_won",
         actualCloseDate: today,
       })
-      .where(eq(opportunities.id, opp.id))
+      .where(and(eq(opportunities.id, opp.id), eq(opportunities.orgId, orgId),
+        ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId)))
       .returning();
+    if (!row) { res.status(404).json({ error: "Opportunity not found" }); return; }
+    await appendAuditEvent({
+      orgId,
+      action: "opportunity.updated",
+      entityType: "opportunity",
+      entityId: row.id,
+      ...auditContext(req),
+      metadata: {
+        operation: "convert_to_customer",
+        before: opportunityAudit(opp),
+        after: opportunityAudit(row),
+      },
+    });
     if (opp.stage !== wonStage.key) {
       await db.insert(opportunityStageHistory).values({
         orgId,
@@ -509,7 +624,11 @@ router.post(
     const [account] = await db
       .select()
       .from(accounts)
-      .where(eq(accounts.id, opp.accountId));
+      .where(and(
+        eq(accounts.id, opp.accountId),
+        eq(accounts.orgId, orgId),
+        ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+      ));
     if (account) {
       const metadata = {
         ...((account.metadata ?? {}) as Record<string, unknown>),
@@ -518,7 +637,25 @@ router.post(
           ((account.metadata ?? {}) as Record<string, unknown>).customerSince ??
           today,
       };
-      await db.update(accounts).set({ metadata }).where(eq(accounts.id, account.id));
+      const [updatedAccount] = await db.update(accounts).set({ metadata })
+        .where(and(
+          eq(accounts.id, account.id),
+          eq(accounts.orgId, orgId),
+          ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+        ))
+        .returning({ id: accounts.id });
+      if (!updatedAccount) {
+        res.status(404).json({ error: "Account not found" });
+        return;
+      }
+      await appendAuditEvent({
+        orgId,
+        action: "account.updated",
+        entityType: "account",
+        entityId: account.id,
+        ...auditContext(req),
+        metadata: { operation: "convert_opportunity_to_customer" },
+      });
     }
     res.json(ConvertOpportunityToCustomerResponse.parse(await opportunityDetail(row)));
   },
@@ -563,6 +700,7 @@ async function leadOut(l: Lead) {
     status: l.status as "new" | "working" | "qualified" | "disqualified",
     score: l.score,
     assignedToUserId: l.assignedToUserId,
+    createdByUserId: l.createdByUserId,
     assignedToName: assignee ? (assignee.fullName ?? assignee.email) : null,
     territoryId: l.territoryId,
     territoryName: territory?.name ?? null,
@@ -574,6 +712,7 @@ async function leadOut(l: Lead) {
 router.get("/orgs/:orgId/leads", ...gate, async (req, res): Promise<void> => {
   const { status, q } = req.query as { status?: string; q?: string };
   const where = [eq(leads.orgId, req.currentOrg!.id), eq(leads.isActive, true)];
+  where.push(...withCrmVisibility(req, leads.assignedToUserId, leads.createdByUserId));
   if (status) where.push(eq(leads.status, status));
   if (q) {
     const like = `%${q}%`;
@@ -601,11 +740,9 @@ router.post("/orgs/:orgId/leads", ...gate, async (req, res): Promise<void> => {
     return;
   }
   const orgId = req.currentOrg!.id;
-  if (
-    parsed.data.assignedToUserId &&
-    !(await isOrgMember(orgId, parsed.data.assignedToUserId))
-  ) {
-    res.status(400).json({ error: "assignedToUserId must reference a member of this organization" });
+  const assignment = await crmAssignee(req, parsed.data.assignedToUserId, "assignedToUserId");
+  if (assignment.error) {
+    res.status(403).json({ error: assignment.error });
     return;
   }
   if (
@@ -617,10 +754,23 @@ router.post("/orgs/:orgId/leads", ...gate, async (req, res): Promise<void> => {
   }
   const [inserted] = await db
     .insert(leads)
-    .values({ ...parsed.data, orgId })
+    .values({
+      ...parsed.data,
+      assignedToUserId: assignment.value,
+      createdByUserId: req.currentUser!.id,
+      orgId,
+    })
     .returning();
   // Auto-score + auto-route to the matching territory owner.
-  const row = await scoreAndRouteLead(orgId, inserted, { reassign: true });
+  const row = await scoreAndRouteLead(orgId, inserted);
+  await appendAuditEvent({
+    orgId,
+    action: "lead.created",
+    entityType: "lead",
+    entityId: row.id,
+    ...auditContext(req),
+    metadata: { after: leadAudit(row) },
+  });
   await publishAutomationEvent({
     orgId,
     eventKey: `lead-created:${row.id}`,
@@ -645,6 +795,7 @@ async function findLead(req: Request): Promise<Lead | undefined> {
       and(
         eq(leads.id, req.params.leadId as string),
         eq(leads.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, leads.assignedToUserId, leads.createdByUserId),
       ),
     );
   return row;
@@ -663,9 +814,13 @@ router.patch("/orgs/:orgId/leads/:leadId", ...gate, async (req, res): Promise<vo
   }
   const orgId = req.currentOrg!.id;
   const { score: explicitScore, ...rest } = parsed.data;
-  if (rest.assignedToUserId && !(await isOrgMember(orgId, rest.assignedToUserId))) {
-    res.status(400).json({ error: "assignedToUserId must reference a member of this organization" });
-    return;
+  if (rest.assignedToUserId !== undefined) {
+    const assignment = await crmAssignee(req, rest.assignedToUserId, "assignedToUserId");
+    if (assignment.error) {
+      res.status(403).json({ error: assignment.error });
+      return;
+    }
+    rest.assignedToUserId = assignment.value;
   }
   if (rest.territoryId && !(await isOrgTerritory(orgId, rest.territoryId))) {
     res.status(400).json({ error: "territoryId must reference a territory in this organization" });
@@ -676,8 +831,10 @@ router.patch("/orgs/:orgId/leads/:leadId", ...gate, async (req, res): Promise<vo
     .set(explicitScore !== undefined && explicitScore !== null
       ? { ...rest, score: explicitScore }
       : rest)
-    .where(eq(leads.id, lead.id))
+    .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId),
+      ...withCrmVisibility(req, leads.assignedToUserId, leads.createdByUserId)))
     .returning();
+  if (!updated) { res.status(404).json({ error: "Lead not found" }); return; }
   // Re-score (unless the rep pinned an explicit score). Re-route when the
   // lead is unassigned, or when routing fields changed without an explicit
   // manual assignment in this request.
@@ -689,7 +846,15 @@ router.patch("/orgs/:orgId/leads/:leadId", ...gate, async (req, res): Promise<vo
     rest.assignedToUserId !== undefined || rest.territoryId !== undefined;
   const row = await scoreAndRouteLead(orgId, updated, {
     keepScore: explicitScore !== undefined && explicitScore !== null,
-    reassign: routingFieldsChanged && !manualAssignment,
+    reassign: hasCrmManagementAccess(req) && routingFieldsChanged && !manualAssignment,
+  });
+  await appendAuditEvent({
+    orgId,
+    action: "lead.updated",
+    entityType: "lead",
+    entityId: row.id,
+    ...auditContext(req),
+    metadata: { before: leadAudit(lead), after: leadAudit(row) },
   });
   void publishWebhookEvent(orgId, "lead.updated", row.id, { id: row.id, email: row.email, status: row.status, score: row.score });
   res.json(UpdateLeadResponse.parse(await leadOut(row)));
@@ -701,7 +866,19 @@ router.delete("/orgs/:orgId/leads/:leadId", ...gate, async (req, res): Promise<v
     res.status(404).json({ error: "Lead not found" });
     return;
   }
-  await db.update(leads).set({ isActive: false }).where(eq(leads.id, lead.id));
+  const [deleted] = await db.update(leads).set({ isActive: false })
+    .where(and(eq(leads.id, lead.id), eq(leads.orgId, req.currentOrg!.id),
+      ...withCrmVisibility(req, leads.assignedToUserId, leads.createdByUserId)))
+    .returning();
+  if (!deleted) { res.status(404).json({ error: "Lead not found" }); return; }
+  await appendAuditEvent({
+    orgId: lead.orgId,
+    action: "lead.deleted",
+    entityType: "lead",
+    entityId: lead.id,
+    ...auditContext(req),
+    metadata: { before: leadAudit(lead), after: leadAudit(deleted) },
+  });
   res.status(204).end();
 });
 
@@ -725,88 +902,110 @@ router.post(
     }
     const orgId = req.currentOrg!.id;
 
-    // Link to an explicit account, or find/create one by company name.
-    let accountId = parsed.data.accountId ?? null;
-    if (accountId) {
-      const [acc] = await db
-        .select({ id: accounts.id })
-        .from(accounts)
-        .where(and(eq(accounts.id, accountId), eq(accounts.orgId, orgId)));
-      if (!acc) {
-        res.status(400).json({ error: "accountId must reference an account in this organization" });
-        return;
-      }
-    } else {
-      const companyName =
-        lead.company ?? `${lead.firstName} ${lead.lastName}`.trim();
-      const [existing] = await db
-        .select({ id: accounts.id })
-        .from(accounts)
-        .where(
-          and(
-            eq(accounts.orgId, orgId),
-            ilike(accounts.name, companyName),
-            eq(accounts.isActive, true),
-          ),
-        );
-      if (existing) {
-        accountId = existing.id;
-      } else {
-        const [created] = await db
-          .insert(accounts)
-          .values({
-            orgId,
-            name: companyName,
-            industry: lead.industry,
-            employeeCount: lead.companySize,
-            annualRevenue: lead.annualRevenue,
-            country: lead.country,
-            state: lead.state,
-            ownerUserId: lead.assignedToUserId ?? req.currentUser!.id,
-          })
-          .returning();
-        accountId = created.id;
-      }
-    }
-
     const pipeline = await orgPipeline(orgId, null);
     const stages = stagesOf(pipeline);
     const firstStage = stages[0];
-    const [opp] = await db
-      .insert(opportunities)
-      .values({
+    const conversion = await db.transaction(async (tx) => {
+      const [lockedLead] = await tx.select().from(leads).where(and(
+        eq(leads.id, lead.id), eq(leads.orgId, orgId),
+        ...withCrmVisibility(req, leads.assignedToUserId, leads.createdByUserId),
+      )).for("update");
+      if (!lockedLead || (lockedLead.status === "qualified" && lockedLead.convertedOpportunityId)) return undefined;
+
+      let accountId = parsed.data.accountId ?? null;
+      let createdAccount: typeof accounts.$inferSelect | undefined;
+      if (accountId) {
+        const [account] = await tx.select({ id: accounts.id }).from(accounts).where(and(
+          eq(accounts.id, accountId), eq(accounts.orgId, orgId),
+          ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+        )).for("update");
+        if (!account) return undefined;
+      } else {
+        const companyName = lockedLead.company ?? `${lockedLead.firstName} ${lockedLead.lastName}`.trim();
+        const [existing] = await tx.select({ id: accounts.id }).from(accounts).where(and(
+          eq(accounts.orgId, orgId), ilike(accounts.name, companyName), eq(accounts.isActive, true),
+          ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+        )).for("update");
+        if (existing) {
+          accountId = existing.id;
+        } else {
+          [createdAccount] = await tx.insert(accounts).values({
+            orgId, name: companyName, industry: lockedLead.industry,
+            employeeCount: lockedLead.companySize, annualRevenue: lockedLead.annualRevenue,
+            country: lockedLead.country, state: lockedLead.state,
+            ownerUserId: lockedLead.assignedToUserId ?? req.currentUser!.id,
+            createdByUserId: req.currentUser!.id,
+          }).returning();
+          accountId = createdAccount.id;
+        }
+      }
+      const [opp] = await tx.insert(opportunities).values({
         orgId,
         accountId: accountId!,
         name:
           parsed.data.opportunityName ??
-          `${lead.company ?? `${lead.firstName} ${lead.lastName}`} - New Business`,
+          `${lockedLead.company ?? `${lockedLead.firstName} ${lockedLead.lastName}`} - New Business`,
         pipelineId: pipeline?.id,
         stage: firstStage?.key ?? "prospecting",
         probability: firstStage?.probability ?? 10,
         forecastCategory: firstStage?.forecastCategory ?? "pipeline",
         value: parsed.data.value,
         expectedCloseDate: parsed.data.expectedCloseDate,
-        ownerUserId: lead.assignedToUserId ?? req.currentUser!.id,
-      })
-      .returning();
-    await db.insert(opportunityStageHistory).values({
-      orgId,
-      opportunityId: opp.id,
-      fromStage: null,
-      toStage: opp.stage,
-      changedByUserId: req.currentUser!.id,
+        ownerUserId: lockedLead.assignedToUserId ?? req.currentUser!.id,
+        createdByUserId: req.currentUser!.id,
+      }).returning();
+      await tx.insert(opportunityStageHistory).values({
+        orgId, opportunityId: opp.id, fromStage: null, toStage: opp.stage,
+        changedByUserId: req.currentUser!.id,
+      });
+      const [updatedLead] = await tx.update(leads)
+        .set({ status: "qualified", convertedOpportunityId: opp.id })
+        .where(and(eq(leads.id, lockedLead.id), eq(leads.orgId, orgId),
+          ...withCrmVisibility(req, leads.assignedToUserId, leads.createdByUserId)))
+        .returning({ id: leads.id });
+      if (!updatedLead) throw new Error("Lead visibility changed during qualification");
+      return { opp, lead: lockedLead, createdAccount };
     });
-    await db
-      .update(leads)
-      .set({ status: "qualified", convertedOpportunityId: opp.id })
-      .where(eq(leads.id, lead.id));
+    if (!conversion) { res.status(404).json({ error: "Lead or account not found" }); return; }
+    const { opp } = conversion;
+    if (conversion.createdAccount) {
+      await appendAuditEvent({
+        orgId, action: "account.created", entityType: "account",
+        entityId: conversion.createdAccount.id, ...auditContext(req),
+        metadata: { source: "lead_qualification", after: {
+          name: conversion.createdAccount.name,
+          ownerUserId: conversion.createdAccount.ownerUserId,
+          createdByUserId: conversion.createdAccount.createdByUserId,
+        } },
+      });
+    }
+    await appendAuditEvent({
+      orgId,
+      action: "opportunity.created",
+      entityType: "opportunity",
+      entityId: opp.id,
+      ...auditContext(req),
+      metadata: { source: "lead_qualification", after: opportunityAudit(opp) },
+    });
+    await appendAuditEvent({
+      orgId,
+      action: "lead.updated",
+      entityType: "lead",
+      entityId: conversion.lead.id,
+      ...auditContext(req),
+      metadata: {
+        operation: "qualify",
+        before: leadAudit(conversion.lead),
+        after: { ...leadAudit(conversion.lead), status: "qualified", convertedOpportunityId: opp.id },
+      },
+    });
     await publishAutomationEvent({
       orgId,
-      eventKey: `lead-qualified:${lead.id}:${opp.id}`,
+      eventKey: `lead-qualified:${conversion.lead.id}:${opp.id}`,
       eventType: "field_change",
       entityType: "lead",
-      entityId: lead.id,
-      payload: { field: "status", oldValue: lead.status, newValue: "qualified" },
+      entityId: conversion.lead.id,
+      payload: { field: "status", oldValue: conversion.lead.status, newValue: "qualified" },
       actorUserId: req.currentUser!.id,
     });
     await publishAutomationEvent({
@@ -986,15 +1185,6 @@ async function quoteOut(q: Quote) {
   };
 }
 
-async function nextQuoteNumber(orgId: string): Promise<string> {
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(quotes)
-    .where(eq(quotes.orgId, orgId));
-  const year = new Date().getFullYear();
-  return `Q-${year}-${String(count + 1).padStart(4, "0")}`;
-}
-
 router.get("/orgs/:orgId/quotes", ...gate, async (req, res): Promise<void> => {
   const { opportunityId } = req.query as { opportunityId?: string };
   const where = [eq(quotes.orgId, req.currentOrg!.id)];
@@ -1004,7 +1194,10 @@ router.get("/orgs/:orgId/quotes", ...gate, async (req, res): Promise<void> => {
     .from(quotes)
     .where(and(...where))
     .orderBy(desc(quotes.createdAt));
-  res.json(ListQuotesResponse.parse(await Promise.all(rows.map(quoteOut))));
+  const visible = await Promise.all(rows.map(async (quote) =>
+    (await canAccessCrmRecord(req, "opportunity", quote.opportunityId)) ? quote : undefined,
+  ));
+  res.json(ListQuotesResponse.parse(await Promise.all(visible.filter((q): q is Quote => Boolean(q)).map(quoteOut))));
 });
 
 router.post("/orgs/:orgId/quotes", ...gate, async (req, res): Promise<void> => {
@@ -1014,48 +1207,46 @@ router.post("/orgs/:orgId/quotes", ...gate, async (req, res): Promise<void> => {
     return;
   }
   const orgId = req.currentOrg!.id;
-  const [opp] = await db
-    .select()
-    .from(opportunities)
-    .where(
-      and(
-        eq(opportunities.id, parsed.data.opportunityId),
-        eq(opportunities.orgId, orgId),
-      ),
-    );
-  if (!opp) {
-    res.status(400).json({ error: "opportunityId must reference an opportunity in this organization" });
-    return;
-  }
-  // 2-click quote creation: default a line item from the opportunity value
-  // and the recipient from the account's primary contact when not provided.
-  let lineItems = parsed.data.lineItems ?? [];
-  if (lineItems.length === 0) {
-    lineItems = [
-      {
+  const row = await db.transaction(async (tx) => {
+    const [opp] = await tx.select().from(opportunities).where(and(
+      eq(opportunities.id, parsed.data.opportunityId),
+      eq(opportunities.orgId, orgId),
+      ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+    )).for("update");
+    if (!opp) return undefined;
+
+    // 2-click quote creation: default a line item from the opportunity value.
+    let lineItems = parsed.data.lineItems ?? [];
+    if (lineItems.length === 0) {
+      lineItems = [{
         name: opp.name,
         description: null,
         quantity: 1,
         unitPrice: opp.value ? Number(opp.value) : 0,
         discountPercent: null,
-      },
-    ];
-  }
-  const [row] = await db
-    .insert(quotes)
-    .values({
+      }];
+    }
+    const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` })
+      .from(quotes).where(eq(quotes.orgId, orgId));
+    const quoteNumber = `Q-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
+    const [created] = await tx.insert(quotes).values({
       orgId,
       opportunityId: opp.id,
       accountId: opp.accountId,
-      quoteNumber: await nextQuoteNumber(orgId),
+      quoteNumber,
       lineItems,
       discountPercent: String(parsed.data.discountPercent ?? 0),
       validUntil: parsed.data.validUntil,
       recipientEmail: parsed.data.recipientEmail,
       notes: parsed.data.notes,
       createdByUserId: req.currentUser!.id,
-    })
-    .returning();
+    }).returning();
+    return created;
+  });
+  if (!row) {
+    res.status(404).json({ error: "Opportunity not found" });
+    return;
+  }
   res.status(201).json(CreateQuoteResponse.parse(await quoteOut(row)));
 });
 
@@ -1069,6 +1260,7 @@ async function findQuote(req: Request): Promise<Quote | undefined> {
         eq(quotes.orgId, req.currentOrg!.id),
       ),
     );
+  if (!row || !(await canAccessCrmRecord(req, "opportunity", row.opportunityId))) return undefined;
   return row;
 }
 
@@ -1107,8 +1299,18 @@ router.patch("/orgs/:orgId/quotes/:quoteId", ...gate, async (req, res): Promise<
   const [row] = await db
     .update(quotes)
     .set(updates)
-    .where(eq(quotes.id, quote.id))
+    .where(and(
+      eq(quotes.id, quote.id),
+      eq(quotes.orgId, req.currentOrg!.id),
+      sql`exists (
+        select 1 from ${opportunities}
+        where ${opportunities.id} = ${quotes.opportunityId}
+          and ${opportunities.orgId} = ${req.currentOrg!.id}
+          ${hasCrmManagementAccess(req) ? sql`` : sql`and ${opportunities.ownerUserId} is not null and (${opportunities.ownerUserId} = ${req.currentUser!.id} or ${opportunities.createdByUserId} = ${req.currentUser!.id})`}
+      )`,
+    ))
     .returning();
+  if (!row) { res.status(404).json({ error: "Quote not found" }); return; }
   res.json(UpdateQuoteResponse.parse(await quoteOut(row)));
 });
 
@@ -1122,7 +1324,17 @@ router.delete("/orgs/:orgId/quotes/:quoteId", ...gate, async (req, res): Promise
     res.status(400).json({ error: "Only draft quotes can be deleted" });
     return;
   }
-  await db.delete(quotes).where(eq(quotes.id, quote.id));
+  const [deleted] = await db.delete(quotes).where(and(
+    eq(quotes.id, quote.id),
+    eq(quotes.orgId, req.currentOrg!.id),
+    sql`exists (
+      select 1 from ${opportunities}
+      where ${opportunities.id} = ${quotes.opportunityId}
+        and ${opportunities.orgId} = ${req.currentOrg!.id}
+        ${hasCrmManagementAccess(req) ? sql`` : sql`and ${opportunities.ownerUserId} is not null and (${opportunities.ownerUserId} = ${req.currentUser!.id} or ${opportunities.createdByUserId} = ${req.currentUser!.id})`}
+    )`,
+  )).returning({ id: quotes.id });
+  if (!deleted) { res.status(404).json({ error: "Quote not found" }); return; }
   res.status(204).end();
 });
 
@@ -1177,6 +1389,29 @@ router.post("/orgs/:orgId/quotes/:quoteId/send", ...gate, async (req, res): Prom
   const message = parsed.data.message
     ? `<p>${parsed.data.message.replace(/</g, "&lt;")}</p>`
     : "";
+  const claimTime = new Date();
+  const priorStatus = quote.status;
+  const priorSentAt = quote.sentAt;
+  const priorRecipient = quote.recipientEmail;
+  const [claimed] = await db.update(quotes)
+    .set({ status: "sent", sentAt: claimTime, recipientEmail: recipient })
+    .where(and(
+      eq(quotes.id, quote.id),
+      eq(quotes.orgId, req.currentOrg!.id),
+      eq(quotes.status, priorStatus),
+      priorSentAt ? eq(quotes.sentAt, priorSentAt) : isNull(quotes.sentAt),
+      sql`exists (
+        select 1 from ${opportunities}
+        where ${opportunities.id} = ${quotes.opportunityId}
+          and ${opportunities.orgId} = ${req.currentOrg!.id}
+          ${hasCrmManagementAccess(req) ? sql`` : sql`and ${opportunities.ownerUserId} is not null and (${opportunities.ownerUserId} = ${req.currentUser!.id} or ${opportunities.createdByUserId} = ${req.currentUser!.id})`}
+      )`,
+    ))
+    .returning();
+  if (!claimed) {
+    res.status(409).json({ error: "Quote changed or is no longer accessible" });
+    return;
+  }
   try {
     await sendEmail({
       to: recipient,
@@ -1194,15 +1429,18 @@ router.post("/orgs/:orgId/quotes/:quoteId/send", ...gate, async (req, res): Prom
       attachments: [{ filename: `${quote.quoteNumber}.pdf`, content: pdf }],
     });
   } catch (err) {
+    await db.update(quotes)
+      .set({ status: priorStatus, sentAt: priorSentAt, recipientEmail: priorRecipient })
+      .where(and(
+        eq(quotes.id, quote.id),
+        eq(quotes.orgId, req.currentOrg!.id),
+        eq(quotes.status, "sent"),
+        eq(quotes.sentAt, claimTime),
+      ));
     res.status(502).json({ error: (err as Error).message });
     return;
   }
-  const [row] = await db
-    .update(quotes)
-    .set({ status: "sent", sentAt: new Date(), recipientEmail: recipient })
-    .where(eq(quotes.id, quote.id))
-    .returning();
-  res.json(SendQuoteResponse.parse(await quoteOut(row)));
+  res.json(SendQuoteResponse.parse(await quoteOut(claimed)));
 });
 
 router.post("/orgs/:orgId/quotes/:quoteId/accept", ...gate, async (req, res): Promise<void> => {
@@ -1218,8 +1456,22 @@ router.post("/orgs/:orgId/quotes/:quoteId/accept", ...gate, async (req, res): Pr
   const [row] = await db
     .update(quotes)
     .set({ status: "accepted", acceptedAt: new Date() })
-    .where(eq(quotes.id, quote.id))
+    .where(and(
+      eq(quotes.id, quote.id),
+      eq(quotes.orgId, req.currentOrg!.id),
+      eq(quotes.status, "sent"),
+      sql`exists (
+        select 1 from ${opportunities}
+        where ${opportunities.id} = ${quotes.opportunityId}
+          and ${opportunities.orgId} = ${req.currentOrg!.id}
+          ${hasCrmManagementAccess(req) ? sql`` : sql`and ${opportunities.ownerUserId} is not null and (${opportunities.ownerUserId} = ${req.currentUser!.id} or ${opportunities.createdByUserId} = ${req.currentUser!.id})`}
+      )`,
+    ))
     .returning();
+  if (!row) {
+    res.status(409).json({ error: "Quote changed or is no longer accessible" });
+    return;
+  }
   res.json(AcceptQuoteResponse.parse(await quoteOut(row)));
 });
 
@@ -1383,7 +1635,11 @@ router.get(
           state: accounts.state,
         })
         .from(accounts)
-        .where(and(eq(accounts.orgId, orgId), eq(accounts.isActive, true))),
+        .where(and(
+          eq(accounts.orgId, orgId),
+          eq(accounts.isActive, true),
+          ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+        )),
       db
         .select({
           accountId: opportunities.accountId,
@@ -1391,7 +1647,10 @@ router.get(
           forecastCategory: opportunities.forecastCategory,
         })
         .from(opportunities)
-        .where(eq(opportunities.orgId, orgId)),
+        .where(and(
+          eq(opportunities.orgId, orgId),
+          ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+        )),
     ]);
 
     const rows = await Promise.all(
@@ -1445,6 +1704,7 @@ router.get("/orgs/:orgId/forecast", ...gate, async (req, res): Promise<void> => 
   const ownerUserId = (req.query as { ownerUserId?: string }).ownerUserId;
 
   const where = [eq(opportunities.orgId, orgId)];
+  where.push(...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId));
   if (ownerUserId) where.push(eq(opportunities.ownerUserId, ownerUserId));
   const rows = await db
     .select()
@@ -1544,6 +1804,7 @@ router.get("/orgs/:orgId/forecast/weighted", ...gate, async (req, res): Promise<
     .from(opportunities)
     .where(and(
       eq(opportunities.orgId, req.currentOrg!.id),
+      ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
       gte(opportunities.expectedCloseDate, startDate),
       lt(opportunities.expectedCloseDate, endDate),
     ));

@@ -25,4 +25,6 @@ export interface ContactUpdate {
   /** @nullable */
   reportsToContactId?: string | null;
   metadata?: ContactUpdateMetadata;
+  /** @nullable */
+  ownerUserId?: string | null;
 }

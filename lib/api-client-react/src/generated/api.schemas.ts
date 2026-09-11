@@ -731,6 +731,24 @@ export interface AcceptInvitationResponse {
   role: AcceptInvitationResponseRole;
 }
 
+export interface ResolveInvitationBody {
+  /**
+     * @minLength 1
+     * @maxLength 4096
+     */
+  token: string;
+}
+
+export type ResolveInvitationResponseOrg = {
+  id: string;
+  name: string;
+};
+
+export interface ResolveInvitationResponse {
+  email: string;
+  org: ResolveInvitationResponseOrg;
+}
+
 export type MemberRoleUpdateRole = typeof MemberRoleUpdateRole[keyof typeof MemberRoleUpdateRole];
 
 

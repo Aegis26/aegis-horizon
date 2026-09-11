@@ -5,6 +5,7 @@ import {
   INVITATION_TTL_SECONDS,
   invitationAcceptanceDecision,
   invitationMembershipMatches,
+  invitationResolutionDecision,
   runInvitationTransferAtomically,
   verifyInvitationToken,
 } from "./invitations";
@@ -231,6 +232,84 @@ test("acceptance fails closed when the database organization does not match the 
   if (!decision.accepted) {
     assert.equal(decision.status, 410);
   }
+});
+
+test("public resolution returns only database-bound email and organization", () => {
+  const decision = invitationResolutionDecision({
+    token: invitation,
+    user: { id: invitation.userId, email: "Recipient@Example.com" },
+    membership: {
+      id: invitation.membershipId,
+      userId: invitation.userId,
+      orgId: invitation.orgId,
+    },
+    organization: { id: invitation.orgId, name: "Acme" },
+  });
+
+  assert.deepEqual(decision, {
+    resolved: true,
+    email: "Recipient@Example.com",
+    org: { id: invitation.orgId, name: "Acme" },
+  });
+});
+
+test("public resolution rejects expired and tampered signed tokens", () => {
+  process.env.SESSION_SECRET = "test-session-secret";
+  const signedToken = createInvitationToken(invitation, NOW);
+  const tamperedToken = `${signedToken.slice(0, -1)}${
+    signedToken.endsWith("a") ? "b" : "a"
+  }`;
+
+  assert.equal(
+    verifyInvitationToken(
+      signedToken,
+      NOW + INVITATION_TTL_SECONDS * 1000,
+    ),
+    null,
+  );
+  assert.equal(verifyInvitationToken(tamperedToken, NOW), null);
+});
+
+test("public resolution rejects removed or mismatched database bindings", () => {
+  const validInput = {
+    token: invitation,
+    user: { id: invitation.userId, email: invitation.email },
+    membership: {
+      id: invitation.membershipId,
+      userId: invitation.userId,
+      orgId: invitation.orgId,
+    },
+    organization: { id: invitation.orgId, name: "Acme" },
+  };
+
+  assert.deepEqual(
+    invitationResolutionDecision({ ...validInput, membership: undefined }),
+    { resolved: false },
+  );
+  assert.deepEqual(
+    invitationResolutionDecision({
+      ...validInput,
+      membership: {
+        ...validInput.membership,
+        orgId: "other-org",
+      },
+    }),
+    { resolved: false },
+  );
+  assert.deepEqual(
+    invitationResolutionDecision({
+      ...validInput,
+      user: { id: invitation.userId, email: "different@example.com" },
+    }),
+    { resolved: false },
+  );
+  assert.deepEqual(
+    invitationResolutionDecision({
+      ...validInput,
+      organization: { id: "other-org", name: "Other" },
+    }),
+    { resolved: false },
+  );
 });
 
 test("audit failure rolls back pending transfer so the same invitation link can retry", async () => {

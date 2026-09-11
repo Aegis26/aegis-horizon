@@ -134,6 +134,8 @@ import type {
   ReportScheduleInput,
   ReportSchedulePatch,
   RescoreResult,
+  ResolveInvitationBody,
+  ResolveInvitationResponse,
   SecurityPolicy,
   SecurityPolicyPatch,
   Segment,
@@ -413,6 +415,78 @@ export const useAcceptInvitation = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getAcceptInvitationMutationOptions(options));
+    }
+
+export const getResolveInvitationUrl = () => {
+
+
+
+
+  return `/api/invitations/resolve`
+}
+
+/**
+ * Public endpoint. Validates the signed seven-day invitation against the current membership, user, and organization records.
+ * @summary Resolve a signed invitation for signup-first account creation
+ */
+export const resolveInvitation = async (resolveInvitationBody: ResolveInvitationBody, options?: Parameters<typeof customFetch>[1]): Promise<ResolveInvitationResponse> => {
+
+  return customFetch<ResolveInvitationResponse>(getResolveInvitationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(resolveInvitationBody)
+  }
+);}
+
+
+
+
+
+export const getResolveInvitationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveInvitation>>, TError,{data: BodyType<ResolveInvitationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveInvitation>>, TError,{data: BodyType<ResolveInvitationBody>}, TContext> => {
+
+const mutationKey = ['resolveInvitation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveInvitation>>, {data: BodyType<ResolveInvitationBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resolveInvitation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveInvitationMutationResult = NonNullable<Awaited<ReturnType<typeof resolveInvitation>>>
+    export type ResolveInvitationMutationBody = BodyType<ResolveInvitationBody>
+    export type ResolveInvitationMutationError = ErrorType<void>
+
+    /**
+ * @summary Resolve a signed invitation for signup-first account creation
+ */
+export const useResolveInvitation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveInvitation>>, TError,{data: BodyType<ResolveInvitationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resolveInvitation>>,
+        TError,
+        {data: BodyType<ResolveInvitationBody>},
+        TContext
+      > => {
+      return useMutation(getResolveInvitationMutationOptions(options));
     }
 
 export const getGetOrgUrl = (orgId: string,) => {

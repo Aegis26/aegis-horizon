@@ -34,6 +34,19 @@ export type InvitationAcceptanceDecision =
       role: string;
     };
 
+export type InvitationResolutionDecision =
+  | {
+      resolved: false;
+    }
+  | {
+      resolved: true;
+      email: string;
+      org: {
+        id: string;
+        name: string;
+      };
+    };
+
 /**
  * Runs a pending-membership transfer and its audit write in one transaction.
  * A failed audit write must roll back the transfer so the signed link remains
@@ -174,6 +187,55 @@ export function invitationMembershipMatches(
       membership.userId === token.userId &&
       membership.orgId === token.orgId,
   );
+}
+
+/**
+ * Resolves only the database-backed values needed by the signup-first form.
+ * The signed token identifies the rows to load, but neither its email nor
+ * organization fields are trusted until they match the current database
+ * bindings.
+ */
+export function invitationResolutionDecision(input: {
+  token: Pick<
+    InvitationTokenPayload,
+    "email" | "membershipId" | "userId" | "orgId"
+  >;
+  user:
+    | {
+        id: string;
+        email: string;
+      }
+    | null
+    | undefined;
+  membership: InvitationMembershipBinding | null | undefined;
+  organization:
+    | {
+        id: string;
+        name: string;
+      }
+    | null
+    | undefined;
+}): InvitationResolutionDecision {
+  const { token, user, membership, organization } = input;
+  if (
+    !user ||
+    user.id !== token.userId ||
+    user.email.toLowerCase().trim() !== token.email.toLowerCase().trim() ||
+    !invitationMembershipMatches(token, membership) ||
+    !organization ||
+    organization.id !== token.orgId
+  ) {
+    return { resolved: false };
+  }
+
+  return {
+    resolved: true,
+    email: user.email,
+    org: {
+      id: organization.id,
+      name: organization.name,
+    },
+  };
 }
 
 function sessionSecret(): string {

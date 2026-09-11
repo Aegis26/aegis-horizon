@@ -70,6 +70,34 @@ paths:
           description: Invitation does not match the authenticated verified email
         "410":
           description: Membership was removed
+  /invitations/resolve:
+    post:
+      operationId: resolveInvitation
+      tags: [members]
+      summary: Resolve a signed invitation for signup-first account creation
+      description: Public endpoint. Validates the signed seven-day invitation against the current membership, user, and organization records.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveInvitationBody"
+      responses:
+        "200":
+          description: Invitation recipient and organization
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolveInvitationResponse"
+        "400":
+          description: Invalid or expired invitation
+        "429":
+          description: Too many invitation resolution attempts
   /orgs/{orgId}:
     get:
       operationId: getOrg
@@ -2414,6 +2442,22 @@ components:
         role:
           type: string
           enum: [owner, admin, manager, user, viewer]
+    ResolveInvitationBody:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, minLength: 1, maxLength: 4096 }
+    ResolveInvitationResponse:
+      type: object
+      required: [email, org]
+      properties:
+        email: { type: string }
+        org:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string }
     MemberRoleUpdate:
       type: object
       required: [role]

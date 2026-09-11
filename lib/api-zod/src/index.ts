@@ -5,6 +5,8 @@ export * from "./generated/types";
 export {
   AcceptInvitationBody,
   AcceptInvitationResponse,
+  ResolveInvitationBody,
+  ResolveInvitationResponse,
   ListAccountsParams,
   ListOpportunitiesParams,
   ListLeadsParams,
@@ -15,6 +17,8 @@ export {
 export type {
   AcceptInvitationBody as AcceptInvitationBodyType,
   AcceptInvitationResponse as AcceptInvitationResponseType,
+  ResolveInvitationBody as ResolveInvitationBodyType,
+  ResolveInvitationResponse as ResolveInvitationResponseType,
   ListAccountsParams as ListAccountsParamsType,
   ListOpportunitiesParams as ListOpportunitiesParamsType,
   ListLeadsParams as ListLeadsParamsType,

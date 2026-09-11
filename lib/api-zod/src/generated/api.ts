@@ -69,6 +69,27 @@ export const AcceptInvitationResponse = zod.object({
 
 
 /**
+ * Public endpoint. Validates the signed seven-day invitation against the current membership, user, and organization records.
+ * @summary Resolve a signed invitation for signup-first account creation
+ */
+export const resolveInvitationBodyTokenMax = 4096;
+
+
+
+export const ResolveInvitationBody = zod.object({
+  "token": zod.string().min(1).max(resolveInvitationBodyTokenMax)
+})
+
+export const ResolveInvitationResponse = zod.object({
+  "email": zod.string(),
+  "org": zod.object({
+  "id": zod.string(),
+  "name": zod.string()
+})
+})
+
+
+/**
  * @summary Org details (requires membership)
  */
 export const GetOrgParams = zod.object({

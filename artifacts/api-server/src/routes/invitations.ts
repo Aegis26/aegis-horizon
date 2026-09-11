@@ -1,9 +1,11 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { and, eq } from "drizzle-orm";
 import { clerkClient, getAuth } from "@clerk/express";
 import {
   AcceptInvitationBody,
   AcceptInvitationResponse,
+  ResolveInvitationBody,
+  ResolveInvitationResponse,
 } from "@workspace/api-zod";
 import { db, organizations, orgUsers, users } from "@workspace/db";
 import {
@@ -11,6 +13,7 @@ import {
 } from "../middlewares/auth";
 import {
   invitationAcceptanceDecision,
+  invitationResolutionDecision,
   runInvitationTransferAtomically,
   verifyInvitationToken,
 } from "../lib/invitations";
@@ -20,9 +23,54 @@ import {
 } from "../lib/invitationIdentity";
 import { appendAuditEvent, auditContext } from "../services/audit";
 import { serializeOrg } from "./auth";
+import { getClientIp } from "../lib/clientIp";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 type DatabaseTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+const INVALID_INVITATION_ERROR = "Invalid invitation";
+const RESOLVE_WINDOW_MS = 60_000;
+const RESOLVE_REQUESTS_PER_WINDOW = 10;
+const resolveRateLimits = new Map<
+  string,
+  { windowStartedAt: number; requestCount: number }
+>();
+
+function consumeResolveRateLimit(req: Request):
+  | { allowed: true }
+  | { allowed: false; retryAfterSeconds: number } {
+  const now = Date.now();
+  const key = getClientIp(req) ?? "unknown";
+  if (resolveRateLimits.size > 10_000) {
+    for (const [knownKey, bucket] of resolveRateLimits) {
+      if (now - bucket.windowStartedAt >= RESOLVE_WINDOW_MS) {
+        resolveRateLimits.delete(knownKey);
+      }
+    }
+  }
+  const current = resolveRateLimits.get(key);
+  if (!current || now - current.windowStartedAt >= RESOLVE_WINDOW_MS) {
+    resolveRateLimits.set(key, { windowStartedAt: now, requestCount: 1 });
+    return { allowed: true };
+  }
+
+  current.requestCount += 1;
+  if (current.requestCount <= RESOLVE_REQUESTS_PER_WINDOW) {
+    return { allowed: true };
+  }
+
+  return {
+    allowed: false,
+    retryAfterSeconds: Math.max(
+      1,
+      Math.ceil((current.windowStartedAt + RESOLVE_WINDOW_MS - now) / 1000),
+    ),
+  };
+}
+
+function invalidInvitation(res: Response): void {
+  res.status(400).json({ error: INVALID_INVITATION_ERROR });
+}
 
 class InvitationTransferFailure extends Error {
   constructor(
@@ -32,6 +80,88 @@ class InvitationTransferFailure extends Error {
     super(message);
   }
 }
+
+/**
+ * Public signup-first resolution. The returned email and organization are
+ * loaded from the current database bindings, never trusted from the token.
+ */
+router.post(
+  "/invitations/resolve",
+  async (req, res): Promise<void> => {
+    res.set("Cache-Control", "no-store");
+
+    const rateLimit = consumeResolveRateLimit(req);
+    if (!rateLimit.allowed) {
+      res
+        .status(429)
+        .set("Retry-After", String(rateLimit.retryAfterSeconds))
+        .json({ error: "Too many invitation resolution attempts" });
+      return;
+    }
+
+    const parsed = ResolveInvitationBody.safeParse(req.body);
+    if (!parsed.success) {
+      invalidInvitation(res);
+      return;
+    }
+
+    const token = verifyInvitationToken(parsed.data.token);
+    if (!token) {
+      invalidInvitation(res);
+      return;
+    }
+
+    try {
+      const [binding] = await db
+        .select({
+          userId: users.id,
+          email: users.email,
+          membershipId: orgUsers.id,
+          membershipUserId: orgUsers.userId,
+          membershipOrgId: orgUsers.orgId,
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+        })
+        .from(orgUsers)
+        .innerJoin(users, eq(users.id, orgUsers.userId))
+        .innerJoin(organizations, eq(organizations.id, orgUsers.orgId))
+        .where(
+          and(
+            eq(orgUsers.id, token.membershipId),
+            eq(orgUsers.userId, token.userId),
+            eq(orgUsers.orgId, token.orgId),
+          ),
+        );
+
+      const decision = invitationResolutionDecision({
+        token,
+        user: binding
+          ? { id: binding.userId, email: binding.email }
+          : undefined,
+        membership: binding
+          ? {
+              id: binding.membershipId,
+              userId: binding.membershipUserId,
+              orgId: binding.membershipOrgId,
+            }
+          : undefined,
+        organization: binding
+          ? { id: binding.organizationId, name: binding.organizationName }
+          : undefined,
+      });
+      if (!decision.resolved) {
+        invalidInvitation(res);
+        return;
+      }
+
+      res.json(ResolveInvitationResponse.parse(decision));
+    } catch {
+      // Do not include the token or any token-derived value in diagnostics.
+      logger.warn({ invitationResolution: "failed" }, "Invitation resolution failed");
+      invalidInvitation(res);
+    }
+  },
+);
 
 /**
  * Accepting an invitation confirms an authenticated recipient and selects the

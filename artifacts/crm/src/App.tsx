@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ClerkProvider, SignIn, SignUp, Show, useAuth, useClerk, useUser } from '@clerk/react';
+import { ClerkProvider, SignIn, SignUp, Show, useAuth } from '@clerk/react';
 import { shadcn } from '@clerk/themes';
 import { Switch, Route, Redirect, useLocation, Router as WouterRouter } from 'wouter';
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
@@ -25,11 +25,11 @@ import Communications from "@/pages/Communications";
 import Reports from "@/pages/Reports";
 import Documents from "@/pages/Documents";
 import Signatures from "@/pages/Signatures";
+import InvitationSignup from "@/pages/InvitationSignup";
 import { Button } from "@/components/ui/button";
 import {
   getGetMeQueryKey,
   getGetMeQueryOptions,
-  useAcceptInvitation,
 } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { getSafeAuthRedirectUrl, isInvitationAuthRedirect } from "@/lib/auth-redirect";
@@ -183,194 +183,9 @@ function readInvitationToken(): InvitationTokenState {
   return { token, error: null };
 }
 
-type InvitationStatus = "confirm" | "accepting" | "error";
-
-function getInvitationErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : "";
-  const detail = message.replace(/^HTTP \d+ [^:]+:\s*/, "").trim();
-  if (detail.toLowerCase().includes("not valid for this account")) {
-    return "This invitation belongs to a different email address. Sign out and use the invited account.";
-  }
-  if (detail.toLowerCase().includes("verify the invited email")) {
-    return "The invited email is not verified on this account. Verify it in Clerk or switch accounts.";
-  }
-  return detail || "We could not accept this invitation. It may be invalid, expired, or no longer available.";
-}
-
-function InvitationAcceptance({ token }: { token: string }) {
-  const [, setLocation] = useLocation();
-  const { isLoaded: userLoaded, isSignedIn, user } = useUser();
-  const { signOut } = useClerk();
-  const queryClient = useQueryClient();
-  const setSelectedOrgId = useOrgStore((state) => state.setSelectedOrgId);
-  const acceptInvitation = useAcceptInvitation();
-  const [status, setStatus] = useState<InvitationStatus>("confirm");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [switchingAccount, setSwitchingAccount] = useState(false);
-
-  const email =
-    user?.primaryEmailAddress?.emailAddress ??
-    user?.emailAddresses[0]?.emailAddress ??
-    "your signed-in email";
-  const returnUrl = `${basePath}/invite`;
-
-  const switchAccount = async () => {
-    setSwitchingAccount(true);
-    try {
-      // Do not clear the invitation token: it is the return context for the
-      // next account and is intentionally kept out of auth query URLs.
-      await signOut();
-      setLocation(`/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`, { replace: true });
-    } catch {
-      setSwitchingAccount(false);
-      setStatus("error");
-      setErrorMessage("We could not sign out this account. Please try again.");
-    }
-  };
-
-  const accept = () => {
-    if (status === "accepting" || switchingAccount || !isSignedIn) return;
-    setStatus("accepting");
-    setErrorMessage(null);
-    acceptInvitation.mutate(
-      { data: { token } },
-      {
-        onSuccess: async (result) => {
-          // The acceptance endpoint can transfer a pending membership. Remove
-          // any pre-acceptance /auth/me result before fetching so Shell cannot
-          // immediately restore a stale org selection after navigation.
-          queryClient.removeQueries({ queryKey: getGetMeQueryKey() });
-          try {
-            const freshMe = await queryClient.fetchQuery(
-              getGetMeQueryOptions({
-                query: {
-                  queryKey: getGetMeQueryKey(),
-                  staleTime: 0,
-                },
-              }),
-            );
-            if (!freshMe.orgs.some((membership) => membership.org.id === result.org.id)) {
-              throw new Error("Accepted organization is not present in the refreshed memberships.");
-            }
-          } catch {
-            // Keep the stale result removed. Shell will make a fresh request
-            // after navigation instead of flashing the previous user's orgs.
-            queryClient.removeQueries({ queryKey: getGetMeQueryKey() });
-          }
-          try {
-            sessionStorage.removeItem(INVITATION_TOKEN_STORAGE_KEY);
-          } catch {
-            // Ignore storage cleanup failures after the server confirms.
-          }
-          setSelectedOrgId(result.org.id);
-          setLocation("/dashboard", { replace: true });
-        },
-        onError: (error) => {
-          // Keep the token and remain on the invitation route so a recipient
-          // can switch to the invited account without losing the link.
-          setStatus("error");
-          setErrorMessage(getInvitationErrorMessage(error));
-        },
-      },
-    );
-  };
-
-  if (!userLoaded || !isSignedIn || !user) {
-    return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card p-8 text-center shadow-xl">
-          <p className="text-sm text-muted-foreground" data-testid="status-invitation-auth">
-            Waiting for the account session…
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-[100dvh] bg-background flex items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card p-8 text-center shadow-xl">
-        {status === "error" ? (
-          <>
-            <h1 className="text-2xl font-bold font-display">Invitation not accepted</h1>
-            <p className="mt-3 text-sm text-muted-foreground" data-testid="status-invitation-error">
-              {errorMessage}
-            </p>
-            <div className="mt-6 flex flex-col gap-3">
-              <Button
-                className="w-full"
-                onClick={switchAccount}
-                disabled={switchingAccount}
-                data-testid="button-switch-invitation-account"
-              >
-                {switchingAccount ? "Signing out…" : "Sign out and use another account"}
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  setStatus("confirm");
-                  setErrorMessage(null);
-                }}
-                disabled={switchingAccount}
-                data-testid="button-retry-invitation"
-              >
-                Try this account again
-              </Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <h1 className="text-2xl font-bold font-display">
-              {status === "accepting" ? "Accepting invitation" : "Confirm your account"}
-            </h1>
-            <p className="mt-3 text-sm text-muted-foreground">
-              {status === "accepting"
-                ? "We are verifying this account and selecting the invited organization."
-                : "Before accepting, confirm that this is the account you want to use for this invitation."}
-            </p>
-            <div
-              className="mt-6 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3"
-              data-testid="text-invitation-account-email"
-            >
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Signed-in email
-              </p>
-              <p className="mt-1 break-all font-semibold text-foreground">{email}</p>
-            </div>
-            <Button
-              className="mt-6 w-full"
-              onClick={accept}
-              disabled={status === "accepting" || switchingAccount}
-              data-testid="button-accept-invitation"
-            >
-              {status === "accepting" ? "Accepting…" : `Accept invitation as ${email}`}
-            </Button>
-            <Button
-              variant="outline"
-              className="mt-3 w-full"
-              onClick={switchAccount}
-              disabled={status === "accepting" || switchingAccount}
-              data-testid="button-switch-invitation-account"
-            >
-              {switchingAccount ? "Signing out…" : "Sign out and use another account"}
-            </Button>
-            <p className="mt-4 text-xs text-muted-foreground">
-              Invitation acceptance is never automatic. If this is not the invited
-              email, switch accounts before continuing.
-            </p>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function InvitationPage() {
   const [{ token, error: tokenError }] = useState(readInvitationToken);
-  const returnUrl = `${basePath}/invite`;
   const [, setLocation] = useLocation();
-  const { isLoaded, isSignedIn } = useAuth();
 
   if (tokenError || !token) {
     return (
@@ -389,54 +204,7 @@ function InvitationPage() {
     );
   }
 
-  if (!isLoaded) {
-    return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card p-8 text-center shadow-xl">
-          <p className="text-sm text-muted-foreground" data-testid="status-invitation-loading">
-            Loading invitation…
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isSignedIn) {
-    const signInUrl = `/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`;
-    const signUpUrl = `/sign-up?redirect_url=${encodeURIComponent(returnUrl)}`;
-    return (
-      <div className="min-h-[100dvh] bg-background flex items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card p-8 text-center shadow-xl">
-          <h1 className="text-2xl font-bold font-display">You’re invited</h1>
-          <p className="mt-3 text-sm text-muted-foreground">
-            Sign in with the invited email, or create your own account to continue.
-            Your invitation will be preserved while you switch between forms.
-          </p>
-          <div className="mt-6 flex flex-col gap-3">
-            <Button
-              className="w-full"
-              onClick={() => setLocation(signInUrl)}
-              data-testid="button-invitation-sign-in"
-            >
-              Sign in
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setLocation(signUpUrl)}
-              data-testid="button-invitation-sign-up"
-            >
-              Create an account
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <InvitationAcceptance token={token} />
-  );
+  return <InvitationSignup token={token} />;
 }
 
 function ClerkQueryClientCacheInvalidator() {

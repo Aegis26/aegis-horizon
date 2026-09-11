@@ -1,0 +1,167 @@
+# Add Email Sending to Invitation Endpoint
+
+**Goal:** Make the invitation endpoint actually send emails via Resend (not just create memberships).
+
+**File to Fix:** `artifacts/api-server/src/routes/orgs.ts` → `POST /orgs/:orgId/members`
+
+**Current Problem:** Endpoint creates membership but never calls Resend
+
+---
+
+## Task 1: Find the Invitation Endpoint
+
+Open `artifacts/api-server/src/routes/orgs.ts`
+
+Find the `POST /orgs/:orgId/members` or `POST .../invite` endpoint that handles invitations.
+
+Look for code that:
+- Creates a membership
+- Takes `email` and `role` as input
+- Currently does NOT call Resend
+
+---
+
+## Task 2: Locate the Email Sending Function
+
+Find the email helper:
+- Should be in `artifacts/api-server/src/lib/email.ts`
+- Look for a function like `sendInvitationEmail()` or create one
+
+It should look like:
+```typescript
+import { resend } from '@/lib/resend' // or similar
+
+export async function sendInvitationEmail(
+  email: string,
+  orgName: string,
+  invitationLink: string
+) {
+  return await resend.emails.send({
+    from: "Aegis Horizon <noreply@aegishz.com>",
+    to: email,
+    subject: `You're invited to join ${orgName}`,
+    html: `
+      <h1>Welcome to Aegis Horizon</h1>
+      <p>You've been invited to join <strong>${orgName}</strong>.</p>
+      <p><a href="${invitationLink}">Click here to accept</a></p>
+      <p>This link expires in 7 days.</p>
+    `,
+  })
+}
+```
+
+If it doesn't exist, **create it** in `artifacts/api-server/src/lib/email.ts`
+
+---
+
+## Task 3: Update the Invitation Endpoint
+
+In `artifacts/api-server/src/routes/orgs.ts`, find where membership is created.
+
+**BEFORE (current code - missing email):**
+```typescript
+app.post('/orgs/:orgId/members', async (req, res) => {
+  const { email, role } = req.body
+  
+  // Create membership
+  const membership = await db.insert(orgUsers).values({
+    org_id: orgId,
+    email,
+    role,
+    status: 'pending',
+    // ... other fields
+  })
+  
+  res.json({ success: true })
+})
+```
+
+**AFTER (add email sending):**
+```typescript
+import { sendInvitationEmail } from '@/lib/email'
+
+app.post('/orgs/:orgId/members', async (req, res) => {
+  const { email, role } = req.body
+  
+  // Get org name for email
+  const org = await db.query.organizations.findFirst({
+    where: eq(organizations.id, orgId),
+  })
+  
+  // Create membership with invitation token
+  const invitationToken = crypto.randomBytes(32).toString('hex')
+  const membership = await db.insert(orgUsers).values({
+    org_id: orgId,
+    email,
+    role,
+    status: 'pending',
+    invitation_token: invitationToken,
+    invitation_sent_at: new Date(),
+    // ... other fields
+  })
+  
+  // Send invitation email
+  try {
+    const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${invitationToken}`
+    
+    await sendInvitationEmail(
+      email,
+      org.name,
+      invitationLink
+    )
+  } catch (error) {
+    console.error('Failed to send invitation email:', error)
+    // Still return success - membership was created
+    // Email can be resent from UI if needed
+  }
+  
+  res.json({ 
+    success: true,
+    message: 'Invitation sent'
+  })
+})
+```
+
+---
+
+## Task 4: Verify the Changes
+
+- [ ] Import statements are correct
+- [ ] `sendInvitationEmail()` function exists in `email.ts`
+- [ ] Invitation endpoint calls `sendInvitationEmail()`
+- [ ] Email includes the invitation link
+- [ ] Error handling doesn't break if email fails
+- [ ] Typecheck passes: `npm run typecheck`
+
+---
+
+## Task 5: Commit & Push
+
+```bash
+git add artifacts/api-server/src/routes/orgs.ts artifacts/api-server/src/lib/email.ts
+
+git commit -m "feat: Add email sending to invitation endpoint
+
+- Invitation endpoint now sends emails via Resend
+- Includes invitation token and expiry info (7 days)
+- Email uses verified domain (noreply@aegishz.com)
+- Error handling prevents membership creation failure
+- Settings page 'Invitation sent' message now accurate"
+
+git push origin main
+```
+
+Railway will auto-deploy. 🚀
+
+---
+
+## What This Does
+
+✅ Membership created in database  
+✅ Invitation email sent via Resend to `noreply@aegishz.com`  
+✅ Email contains invitation link with token  
+✅ Token expires after 7 days  
+✅ Settings page message is accurate  
+✅ User receives email and can accept invite  
+
+**Test after deployment:** Try sending an invitation and check your email (including spam)!

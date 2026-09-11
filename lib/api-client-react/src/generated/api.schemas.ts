@@ -689,6 +689,48 @@ export interface MemberInvite {
   role: MemberInviteRole;
 }
 
+export type InvitationDeliveryStatus = typeof InvitationDeliveryStatus[keyof typeof InvitationDeliveryStatus];
+
+
+export const InvitationDeliveryStatus = {
+  sent: 'sent',
+  failed: 'failed',
+} as const;
+
+export interface InvitationDelivery {
+  status: InvitationDeliveryStatus;
+  /** @nullable */
+  message?: string | null;
+}
+
+export type MemberInvitationResponse = Member & {
+  delivery: InvitationDelivery;
+};
+
+export interface AcceptInvitationBody {
+  /**
+     * @minLength 1
+     * @maxLength 4096
+     */
+  token: string;
+}
+
+export type AcceptInvitationResponseRole = typeof AcceptInvitationResponseRole[keyof typeof AcceptInvitationResponseRole];
+
+
+export const AcceptInvitationResponseRole = {
+  owner: 'owner',
+  admin: 'admin',
+  manager: 'manager',
+  user: 'user',
+  viewer: 'viewer',
+} as const;
+
+export interface AcceptInvitationResponse {
+  org: Organization;
+  role: AcceptInvitationResponseRole;
+}
+
 export type MemberRoleUpdateRole = typeof MemberRoleUpdateRole[keyof typeof MemberRoleUpdateRole];
 
 

@@ -3,6 +3,8 @@ export * from "./generated/types";
 // Explicit re-export to resolve the name collision between the generated zod
 // value and the generated TS type of the same name.
 export {
+  AcceptInvitationBody,
+  AcceptInvitationResponse,
   ListAccountsParams,
   ListOpportunitiesParams,
   ListLeadsParams,
@@ -11,6 +13,8 @@ export {
   GetWeightedRevenueForecastParams,
 } from "./generated/api";
 export type {
+  AcceptInvitationBody as AcceptInvitationBodyType,
+  AcceptInvitationResponse as AcceptInvitationResponseType,
   ListAccountsParams as ListAccountsParamsType,
   ListOpportunitiesParams as ListOpportunitiesParamsType,
   ListLeadsParams as ListLeadsParamsType,

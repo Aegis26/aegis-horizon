@@ -30,5 +30,59 @@ export async function sendEmail(args: {
   if (error) {
     throw new Error(`Resend: ${error.message}`);
   }
-  return { id: data?.id ?? "" };
+  if (!data?.id) {
+    throw new Error("Resend did not return a message id");
+  }
+  return { id: data.id };
+}
+
+export type EmailSender = (args: {
+  to: string;
+  subject: string;
+  html: string;
+}) => Promise<{ id: string }>;
+
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[character]!,
+  );
+}
+
+/**
+ * Sends an invitation for an already-created membership. The URL is supplied
+ * by the invitation route and contains a signed, seven-day token. Do not put
+ * raw membership or invitation tokens in the database.
+ */
+export async function sendInvitationEmail(
+  email: string,
+  orgName: string,
+  invitationLink: string,
+  sender: EmailSender = sendEmail,
+): Promise<{ id: string }> {
+  const safeOrgName = escapeHtml(orgName);
+  const safeInvitationLink = escapeHtml(invitationLink);
+  const subjectOrgName = orgName.replace(/[\r\n]+/g, " ").trim().slice(0, 160);
+
+  const result = await sender({
+    to: email,
+    subject: `You're invited to join ${subjectOrgName || "Aegis Horizon"}`,
+    html: `
+      <h1>Welcome to Aegis Horizon</h1>
+      <p>You've been invited to join <strong>${safeOrgName}</strong>.</p>
+      <p><a href="${safeInvitationLink}">Click here to accept your invitation</a></p>
+      <p>This link expires in 7 days. If it expires, ask an organization administrator to send the invitation again.</p>
+    `,
+  });
+  if (!result?.id) {
+    throw new Error("Email provider did not return a message id");
+  }
+  return result;
 }

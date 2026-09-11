@@ -14,6 +14,7 @@ import {
   ListMembersResponse,
   InviteMemberBody,
   InviteMemberResponse,
+  ResendMemberInviteResponse,
   UpdateMemberRoleBody,
   UpdateMemberRoleResponse,
   ListFeaturesResponse,
@@ -27,10 +28,70 @@ import {
 } from "../middlewares/auth";
 import { serializeOrg } from "./auth";
 import { FEATURE_KEYS, featuresForPlan } from "../lib/catalog";
+import { sendInvitationEmail } from "../lib/email";
+import {
+  createInvitationToken,
+  invitationLink,
+} from "../lib/invitations";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
 router.use("/orgs/:orgId", attachUser, attachOrg);
+
+const INVITATION_DELIVERY_FAILURE_MESSAGE =
+  "The member was added, but the invitation email could not be delivered. Use Resend invitation to try again.";
+
+async function deliverInvitation(args: {
+  membershipId: string;
+  userId: string;
+  email: string;
+  orgId: string;
+  orgName: string;
+}) {
+  try {
+    const token = createInvitationToken({
+      membershipId: args.membershipId,
+      userId: args.userId,
+      orgId: args.orgId,
+      email: args.email.toLowerCase(),
+    });
+    await sendInvitationEmail(
+      args.email,
+      args.orgName,
+      invitationLink(token),
+    );
+    return { status: "sent" as const, message: null };
+  } catch {
+    // Keep the pre-provisioned membership. Delivery can be retried from
+    // Settings, and neither the token nor the recipient address is logged.
+    logger.warn(
+      { invitationDelivery: "failed" },
+      "Invitation email delivery failed",
+    );
+    return {
+      status: "failed" as const,
+      message: INVITATION_DELIVERY_FAILURE_MESSAGE,
+    };
+  }
+}
+
+function memberResponse(
+  membership: typeof orgUsers.$inferSelect,
+  user: typeof users.$inferSelect,
+) {
+  return {
+    id: membership.id,
+    role: membership.role,
+    createdAt: membership.createdAt.toISOString(),
+    user: {
+      id: user.id,
+      clerkId: user.clerkId,
+      email: user.email,
+      fullName: user.fullName,
+    },
+  };
+}
 
 router.get("/orgs/:orgId", async (req, res): Promise<void> => {
   res.json(GetOrgResponse.parse(serializeOrg(req.currentOrg!)));
@@ -115,7 +176,7 @@ router.post(
 
     let [user] = await db.select().from(users).where(eq(users.email, email));
     if (!user) {
-      // Pre-provision a pending user; clerkId is linked on their first sign-in.
+      // Pre-provision a local user; clerkId is linked on their first sign-in.
       [user] = await db
         .insert(users)
         .values({
@@ -139,18 +200,65 @@ router.post(
       .insert(orgUsers)
       .values({ orgId: org.id, userId: user.id, role: parsed.data.role })
       .returning();
+    const delivery = await deliverInvitation({
+      membershipId: membership.id,
+      userId: user.id,
+      email: user.email,
+      orgId: org.id,
+      orgName: org.name,
+    });
 
     res.status(201).json(
       InviteMemberResponse.parse({
-        id: membership.id,
-        role: membership.role,
-        createdAt: membership.createdAt.toISOString(),
-        user: {
-          id: user.id,
-          clerkId: user.clerkId,
-          email: user.email,
-          fullName: user.fullName,
-        },
+        ...memberResponse(membership, user),
+        delivery,
+      }),
+    );
+  },
+);
+
+router.post(
+  "/orgs/:orgId/members/:memberId/resend-invite",
+  requireRole("admin"),
+  async (req, res): Promise<void> => {
+    const memberId = Array.isArray(req.params.memberId)
+      ? req.params.memberId[0]
+      : req.params.memberId;
+    const [membership] = await db
+      .select()
+      .from(orgUsers)
+      .where(
+        and(eq(orgUsers.id, memberId), eq(orgUsers.orgId, req.currentOrg!.id)),
+      );
+    if (!membership) {
+      res.status(404).json({ error: "Member not found" });
+      return;
+    }
+    if (membership.role === "owner") {
+      res.status(400).json({ error: "Owners do not need an invitation" });
+      return;
+    }
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, membership.userId));
+    if (!user) {
+      res.status(404).json({ error: "Member user not found" });
+      return;
+    }
+
+    const delivery = await deliverInvitation({
+      membershipId: membership.id,
+      userId: user.id,
+      email: user.email,
+      orgId: req.currentOrg!.id,
+      orgName: req.currentOrg!.name,
+    });
+    res.json(
+      ResendMemberInviteResponse.parse({
+        ...memberResponse(membership, user),
+        delivery,
       }),
     );
   },

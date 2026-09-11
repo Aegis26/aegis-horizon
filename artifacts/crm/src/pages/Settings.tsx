@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   useGetOrg, useUpdateOrg, getGetOrgQueryKey,
-  useListMembers, useInviteMember, useUpdateMemberRole, useRemoveMember, getListMembersQueryKey,
+  useListMembers, useInviteMember, useResendMemberInvite, useUpdateMemberRole, useRemoveMember, getListMembersQueryKey,
   useListApiTokens, useCreateApiToken, getListApiTokensQueryKey,
   useGetOrgSecurityPolicy, useUpdateOrgSecurityPolicy, getGetOrgSecurityPolicyQueryKey,
   useListWebhooks, useCreateWebhook, useDeleteWebhook, getListWebhooksQueryKey, useRevokeApiToken, useTestWebhookDelivery,
@@ -70,6 +70,7 @@ export default function Settings() {
 
   const updateOrg = useUpdateOrg();
   const inviteMember = useInviteMember();
+  const resendInvite = useResendMemberInvite();
   const updateRole = useUpdateMemberRole();
   const removeMember = useRemoveMember();
 
@@ -121,11 +122,47 @@ export default function Settings() {
     e.preventDefault();
     if (!inviteEmail) return;
     inviteMember.mutate({ orgId: selectedOrgId!, data: { email: inviteEmail, role: inviteRole } }, {
-      onSuccess: () => {
-        toast({ title: "Invitation sent", description: `Invited ${inviteEmail} as ${inviteRole}` });
+      onSuccess: (result) => {
+        const deliveryFailed = result.delivery.status === "failed";
+        toast({
+          title: deliveryFailed ? "Member added; invitation email failed" : "Invitation sent",
+          description: deliveryFailed
+            ? result.delivery.message
+            : `Invited ${inviteEmail} as ${inviteRole}`,
+          variant: deliveryFailed ? "destructive" : "default",
+        });
         setInviteOpen(false); setInviteEmail("");
         queryClient.invalidateQueries({ queryKey: getListMembersQueryKey(selectedOrgId!) });
-      }
+      },
+      onError: () => {
+        toast({
+          title: "Failed to add member",
+          description: "The invitation was not created. Check the details and try again.",
+          variant: "destructive",
+        });
+      },
+    });
+  };
+
+  const handleResendInvite = (memberId: string) => {
+    resendInvite.mutate({ orgId: selectedOrgId!, memberId }, {
+      onSuccess: (result) => {
+        const deliveryFailed = result.delivery.status === "failed";
+        toast({
+          title: deliveryFailed ? "Invitation email still failed" : "Invitation resent",
+          description: deliveryFailed
+            ? result.delivery.message
+            : "A fresh invitation link was sent. It expires in 7 days.",
+          variant: deliveryFailed ? "destructive" : "default",
+        });
+      },
+      onError: () => {
+        toast({
+          title: "Failed to resend invitation",
+          description: "The member remains in the workspace. Try again shortly.",
+          variant: "destructive",
+        });
+      },
     });
   };
 
@@ -258,7 +295,11 @@ export default function Settings() {
                 <CardHeader className="flex flex-row items-start justify-between">
                   <div>
                     <CardTitle className="font-display">Team Access</CardTitle>
-                    <CardDescription>Manage who has access to your workspace.</CardDescription>
+                    <CardDescription>
+                      Manage organization memberships and resend confirmation links.
+                      Invitation links expire after 7 days; memberships are not
+                      automatically revoked when a link expires.
+                    </CardDescription>
                   </div>
                   <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
                     <DialogTrigger asChild>
@@ -341,6 +382,17 @@ export default function Settings() {
                             {formatDate(member.createdAt)}
                           </TableCell>
                           <TableCell className="text-right">
+                            {member.role !== "owner" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleResendInvite(member.id)}
+                                disabled={resendInvite.isPending}
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                <Mail className="h-4 w-4 mr-1" /> Resend
+                              </Button>
+                            )}
                             <Button variant="ghost" size="icon" onClick={() => handleRemove(member.id)} disabled={member.role === "owner" || removeMember.isPending} className="text-destructive hover:text-destructive hover:bg-destructive/10">
                               <Trash2 className="h-4 w-4" />
                             </Button>

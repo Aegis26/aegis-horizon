@@ -14,11 +14,13 @@ import enterpriseRouter from "./enterprise";
 import reportsRouter from "./reports";
 import documentsRouter from "./documents";
 import webhooksRouter from "./webhooks";
+import invitationsRouter from "./invitations";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(invitationsRouter);
 // Specific org sub-resources must be mounted before the generic orgs router
 // so their middleware chains (feature gates, role gates) apply.
 router.use(billingRouter);

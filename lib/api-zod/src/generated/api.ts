@@ -43,6 +43,32 @@ export const GetMeResponse = zod.object({
 
 
 /**
+ * @summary Confirm a signed invitation for the authenticated recipient
+ */
+export const acceptInvitationBodyTokenMax = 4096;
+
+
+
+export const AcceptInvitationBody = zod.object({
+  "token": zod.string().min(1).max(acceptInvitationBodyTokenMax)
+})
+
+export const AcceptInvitationResponse = zod.object({
+  "org": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "plan": zod.enum(['essential', 'professional', 'enterprise', 'custom']),
+  "enabledFeatures": zod.array(zod.string()),
+  "stripeCustomerId": zod.string().nullish(),
+  "stripeSubscriptionId": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+}),
+  "role": zod.enum(['owner', 'admin', 'manager', 'user', 'viewer'])
+})
+
+
+/**
  * @summary Org details (requires membership)
  */
 export const GetOrgParams = zod.object({
@@ -132,7 +158,38 @@ export const InviteMemberResponse = zod.object({
   "fullName": zod.string().nullish()
 }),
   "createdAt": zod.string().nullish()
+}).and(zod.object({
+  "delivery": zod.object({
+  "status": zod.enum(['sent', 'failed']),
+  "message": zod.string().nullish()
 })
+}))
+
+
+/**
+ * @summary Resend an invitation for an existing member (admin+)
+ */
+export const ResendMemberInviteParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "memberId": zod.coerce.string()
+})
+
+export const ResendMemberInviteResponse = zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['owner', 'admin', 'manager', 'user', 'viewer']),
+  "user": zod.object({
+  "id": zod.string(),
+  "clerkId": zod.string().optional(),
+  "email": zod.string(),
+  "fullName": zod.string().nullish()
+}),
+  "createdAt": zod.string().nullish()
+}).and(zod.object({
+  "delivery": zod.object({
+  "status": zod.enum(['sent', 'failed']),
+  "message": zod.string().nullish()
+})
+}))
 
 
 /**

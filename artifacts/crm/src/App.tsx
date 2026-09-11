@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ClerkProvider, SignIn, SignUp, Show, useClerk } from '@clerk/react';
 import { shadcn } from '@clerk/themes';
 import { Switch, Route, Redirect, useLocation, Router as WouterRouter } from 'wouter';
@@ -26,6 +26,8 @@ import Reports from "@/pages/Reports";
 import Documents from "@/pages/Documents";
 import Signatures from "@/pages/Signatures";
 import { Button } from "@/components/ui/button";
+import { useAcceptInvitation } from "@workspace/api-client-react";
+import { useOrgStore } from "@/store/org-store";
 
 const queryClient = new QueryClient();
 
@@ -94,18 +96,153 @@ const clerkAppearance = {
 };
 
 function SignInPage() {
+  const redirectUrl = getAuthRedirectUrl(`${basePath}/dashboard`);
   return (
     <AuthLayout>
-      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
+      <SignIn
+        routing="path"
+        path={`${basePath}/sign-in`}
+        signUpUrl={`${basePath}/sign-up?redirect_url=${encodeURIComponent(redirectUrl)}`}
+        fallbackRedirectUrl={redirectUrl}
+      />
     </AuthLayout>
   );
 }
 
 function SignUpPage() {
+  const redirectUrl = getAuthRedirectUrl(`${basePath}/dashboard`);
   return (
     <AuthLayout>
-      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
+      <SignUp
+        routing="path"
+        path={`${basePath}/sign-up`}
+        signInUrl={`${basePath}/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`}
+        fallbackRedirectUrl={redirectUrl}
+      />
     </AuthLayout>
+  );
+}
+
+function getAuthRedirectUrl(defaultPath: string): string {
+  const requested = new URLSearchParams(window.location.search).get("redirect_url");
+  if (!requested || !requested.startsWith("/") || requested.startsWith("//")) {
+    return defaultPath;
+  }
+  return requested;
+}
+
+const INVITATION_TOKEN_STORAGE_KEY = "aegis_horizon_invitation_token";
+
+function readInvitationToken(): string | null {
+  let token: string | null = null;
+  try {
+    const hash = window.location.hash.replace(/^#/, "");
+    const hashParams = new URLSearchParams(hash.startsWith("?") ? hash.slice(1) : hash);
+    token = hashParams.get("token");
+    if (token) {
+      sessionStorage.setItem(INVITATION_TOKEN_STORAGE_KEY, token);
+      // Fragments are not sent to the API, but clear the token from browser
+      // history as soon as it has been persisted for the auth redirect.
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}`,
+      );
+    } else {
+      token = sessionStorage.getItem(INVITATION_TOKEN_STORAGE_KEY);
+    }
+  } catch {
+    // Private browsing modes can disable sessionStorage. The API still
+    // receives the token when it is present in the current URL.
+  }
+  return token;
+}
+
+function InvitationAcceptance({ token }: { token: string }) {
+  const [, setLocation] = useLocation();
+  const setSelectedOrgId = useOrgStore((state) => state.setSelectedOrgId);
+  const acceptInvitation = useAcceptInvitation();
+  const started = useRef(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    acceptInvitation.mutate(
+      { data: { token } },
+      {
+        onSuccess: (result) => {
+          try {
+            sessionStorage.removeItem(INVITATION_TOKEN_STORAGE_KEY);
+          } catch {
+            // Ignore storage cleanup failures after the server confirms.
+          }
+          setSelectedOrgId(result.org.id);
+          setLocation("/dashboard", { replace: true });
+        },
+        onError: () => setFailed(true),
+      },
+    );
+  }, [acceptInvitation, setLocation, setSelectedOrgId, token]);
+
+  return (
+    <div className="min-h-[100dvh] bg-background flex items-center justify-center p-6">
+      <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card p-8 text-center shadow-xl">
+        {failed ? (
+          <>
+            <h1 className="text-2xl font-bold font-display">Invitation unavailable</h1>
+            <p className="mt-3 text-sm text-muted-foreground">
+              This invitation is invalid, expired, removed, or belongs to a
+              different verified email address.
+            </p>
+            <Button className="mt-6" onClick={() => setLocation("/dashboard")}>
+              Continue to workspace
+            </Button>
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl font-bold font-display">Confirming invitation</h1>
+            <p className="mt-3 text-sm text-muted-foreground">
+              We are verifying your signed-in email and selecting the invited
+              organization.
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InvitationPage() {
+  const [token] = useState(readInvitationToken);
+  const returnUrl = `${basePath}/invite`;
+
+  if (!token) {
+    return (
+      <div className="min-h-[100dvh] bg-background flex items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card p-8 text-center shadow-xl">
+          <h1 className="text-2xl font-bold font-display">Invitation unavailable</h1>
+          <p className="mt-3 text-sm text-muted-foreground">
+            This invitation link is missing its signed token. Ask an organization
+            administrator to resend it.
+          </p>
+          <Button className="mt-6" onClick={() => window.location.assign("/")}>
+            Go home
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Show when="signed-out">
+        <Redirect to={`/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`} />
+      </Show>
+      <Show when="signed-in">
+        <InvitationAcceptance token={token} />
+      </Show>
+    </>
   );
 }
 
@@ -192,6 +329,7 @@ function ClerkProviderWithRoutes() {
           <Route path="/" component={HomeRedirect} />
           <Route path="/sign-in/*?" component={SignInPage} />
           <Route path="/sign-up/*?" component={SignUpPage} />
+          <Route path="/invite" component={InvitationPage} />
           
           <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
           <Route path="/communications" component={() => <ProtectedRoute component={Communications} />} />

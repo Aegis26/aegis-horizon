@@ -46,6 +46,30 @@ paths:
                 $ref: "#/components/schemas/Me"
         "401":
           description: Not authenticated
+  /invitations/accept:
+    post:
+      operationId: acceptInvitation
+      tags: [members]
+      summary: Confirm a signed invitation for the authenticated recipient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptInvitationBody"
+      responses:
+        "200":
+          description: Invitation confirmed and organization selected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptInvitationResponse"
+        "400":
+          description: Invalid or expired invitation
+        "403":
+          description: Invitation does not match the authenticated verified email
+        "410":
+          description: Membership was removed
   /orgs/{orgId}:
     get:
       operationId: getOrg
@@ -111,11 +135,26 @@ paths:
               $ref: "#/components/schemas/MemberInvite"
       responses:
         "201":
-          description: Created membership (or pending invite)
+          description: Created pre-provisioned membership and attempted invitation delivery
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Member"
+                $ref: "#/components/schemas/MemberInvitationResponse"
+  /orgs/{orgId}/members/{memberId}/resend-invite:
+    post:
+      operationId: resendMemberInvite
+      tags: [members]
+      summary: Resend an invitation for an existing member (admin+)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/MemberId"
+      responses:
+        "200":
+          description: Existing membership and attempted invitation delivery
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberInvitationResponse"
   /orgs/{orgId}/members/{memberId}:
     patch:
       operationId: updateMemberRole
@@ -2345,6 +2384,36 @@ components:
         role:
           type: string
           enum: [admin, manager, user, viewer]
+    InvitationDelivery:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [sent, failed]
+        message: { type: ["string", "null"] }
+    MemberInvitationResponse:
+      allOf:
+        - $ref: "#/components/schemas/Member"
+        - type: object
+          required: [delivery]
+          properties:
+            delivery:
+              $ref: "#/components/schemas/InvitationDelivery"
+    AcceptInvitationBody:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, minLength: 1, maxLength: 4096 }
+    AcceptInvitationResponse:
+      type: object
+      required: [org, role]
+      properties:
+        org:
+          $ref: "#/components/schemas/Organization"
+        role:
+          type: string
+          enum: [owner, admin, manager, user, viewer]
     MemberRoleUpdate:
       type: object
       required: [role]

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { getAuth, clerkClient } from "@clerk/express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   db,
   organizations,
@@ -15,6 +15,10 @@ import {
 } from "@workspace/db";
 import { featuresForPlan } from "../lib/catalog";
 import { getClientIp, isIpAllowed } from "../lib/clientIp";
+import {
+  isPendingUserForVerifiedEmail,
+  verifiedClerkEmails,
+} from "../lib/invitationIdentity";
 import { isViewerMutation } from "../services/crmAccess";
 
 declare global {
@@ -61,30 +65,82 @@ export async function attachUser(
 
   if (!user) {
     const clerkUser = await clerkClient.users.getUser(auth.userId);
+    const verifiedEmails = verifiedClerkEmails(clerkUser);
+    if (verifiedEmails.length === 0) {
+      res.status(403).json({ error: "A verified email address is required" });
+      return;
+    }
+    const primaryEmail = clerkUser.primaryEmailAddress?.emailAddress
+      ?.toLowerCase()
+      .trim();
     const email =
-      clerkUser.primaryEmailAddress?.emailAddress ??
-      clerkUser.emailAddresses[0]?.emailAddress ??
-      `${auth.userId}@unknown.local`;
+      (primaryEmail && verifiedEmails.includes(primaryEmail)
+        ? primaryEmail
+        : verifiedEmails[0])!;
     const fullName =
       [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || null;
 
-    // An admin may have pre-created this user via an invite (by email).
-    const [existingByEmail] = await db
+    // An admin may have pre-created this user via an invite. Match only
+    // verified addresses, and never merge into an active Clerk identity.
+    const existingByEmail = await db
       .select()
       .from(users)
-      .where(eq(users.email, email.toLowerCase()));
+      .where(inArray(users.email, verifiedEmails));
 
-    if (existingByEmail) {
-      [user] = await db
-        .update(users)
-        .set({ clerkId: auth.userId, fullName: existingByEmail.fullName ?? fullName })
-        .where(eq(users.id, existingByEmail.id))
-        .returning();
+    if (existingByEmail.length > 1) {
+      res.status(403).json({ error: "Verified email identity is ambiguous" });
+      return;
+    }
+
+    const candidate = existingByEmail[0];
+    if (candidate) {
+      if (candidate.clerkId === auth.userId) {
+        user = candidate;
+      } else if (isPendingUserForVerifiedEmail(candidate, verifiedEmails)) {
+        // The clerkId predicate makes this claim safe if two first sign-ins
+        // race. A real Clerk identity can never be overwritten.
+        [user] = await db
+          .update(users)
+          .set({ clerkId: auth.userId, fullName: candidate.fullName ?? fullName })
+          .where(
+            and(
+              eq(users.id, candidate.id),
+              eq(users.email, candidate.email),
+              eq(users.clerkId, candidate.clerkId),
+            ),
+          )
+          .returning();
+        if (!user) {
+          [user] = await db
+            .select()
+            .from(users)
+            .where(eq(users.clerkId, auth.userId));
+        }
+        if (!user) {
+          res.status(409).json({ error: "Unable to claim invited account safely" });
+          return;
+        }
+      } else {
+        res.status(403).json({ error: "Verified email is linked to another account" });
+        return;
+      }
     } else {
-      [user] = await db
-        .insert(users)
-        .values({ clerkId: auth.userId, email: email.toLowerCase(), fullName })
-        .returning();
+      try {
+        [user] = await db
+          .insert(users)
+          .values({ clerkId: auth.userId, email, fullName })
+          .returning();
+      } catch {
+        // A concurrent first sign-in may have claimed the same identity.
+        [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.clerkId, auth.userId));
+        if (!user) {
+          res.status(409).json({ error: "Unable to create account safely" });
+          return;
+        }
+      }
     }
   }
 

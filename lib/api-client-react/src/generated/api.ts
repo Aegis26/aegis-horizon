@@ -20,6 +20,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AcceptInvitationBody,
+  AcceptInvitationResponse,
   Account,
   AccountCreate,
   AccountDetail,
@@ -98,6 +100,7 @@ import type {
   ListQuotesParams,
   Me,
   Member,
+  MemberInvitationResponse,
   MemberInvite,
   MemberRoleUpdate,
   NextActionRecommendation,
@@ -341,6 +344,77 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Err
 
 
 
+export const getAcceptInvitationUrl = () => {
+
+
+
+
+  return `/api/invitations/accept`
+}
+
+/**
+ * @summary Confirm a signed invitation for the authenticated recipient
+ */
+export const acceptInvitation = async (acceptInvitationBody: AcceptInvitationBody, options?: Parameters<typeof customFetch>[1]): Promise<AcceptInvitationResponse> => {
+
+  return customFetch<AcceptInvitationResponse>(getAcceptInvitationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(acceptInvitationBody)
+  }
+);}
+
+
+
+
+
+export const getAcceptInvitationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptInvitation>>, TError,{data: BodyType<AcceptInvitationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptInvitation>>, TError,{data: BodyType<AcceptInvitationBody>}, TContext> => {
+
+const mutationKey = ['acceptInvitation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptInvitation>>, {data: BodyType<AcceptInvitationBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  acceptInvitation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptInvitationMutationResult = NonNullable<Awaited<ReturnType<typeof acceptInvitation>>>
+    export type AcceptInvitationMutationBody = BodyType<AcceptInvitationBody>
+    export type AcceptInvitationMutationError = ErrorType<void>
+
+    /**
+ * @summary Confirm a signed invitation for the authenticated recipient
+ */
+export const useAcceptInvitation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptInvitation>>, TError,{data: BodyType<AcceptInvitationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acceptInvitation>>,
+        TError,
+        {data: BodyType<AcceptInvitationBody>},
+        TContext
+      > => {
+      return useMutation(getAcceptInvitationMutationOptions(options));
+    }
+
 export const getGetOrgUrl = (orgId: string,) => {
 
 
@@ -579,9 +653,9 @@ export const getInviteMemberUrl = (orgId: string,) => {
  * @summary Invite a user by email with a role (admin+)
  */
 export const inviteMember = async (orgId: string,
-    memberInvite: MemberInvite, options?: Parameters<typeof customFetch>[1]): Promise<Member> => {
+    memberInvite: MemberInvite, options?: Parameters<typeof customFetch>[1]): Promise<MemberInvitationResponse> => {
 
-  return customFetch<Member>(getInviteMemberUrl(orgId),
+  return customFetch<MemberInvitationResponse>(getInviteMemberUrl(orgId),
   {
     ...options,
     method: 'POST',
@@ -637,6 +711,79 @@ export const useInviteMember = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getInviteMemberMutationOptions(options));
+    }
+
+export const getResendMemberInviteUrl = (orgId: string,
+    memberId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/members/${memberId}/resend-invite`
+}
+
+/**
+ * @summary Resend an invitation for an existing member (admin+)
+ */
+export const resendMemberInvite = async (orgId: string,
+    memberId: string, options?: Parameters<typeof customFetch>[1]): Promise<MemberInvitationResponse> => {
+
+  return customFetch<MemberInvitationResponse>(getResendMemberInviteUrl(orgId,memberId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getResendMemberInviteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resendMemberInvite>>, TError,{orgId: string;memberId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resendMemberInvite>>, TError,{orgId: string;memberId: string}, TContext> => {
+
+const mutationKey = ['resendMemberInvite'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resendMemberInvite>>, {orgId: string;memberId: string}> = (props) => {
+          const {orgId,memberId} = props ?? {};
+
+          return  resendMemberInvite(orgId,memberId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResendMemberInviteMutationResult = NonNullable<Awaited<ReturnType<typeof resendMemberInvite>>>
+
+    export type ResendMemberInviteMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Resend an invitation for an existing member (admin+)
+ */
+export const useResendMemberInvite = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resendMemberInvite>>, TError,{orgId: string;memberId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resendMemberInvite>>,
+        TError,
+        {orgId: string;memberId: string},
+        TContext
+      > => {
+      return useMutation(getResendMemberInviteMutationOptions(options));
     }
 
 export const getUpdateMemberRoleUrl = (orgId: string,

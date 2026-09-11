@@ -1,0 +1,291 @@
+# Fix Invitation Acceptance Flow - Employee Login & Portal Access
+
+**Goal:** Make invitation links create a separate employee account/session (not log them into owner's account).
+
+**Current Problem:**
+- Employee clicks invitation link
+- Gets logged into OWNER's session instead of creating their own account
+- Sees owner's data instead of their own portal
+
+**Expected Behavior:**
+- Employee clicks link → Signup/login page (their own account)
+- They create/login with their Clerk account
+- System validates invitation token
+- They access THEIR org portal with THEIR data only
+
+---
+
+## Task 1: Find the Invitation Acceptance Page
+
+Search for the invitation acceptance handler:
+
+```bash
+find src/ -name "*invite*" -type f
+grep -r "invite/\[token\]\|invitation.*accept\|acceptInvitation" src/
+```
+
+Look for:
+- `src/pages/invite/[token].tsx` (or similar)
+- `src/routes/invitations.ts` or endpoint that handles `/invite/:token`
+- Any file processing invitation tokens
+
+---
+
+## Task 2: Understand Current Flow
+
+Once found, check if it:
+1. Checks if user is logged in (using Clerk)
+2. Validates the invitation token
+3. Accepts the invitation (updates membership status)
+4. Redirects somewhere
+
+**Report back:**
+- File path
+- Current logic flow (step by step)
+- Where it redirects after accepting
+
+---
+
+## Task 3: Fix the Flow
+
+The corrected flow should be:
+
+```typescript
+// File: artifacts/crm/src/pages/invite/[token].tsx
+// (or wherever the invitation acceptance happens)
+
+import { useUser } from '@clerk/nextjs'
+import { useRouter } from 'next/router'
+import { useEffect, useState } from 'react'
+
+export default function AcceptInvitationPage() {
+  const router = useRouter()
+  const { token } = router.query
+  const { user, isLoaded, isSignedIn } = useUser()
+  const [status, setStatus] = useState('loading')
+  const [error, setError] = useState('')
+  const [orgId, setOrgId] = useState('')
+
+  useEffect(() => {
+    if (!isLoaded || !token) return
+
+    // Step 1: If NOT logged in, redirect to signup/login with invitation context
+    if (!isSignedIn) {
+      // Redirect to Clerk sign-up with email pre-filled (if available)
+      // After signup, Clerk redirects back here with same token
+      router.push(`/sign-up?invite_token=${token}`)
+      return
+    }
+
+    // Step 2: User IS logged in, now accept the invitation
+    const acceptInvitation = async () => {
+      try {
+        // Get client IP for security logging
+        const ipResponse = await fetch('https://api.ipify.org?format=json')
+        const ipData = await ipResponse.json()
+
+        // Call backend to accept invitation
+        const response = await fetch('/api/invitations/accept', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token, // Raw token from URL
+            userEmail: user.emailAddresses[0].emailAddress,
+            userId: user.id,
+            ipAddress: ipData.ip,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          setError(data.error || 'Failed to accept invitation')
+          setStatus('error')
+          return
+        }
+
+        const data = await response.json()
+        setOrgId(data.orgId)
+        setStatus('success')
+
+        // Step 3: Redirect to THEIR org dashboard (not owner's)
+        setTimeout(() => {
+          router.push(`/dashboard?orgId=${data.orgId}`)
+        }, 2000)
+      } catch (err) {
+        setError('An error occurred. Please try again.')
+        setStatus('error')
+      }
+    }
+
+    acceptInvitation()
+  }, [isLoaded, isSignedIn, user, token])
+
+  // Render appropriate state
+  if (!isLoaded) {
+    return <div className="text-center p-8">Loading...</div>
+  }
+
+  // If not signed in, show message
+  if (!isSignedIn) {
+    return (
+      <div className="max-w-md mx-auto p-8 text-center">
+        <h1>Sign In to Accept Invitation</h1>
+        <p>Please create an account or sign in with the email you were invited with.</p>
+        <p className="text-sm text-gray-500 mt-4">Redirecting to sign-up...</p>
+      </div>
+    )
+  }
+
+  // If signed in, show acceptance status
+  return (
+    <div className="max-w-md mx-auto p-8">
+      {status === 'loading' && (
+        <>
+          <h1>Accepting invitation...</h1>
+          <p>Setting up your account...</p>
+        </>
+      )}
+
+      {status === 'success' && (
+        <>
+          <h1 className="text-green-600">✓ Welcome!</h1>
+          <p>You've joined the organization. Redirecting to your dashboard...</p>
+        </>
+      )}
+
+      {status === 'error' && (
+        <>
+          <h1 className="text-red-600">Error</h1>
+          <p>{error}</p>
+          <button 
+            onClick={() => router.push('/')} 
+            className="mt-4 text-blue-500"
+          >
+            Go Home
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+```
+
+---
+
+## Task 4: Backend Acceptance Endpoint
+
+Verify the acceptance endpoint at `artifacts/api-server/src/routes/...` (or wherever it is):
+
+Should look like:
+```typescript
+app.post('/api/invitations/accept', async (req, res) => {
+  const { token, userEmail, userId, ipAddress } = req.body
+
+  try {
+    // Find and validate invitation
+    const invitation = await db.query.orgUsers.findFirst({
+      where: and(
+        eq(orgUsers.email, userEmail),
+        eq(orgUsers.status, 'pending')
+      ),
+    })
+
+    if (!invitation) {
+      return res.status(400).json({ error: 'Invitation not found' })
+    }
+
+    // Verify token
+    if (!verifyToken(token, invitation.invitation_token_hash)) {
+      return res.status(400).json({ error: 'Invalid token' })
+    }
+
+    // Check expiry
+    if (invitation.invitation_expires_at < new Date()) {
+      return res.status(400).json({ error: 'Invitation expired' })
+    }
+
+    // Accept invitation - link user to membership
+    await db.update(orgUsers)
+      .set({
+        user_id: userId,
+        status: 'active',
+        invitation_accepted_at: new Date(),
+        invitation_accepted_from_ip: ipAddress,
+        invitation_token_hash: null, // Single-use
+        invitation_expires_at: null,
+      })
+      .where(eq(orgUsers.id, invitation.id))
+
+    // Log acceptance
+    await AuditService.log(
+      invitation.org_id,
+      userId,
+      'accept_invitation',
+      'org_user',
+      invitation.id,
+      { email: userEmail, ipAddress }
+    )
+
+    // Get org name for response
+    const org = await db.query.organizations.findFirst({
+      where: eq(organizations.id, invitation.org_id),
+    })
+
+    res.json({
+      success: true,
+      orgId: invitation.org_id,
+      orgName: org.name,
+    })
+  } catch (error) {
+    console.error('Invitation acceptance error:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+```
+
+---
+
+## Task 5: Critical: Verify Data Isolation Works
+
+After fixing the login flow, test the data isolation:
+
+1. **Employee logs in separately** (their own Clerk account)
+2. **Go to /dashboard?orgId=<THEIR_ORG>**
+3. **Check Accounts page** - should see only THEIR accounts, not owner's
+4. **Check Pipeline** - should see only THEIR opportunities
+
+If they still see owner's data, Phase 6 data isolation isn't working and needs debugging.
+
+---
+
+## Task 6: Commit & Push
+
+```bash
+git add artifacts/crm/src/pages/invite/[token].tsx artifacts/api-server/src/routes/...
+
+git commit -m "feat: Fix invitation acceptance for separate employee accounts
+
+- Invitation link now redirects to signup/login if not authenticated
+- Prevents employee from accessing owner's session
+- Validates invitation token against employee's email
+- Redirects to employee's org dashboard (not owner's)
+- Maintains data isolation - employees see only their data
+- IP address tracked on acceptance for security"
+
+git push origin main
+```
+
+Railway will auto-deploy. 🚀
+
+---
+
+## What This Fixes
+
+✅ Employee gets their OWN Clerk account (not logged into owner)  
+✅ Invitation token validated for their email  
+✅ Membership created linking their user to org  
+✅ Redirected to their dashboard with their data  
+✅ Data isolation enforced (can't see owner's data)  
+✅ Each employee has separate login credentials  
+
+**Test after deployment:** Have employee click invitation link again - should go to login/signup, then their dashboard!

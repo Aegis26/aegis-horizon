@@ -1,0 +1,395 @@
+# Audit & Fix GET Endpoints for Row-Level Data Filtering
+
+**Goal:** Verify all GET endpoints filter data by user role and ownership (so employees see only their data, not owner's).
+
+**Critical Issue:** Employee logged in sees owner's data instead of empty dashboard.
+
+**Expected Behavior:**
+- Admin/Owner: GET `/api/accounts` → Returns ALL accounts
+- Employee: GET `/api/accounts` → Returns ONLY accounts they own
+- Same for opportunities, contacts, leads, etc.
+
+---
+
+## Task 1: Find All GET Endpoints for CRM Resources
+
+Search for all API endpoints that fetch CRM data:
+
+```bash
+find artifacts/api-server/src/routes -name "*.ts" -type f
+grep -r "app.get.*accounts\|app.get.*opportunities\|app.get.*contacts\|app.get.*leads\|router.get" artifacts/api-server/src/routes/
+```
+
+Look for endpoints like:
+- `GET /accounts` (list)
+- `GET /accounts/:id` (detail)
+- `GET /opportunities`
+- `GET /contacts`
+- `GET /leads`
+- And any other CRM resource endpoints
+
+**Report back:**
+- List of ALL GET endpoints found
+- Which ones exist
+- File paths
+
+---
+
+## Task 2: Audit Each GET Endpoint
+
+For EACH GET endpoint found, check if it:
+
+1. **Gets the current user's role** from auth context
+2. **Gets the current user's ID**
+3. **Filters based on role:**
+   ```typescript
+   const userRole = membership.role // 'admin', 'manager', 'user', 'viewer'
+   const userId = req.user.id
+   
+   if (userRole === 'admin' || userRole === 'manager') {
+     // Return ALL org data
+     return db.query.accounts.findMany({
+       where: eq(accounts.org_id, orgId)
+     })
+   } else if (userRole === 'user') {
+     // Return ONLY employee's data
+     return db.query.accounts.findMany({
+       where: and(
+         eq(accounts.org_id, orgId),
+         or(
+           eq(accounts.owner_user_id, userId),
+           eq(accounts.created_by_user_id, userId)
+         )
+       )
+     })
+   } else if (userRole === 'viewer') {
+     // Return ONLY owned data, read-only
+     return db.query.accounts.findMany({
+       where: and(
+         eq(accounts.org_id, orgId),
+         eq(accounts.owner_user_id, userId)
+       )
+     })
+   }
+   ```
+
+**For each endpoint, report:**
+- File path
+- Current code (does it filter by user?)
+- Does it check user role?
+- Does it filter by owner_user_id or created_by_user_id?
+
+---
+
+## Task 3: Fix Endpoints That Don't Filter
+
+For any endpoint that's NOT filtering by user ownership, update it.
+
+**Template for fixing GET /api/accounts:**
+
+```typescript
+// BEFORE (returns all data to any member)
+app.get('/api/accounts', async (req, res) => {
+  const { orgId } = req.query
+  
+  const accounts = await db.query.accounts.findMany({
+    where: eq(accounts.org_id, orgId),
+  })
+  
+  res.json(accounts)
+})
+
+// AFTER (filters by user role and ownership)
+app.get('/api/accounts', async (req, res) => {
+  const { orgId } = req.query
+  const userId = req.user.id
+  
+  // Get user's role in org
+  const membership = await db.query.orgUsers.findFirst({
+    where: and(
+      eq(orgUsers.org_id, orgId),
+      eq(orgUsers.user_id, userId),
+      eq(orgUsers.status, 'active')
+    ),
+  })
+  
+  if (!membership) {
+    return res.status(403).json({ error: 'Not member of organization' })
+  }
+  
+  let accounts
+  
+  // Admin and managers see all org accounts
+  if (membership.role === 'admin' || membership.role === 'manager') {
+    accounts = await db.query.accounts.findMany({
+      where: eq(accounts.org_id, orgId),
+    })
+  }
+  // Users see only their own accounts
+  else if (membership.role === 'user') {
+    accounts = await db.query.accounts.findMany({
+      where: and(
+        eq(accounts.org_id, orgId),
+        or(
+          eq(accounts.owner_user_id, userId),
+          eq(accounts.created_by_user_id, userId)
+        )
+      ),
+    })
+  }
+  // Viewers see only accounts they own (read-only)
+  else if (membership.role === 'viewer') {
+    accounts = await db.query.accounts.findMany({
+      where: and(
+        eq(accounts.org_id, orgId),
+        eq(accounts.owner_user_id, userId)
+      ),
+    })
+  }
+  else {
+    return res.status(403).json({ error: 'Invalid role' })
+  }
+  
+  res.json(accounts)
+})
+```
+
+**Apply same pattern to:**
+- `GET /api/opportunities`
+- `GET /api/contacts`
+- `GET /api/leads`
+- `GET /api/:id` (detail endpoints)
+- Any other GET endpoints
+
+---
+
+## Task 4: Fix Detail Endpoints (GET by ID)
+
+Detail endpoints need EXTRA CARE - must verify user can access that specific record:
+
+```typescript
+// BEFORE (returns any account by ID, no permission check)
+app.get('/api/accounts/:id', async (req, res) => {
+  const { id } = req.params
+  
+  const account = await db.query.accounts.findFirst({
+    where: eq(accounts.id, id),
+  })
+  
+  res.json(account)
+})
+
+// AFTER (checks user can access this specific account)
+app.get('/api/accounts/:id', async (req, res) => {
+  const { id } = req.params
+  const { orgId } = req.query
+  const userId = req.user.id
+  
+  // Get user's role
+  const membership = await db.query.orgUsers.findFirst({
+    where: and(
+      eq(orgUsers.org_id, orgId),
+      eq(orgUsers.user_id, userId),
+      eq(orgUsers.status, 'active')
+    ),
+  })
+  
+  if (!membership) {
+    return res.status(403).json({ error: 'Not member' })
+  }
+  
+  // Get the account
+  const account = await db.query.accounts.findFirst({
+    where: and(
+      eq(accounts.id, id),
+      eq(accounts.org_id, orgId)
+    ),
+  })
+  
+  if (!account) {
+    return res.status(404).json({ error: 'Account not found' })
+  }
+  
+  // Check access permission
+  if (membership.role === 'admin' || membership.role === 'manager') {
+    // Can view any org account
+    res.json(account)
+  } else if (membership.role === 'user') {
+    // Can only view own accounts
+    if (account.owner_user_id !== userId && account.created_by_user_id !== userId) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
+    res.json(account)
+  } else if (membership.role === 'viewer') {
+    // Can only view owned accounts
+    if (account.owner_user_id !== userId) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
+    res.json(account)
+  }
+})
+```
+
+---
+
+## Task 5: Helper Function (Optional but Recommended)
+
+Create a reusable filter helper in `artifacts/api-server/src/lib/dataAccessControl.ts`:
+
+```typescript
+import { db } from '@/db'
+import { orgUsers } from '@/db/schema'
+import { and, eq, or } from 'drizzle-orm'
+
+export async function getUserMembership(orgId: string, userId: string) {
+  return await db.query.orgUsers.findFirst({
+    where: and(
+      eq(orgUsers.org_id, orgId),
+      eq(orgUsers.user_id, userId),
+      eq(orgUsers.status, 'active')
+    ),
+  })
+}
+
+export function buildVisibilityFilter(
+  table: any,
+  userRole: string,
+  userId: string,
+  orgId: string
+) {
+  if (userRole === 'admin' || userRole === 'manager') {
+    return eq(table.org_id, orgId)
+  } else if (userRole === 'user') {
+    return and(
+      eq(table.org_id, orgId),
+      or(
+        eq(table.owner_user_id, userId),
+        eq(table.created_by_user_id, userId)
+      )
+    )
+  } else if (userRole === 'viewer') {
+    return and(
+      eq(table.org_id, orgId),
+      eq(table.owner_user_id, userId)
+    )
+  }
+  return null
+}
+```
+
+Then use in endpoints:
+
+```typescript
+import { getUserMembership, buildVisibilityFilter } from '@/lib/dataAccessControl'
+
+app.get('/api/accounts', async (req, res) => {
+  const { orgId } = req.query
+  const userId = req.user.id
+  
+  const membership = await getUserMembership(orgId, userId)
+  if (!membership) return res.status(403).json({ error: 'Not member' })
+  
+  const filter = buildVisibilityFilter(accounts, membership.role, userId, orgId)
+  const results = await db.query.accounts.findMany({ where: filter })
+  
+  res.json(results)
+})
+```
+
+---
+
+## Task 6: Test the Fixes
+
+After fixing all endpoints, test thoroughly:
+
+**Test 1: Admin/Owner View**
+1. Log in as owner (chris.mckeithen87@gmail.com)
+2. GET `/api/accounts` → Should return 6 accounts (Shana, Maid in East Texas, etc.)
+3. GET `/api/opportunities` → Should return 4 opportunities
+
+**Test 2: Employee View**
+1. Log in as employee (the Christian Hunter account you created)
+2. GET `/api/accounts` → Should return 0 accounts (employee hasn't created any)
+3. GET `/api/opportunities` → Should return 0 opportunities
+4. Dashboard should show empty state (0 accounts, 0 opportunities)
+
+**Test 3: Employee Creates Data**
+1. As employee, create 1 account
+2. GET `/api/accounts` → Should return only 1 account (the one they created)
+3. As owner, GET `/api/accounts` → Should return 7 accounts (original 6 + employee's 1)
+4. Employee and owner should NOT see the same data
+
+---
+
+## Task 7: Search for ALL GET Endpoints Systemically
+
+Don't miss any. Run this comprehensive search:
+
+```bash
+# Find all GET endpoints
+grep -r "app\.get\|router\.get\|\.get(" artifacts/api-server/src/ --include="*.ts" | grep -v "node_modules" | head -50
+
+# Look for account/opportunity/contact/lead specific endpoints
+grep -r "/accounts\|/opportunities\|/contacts\|/leads\|/segments\|/quotes" artifacts/api-server/src/routes --include="*.ts"
+```
+
+**List EVERY endpoint you find.** Don't skip any.
+
+---
+
+## Task 8: Commit & Push
+
+```bash
+git add artifacts/api-server/src/routes/ artifacts/api-server/src/lib/
+
+git commit -m "feat: Implement row-level access control filtering on all GET endpoints
+
+Data Access Control:
+- All GET endpoints now filter by user role and ownership
+- Admins/managers see all org data
+- Regular users see only their own accounts/opportunities/contacts/leads
+- Viewers see only accounts they own (read-only)
+- Detail endpoints verify permission before returning record
+
+Endpoints Fixed:
+- GET /accounts - filters by owner_user_id or created_by_user_id for users
+- GET /accounts/:id - verifies user can access this account
+- GET /opportunities - filters by ownership
+- GET /opportunities/:id - verifies permission
+- GET /contacts - filters by ownership
+- GET /contacts/:id - verifies permission
+- GET /leads - filters by ownership
+- GET /leads/:id - verifies permission
+- (any other GET endpoints)
+
+Helper Functions:
+- getUserMembership() - Get user's role in org
+- buildVisibilityFilter() - Build WHERE clause based on role
+
+Now employees see ONLY their data, not owner's data.
+True data isolation enforced at API level."
+
+git push origin main
+```
+
+Railway will auto-deploy. 🚀
+
+---
+
+## Success Criteria
+
+✅ Owner logs in → Sees 6 accounts, 4 opportunities  
+✅ Employee logs in → Sees 0 accounts, 0 opportunities (clean)  
+✅ Employee creates 1 account → Sees only that 1 account  
+✅ Owner can see employee's account (in their 6+1=7)  
+✅ Employee CANNOT see owner's accounts  
+✅ All roles (admin, manager, user, viewer) have correct filtering  
+✅ Detail endpoints verify permission  
+
+---
+
+## CRITICAL
+
+This is the final piece of Phase 6! Once these endpoints are fixed, **true multi-user data isolation will be complete!** 🎉
+
+The employee will have a completely separate portal with only their data.

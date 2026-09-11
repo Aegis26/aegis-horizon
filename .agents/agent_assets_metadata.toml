@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "LHce4FID07STrAewZyo4t"
+uri = "file://docs/audits/get-row-access.html"
+type = "text"
+title = "GET Endpoint Row-Access Audit"
+description = "Complete inventory of 60 GET endpoints, source files, role and ownership checks, fixes, and verification limits."
+logical_id = "45f5c7b9-64c6-47f8-8a88-034b1a7926f7"
+content_hash = "sha256:769eacef233257d2b80ab2c6058f58ae7cf28d586941e6d60de7a2f5f0ff4542"
+size = 44278
+mtime_ms = 1789160096939
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:53bf35b9-7934-40bc-b23f-c0b73d19c959/45f5c7b9-64c6-47f8-8a88-034b1a7926f7/562aec03-288f-484e-828a-646a3a9065b7"
+storage_version_token = "1789160192641688"
+content_type = "text/html"

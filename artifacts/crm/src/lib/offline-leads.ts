@@ -10,6 +10,12 @@ export interface QueuedLead {
   id: string;
   idempotencyKey: string;
   orgId: string;
+  /**
+   * Offline mutations are authored by a Clerk account. Keep that scope with
+   * the record so an account switch cannot display or sync another user's
+   * unsynced lead.
+   */
+  clerkUserId?: string;
   data: LeadCreate;
   createdAt: string;
   lastError?: string;
@@ -18,9 +24,31 @@ export interface QueuedLead {
 export interface LeadQueueChange {
   syncedLead?: Lead;
   orgId?: string;
+  clerkUserId?: string;
 }
 
-let syncPromise: Promise<void> | null = null;
+export interface LeadSyncAuth {
+  /**
+   * This callback is evaluated for every queued request. The caller supplies
+   * a token for the Clerk identity that owns the queue record.
+   */
+  getToken: () => Promise<string | null>;
+  /**
+   * Reads the live Clerk identity, rather than the identity captured when a
+   * sync job started.
+   */
+  getCurrentUserId: () => string | null;
+}
+
+export interface LeadQueueSyncDependencies {
+  list: (clerkUserId: string) => Promise<QueuedLead[]>;
+  create: (record: QueuedLead, authToken: string) => Promise<Lead>;
+  remove: (record: QueuedLead) => Promise<void>;
+  update: (record: QueuedLead) => Promise<void>;
+  notify?: (detail: LeadQueueChange) => void;
+}
+
+const syncPromises = new Map<string, Promise<void>>();
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -62,25 +90,41 @@ function newIdempotencyKey(): string {
   return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-export async function listQueuedLeads(orgId?: string): Promise<QueuedLead[]> {
+export async function listQueuedLeads(
+  orgId?: string,
+  clerkUserId?: string,
+): Promise<QueuedLead[]> {
   const records = await withStore<QueuedLead[]>("readonly", (store) => store.getAll());
   return records
-    .filter((record) => !orgId || record.orgId === orgId)
+    // Records written before account scoping was added remain in IndexedDB,
+    // but are deliberately not exposed to an authenticated account because
+    // their owner cannot be established safely.
+    .filter(
+      (record) =>
+        (!orgId || record.orgId === orgId) &&
+        (!clerkUserId || record.clerkUserId === clerkUserId),
+    )
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
-export async function enqueueLead(orgId: string, data: LeadCreate): Promise<QueuedLead> {
+export async function enqueueLead(
+  orgId: string,
+  data: LeadCreate,
+  clerkUserId: string,
+  auth: LeadSyncAuth,
+): Promise<QueuedLead> {
   const key = newIdempotencyKey();
   const record: QueuedLead = {
     id: `pending-${key}`,
     idempotencyKey: key,
     orgId,
+    clerkUserId,
     data,
     createdAt: new Date().toISOString(),
   };
   await withStore<IDBValidKey>("readwrite", (store) => store.add(record));
-  notify({ orgId });
-  void syncLeadQueue();
+  notify({ orgId, clerkUserId });
+  void syncLeadQueue(clerkUserId, auth);
   return record;
 }
 
@@ -92,34 +136,123 @@ async function deleteQueuedLead(id: string): Promise<void> {
   await withStore<undefined>("readwrite", (store) => store.delete(id));
 }
 
-export function syncLeadQueue(): Promise<void> {
-  if (syncPromise) return syncPromise;
+export function createLeadRequestOptions(
+  record: QueuedLead,
+  authToken: string,
+): RequestInit {
+  return {
+    // The explicit Clerk token is identity-bound. Omitting cookies prevents a
+    // newly signed-in account from taking precedence over the queue owner.
+    credentials: "omit",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      "Idempotency-Key": record.idempotencyKey,
+    },
+  };
+}
 
-  syncPromise = (async () => {
-    notify();
-    while (true) {
-      const [record] = await listQueuedLeads();
-      if (!record) break;
-      try {
-        const syncedLead = await createLead(record.orgId, record.data, {
-          headers: { "Idempotency-Key": record.idempotencyKey },
-        });
-        await deleteQueuedLead(record.id);
-        notify({ orgId: record.orgId, syncedLead });
-      } catch (error) {
-        await updateQueuedLead({
-          ...record,
-          lastError: error instanceof Error ? error.message : "Sync failed",
-        });
-        notify({ orgId: record.orgId });
-        break;
-      }
+function tokenSubject(authToken: string): string | null {
+  const payloadSegment = authToken.split(".")[1];
+  if (!payloadSegment) return null;
+  try {
+    const base64 = payloadSegment.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const payload = JSON.parse(new TextDecoder().decode(bytes)) as { sub?: unknown };
+    return typeof payload.sub === "string" ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+const defaultSyncDependencies: LeadQueueSyncDependencies = {
+  list: (clerkUserId) => listQueuedLeads(undefined, clerkUserId),
+  create: (record, authToken) =>
+    createLead(
+      record.orgId,
+      record.data,
+      createLeadRequestOptions(record, authToken),
+    ),
+  remove: (record) => deleteQueuedLead(record.id),
+  update: updateQueuedLead,
+  notify,
+};
+
+/**
+ * Runs one identity-bound queue. It intentionally leaves records in
+ * IndexedDB when the Clerk identity changes or a token cannot be obtained.
+ * The request itself uses an explicit bearer token with cookies omitted, so a
+ * session switch cannot turn an A-owned mutation into a B-owned mutation.
+ */
+export async function syncLeadQueueForUser(
+  clerkUserId: string,
+  auth: LeadSyncAuth,
+  dependencies: LeadQueueSyncDependencies = defaultSyncDependencies,
+): Promise<void> {
+  dependencies.notify?.({ clerkUserId });
+  while (auth.getCurrentUserId() === clerkUserId) {
+    const [record] = await dependencies.list(clerkUserId);
+    if (!record || record.clerkUserId !== clerkUserId) break;
+
+    let authToken: string | null;
+    try {
+      authToken = await auth.getToken();
+    } catch {
+      // Keep the record queued if Clerk is in the middle of a session change.
+      break;
     }
-  })().finally(() => {
-    syncPromise = null;
-    notify();
+    // Clerk's getToken follows the live session. Check both the live hook
+    // identity and the token subject so a session update racing React's render
+    // cannot hand this A-owned queue a B token.
+    if (
+      !authToken ||
+      auth.getCurrentUserId() !== clerkUserId ||
+      tokenSubject(authToken) !== clerkUserId
+    ) {
+      break;
+    }
+
+    try {
+      const syncedLead = await dependencies.create(record, authToken);
+      // A switch while the request was in flight cannot change the request's
+      // explicit bearer identity. Remove only after that owner-bound request
+      // succeeds; otherwise the next sign-in can safely retry the record.
+      await dependencies.remove(record);
+      dependencies.notify?.({
+        orgId: record.orgId,
+        clerkUserId,
+        syncedLead,
+      });
+    } catch (error) {
+      await dependencies.update({
+        ...record,
+        lastError: error instanceof Error ? error.message : "Sync failed",
+      });
+      dependencies.notify?.({ orgId: record.orgId, clerkUserId });
+      break;
+    }
+  }
+}
+
+export function syncLeadQueue(
+  clerkUserId?: string,
+  auth?: LeadSyncAuth,
+  dependencies: LeadQueueSyncDependencies = defaultSyncDependencies,
+): Promise<void> {
+  if (!clerkUserId || !auth) return Promise.resolve();
+  const existing = syncPromises.get(clerkUserId);
+  if (existing) return existing;
+
+  let promise: Promise<void>;
+  promise = syncLeadQueueForUser(clerkUserId, auth, dependencies).finally(() => {
+    if (syncPromises.get(clerkUserId) === promise) {
+      syncPromises.delete(clerkUserId);
+    }
+    dependencies.notify?.({ clerkUserId });
   });
-  return syncPromise;
+  syncPromises.set(clerkUserId, promise);
+  return promise;
 }
 
 export function subscribeToLeadQueue(listener: (detail: LeadQueueChange) => void): () => void {
@@ -129,6 +262,6 @@ export function subscribeToLeadQueue(listener: (detail: LeadQueueChange) => void
   return () => window.removeEventListener(CHANGE_EVENT, onChange);
 }
 
-export function isLeadQueueSyncing(): boolean {
-  return syncPromise !== null;
+export function isLeadQueueSyncing(clerkUserId?: string): boolean {
+  return clerkUserId ? syncPromises.has(clerkUserId) : syncPromises.size > 0;
 }

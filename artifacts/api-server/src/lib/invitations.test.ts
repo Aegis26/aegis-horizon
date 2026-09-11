@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   createInvitationToken,
   INVITATION_TTL_SECONDS,
+  invitationAcceptanceDecision,
   invitationMembershipMatches,
+  runInvitationTransferAtomically,
   verifyInvitationToken,
 } from "./invitations";
 import { sendInvitationEmail } from "./email";
@@ -121,6 +123,166 @@ test("acceptance membership binding fails closed for removed or wrong-org member
     }),
     true,
   );
+});
+
+test("acceptance rejects a signed-in owner whose verified email is not invited", () => {
+  const decision = invitationAcceptanceDecision({
+    token: invitation,
+    authUserId: "clerk-owner",
+    localUser: { id: "owner-user", clerkId: "clerk-owner" },
+    verifiedEmails: ["owner@example.com"],
+    targetUser: {
+      id: invitation.userId,
+      clerkId: "pending:recipient@example.com",
+      email: invitation.email,
+    },
+    targetMembership: {
+      id: invitation.membershipId,
+      userId: invitation.userId,
+      orgId: invitation.orgId,
+      role: "user",
+    },
+    organization: { id: invitation.orgId },
+  });
+
+  assert.deepEqual(decision, {
+    accepted: false,
+    status: 403,
+    error: "Verify the invited email address in Clerk before accepting",
+  });
+});
+
+test("verified employee acceptance selects the token organization without consuming membership", () => {
+  const decision = invitationAcceptanceDecision({
+    token: invitation,
+    authUserId: "clerk-employee",
+    localUser: { id: invitation.userId, clerkId: "clerk-employee" },
+    verifiedEmails: [invitation.email],
+    targetUser: {
+      id: invitation.userId,
+      clerkId: "clerk-employee",
+      email: invitation.email,
+    },
+    targetMembership: {
+      id: invitation.membershipId,
+      userId: invitation.userId,
+      orgId: invitation.orgId,
+      role: "user",
+    },
+    // A different org must not be selected from ambient session state.
+    organization: { id: invitation.orgId },
+  });
+
+  assert.deepEqual(decision, {
+    accepted: true,
+    transferMembership: false,
+    orgId: invitation.orgId,
+    membershipId: invitation.membershipId,
+    role: "user",
+  });
+});
+
+test("removed memberships fail closed even when the signed invitation is unexpired", () => {
+  process.env.SESSION_SECRET = "test-session-secret";
+  const token = createInvitationToken(invitation, NOW);
+  assert.ok(verifyInvitationToken(token, NOW));
+
+  const decision = invitationAcceptanceDecision({
+    token: invitation,
+    authUserId: "clerk-employee",
+    localUser: { id: invitation.userId, clerkId: "clerk-employee" },
+    verifiedEmails: [invitation.email],
+    targetUser: {
+      id: invitation.userId,
+      clerkId: "clerk-employee",
+      email: invitation.email,
+    },
+    targetMembership: undefined,
+    organization: { id: invitation.orgId },
+  });
+
+  assert.equal(decision.accepted, false);
+  if (!decision.accepted) {
+    assert.equal(decision.status, 410);
+  }
+});
+
+test("acceptance fails closed when the database organization does not match the token", () => {
+  const decision = invitationAcceptanceDecision({
+    token: invitation,
+    authUserId: "clerk-employee",
+    localUser: { id: invitation.userId, clerkId: "clerk-employee" },
+    verifiedEmails: [invitation.email],
+    targetUser: {
+      id: invitation.userId,
+      clerkId: "clerk-employee",
+      email: invitation.email,
+    },
+    targetMembership: {
+      id: invitation.membershipId,
+      userId: invitation.userId,
+      orgId: invitation.orgId,
+      role: "user",
+    },
+    organization: { id: "different-org" },
+  });
+
+  assert.equal(decision.accepted, false);
+  if (!decision.accepted) {
+    assert.equal(decision.status, 410);
+  }
+});
+
+test("audit failure rolls back pending transfer so the same invitation link can retry", async () => {
+  process.env.SESSION_SECRET = "test-session-secret";
+  const signedToken = createInvitationToken(invitation, NOW);
+  const verifiedToken = verifyInvitationToken(signedToken, NOW);
+  assert.ok(verifiedToken);
+
+  type TransactionState = { membershipUserId: string };
+  let persisted: TransactionState = { membershipUserId: invitation.userId };
+  let auditAttempts = 0;
+  const auditRows: string[] = [];
+  const transaction = async (
+    work: (tx: TransactionState) => Promise<string>,
+  ): Promise<string> => {
+    const tx = { ...persisted };
+    const result = await work(tx);
+    persisted = tx;
+    return result;
+  };
+
+  const transfer = async (tx: TransactionState): Promise<string> => {
+    if (tx.membershipUserId !== verifiedToken.userId) {
+      throw new Error("Invitation is no longer bound to the pending user");
+    }
+    tx.membershipUserId = "employee-user";
+    return tx.membershipUserId;
+  };
+  const writeAudit = async (
+    _tx: TransactionState,
+    membershipUserId: string,
+  ): Promise<void> => {
+    auditAttempts += 1;
+    if (auditAttempts === 1) throw new Error("audit unavailable");
+    auditRows.push(membershipUserId);
+  };
+
+  await assert.rejects(
+    runInvitationTransferAtomically(transaction, transfer, writeAudit),
+    /audit unavailable/,
+  );
+  assert.equal(persisted.membershipUserId, invitation.userId);
+  assert.equal(auditRows.length, 0);
+
+  const acceptedUserId = await runInvitationTransferAtomically(
+    transaction,
+    transfer,
+    writeAudit,
+  );
+  assert.equal(acceptedUserId, "employee-user");
+  assert.equal(persisted.membershipUserId, "employee-user");
+  assert.deepEqual(auditRows, ["employee-user"]);
 });
 
 test("resend can issue a fresh token for the same membership binding", () => {

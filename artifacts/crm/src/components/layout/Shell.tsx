@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
+import { useAuth } from "@clerk/react";
 import { Link, useLocation } from "wouter";
 import { 
   Building2, 
@@ -27,6 +28,10 @@ import { Button } from "@/components/ui/button";
 import { CommandCenter } from "@/components/ai/CommandCenter";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useOfflineLeads } from "@/hooks/use-offline-leads";
+import {
+  belongsToAuthenticatedUser,
+  hasAuthenticatedOrganizationMembership,
+} from "@/lib/auth-scope";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -49,24 +54,41 @@ export function Shell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const { data: me } = useGetMe({ query: { queryKey: getGetMeQueryKey() }});
+  const { isLoaded: authLoaded, isSignedIn, userId } = useAuth();
+  const { data: me } = useGetMe({
+    query: {
+      enabled: authLoaded && isSignedIn === true && Boolean(userId),
+      queryKey: getGetMeQueryKey(),
+    },
+  });
   const { selectedOrgId, setSelectedOrgId } = useOrgStore();
-  const { online, pendingLeads } = useOfflineLeads();
-
   const orgs = me?.orgs || [];
+  const selectedMembership = selectedOrgId
+    ? hasAuthenticatedOrganizationMembership(orgs, selectedOrgId)
+      ? orgs.find((membership) => membership.org.id === selectedOrgId)
+      : undefined
+    : undefined;
+  const currentOrg = selectedMembership?.org || (!selectedOrgId ? orgs[0]?.org : undefined);
+  const { online, pendingLeads } = useOfflineLeads(currentOrg?.id);
+
+  // The API response is the source of truth for membership. In particular,
+  // never render a persisted org selection while it belongs to another
+  // account or while the current account's memberships are still loading.
+  const meBelongsToSignedInUser = belongsToAuthenticatedUser(me?.user, userId);
+  const membershipsReady = authLoaded && isSignedIn === true && meBelongsToSignedInUser;
 
   // Set default org if none selected (in an effect — updating the store during
   // render triggers React's "cannot update a component while rendering" warning)
   useEffect(() => {
-    if (orgs.length > 0 && !selectedOrgId) {
+    if (!membershipsReady) return;
+    if (selectedOrgId && !selectedMembership) {
+      setSelectedOrgId(orgs[0]?.org.id || null);
+    } else if (orgs.length > 0 && !selectedOrgId) {
       setSelectedOrgId(orgs[0].org.id);
     }
-  }, [orgs, selectedOrgId, setSelectedOrgId]);
+  }, [membershipsReady, orgs, selectedMembership, selectedOrgId, setSelectedOrgId]);
 
-  const currentOrg = orgs.find(o => o.org.id === selectedOrgId)?.org || orgs[0]?.org;
-
-  const offlineWorkspaceAvailable = !online && Boolean(selectedOrgId);
-  if ((!me || !currentOrg) && !offlineWorkspaceAvailable) {
+  if (!membershipsReady || !currentOrg || !selectedOrgId) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse flex flex-col items-center gap-4">

@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { isPendingUserForVerifiedEmail } from "./invitationIdentity";
 
 const INVITATION_PURPOSE = "aegis-horizon.org-invitation.v1";
 export const INVITATION_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -18,6 +19,150 @@ export type InvitationMembershipBinding = {
   userId: string;
   orgId: string;
 };
+
+export type InvitationAcceptanceDecision =
+  | {
+      accepted: false;
+      status: 403 | 410;
+      error: string;
+    }
+  | {
+      accepted: true;
+      transferMembership: boolean;
+      orgId: string;
+      membershipId: string;
+      role: string;
+    };
+
+/**
+ * Runs a pending-membership transfer and its audit write in one transaction.
+ * A failed audit write must roll back the transfer so the signed link remains
+ * bound to the original pending user and can be retried safely.
+ */
+export async function runInvitationTransferAtomically<
+  Transaction,
+  Membership,
+>(
+  transaction: (
+    work: (tx: Transaction) => Promise<Membership>,
+  ) => Promise<Membership>,
+  transfer: (tx: Transaction) => Promise<Membership>,
+  writeAudit: (tx: Transaction, membership: Membership) => Promise<void>,
+): Promise<Membership> {
+  return transaction(async (tx) => {
+    const membership = await transfer(tx);
+    await writeAudit(tx, membership);
+    return membership;
+  });
+}
+
+/**
+ * Applies the identity and pre-provisioned-membership checks used by the
+ * acceptance route without performing any database writes. Keeping this
+ * decision pure makes it possible to regression-test account binding and
+ * intended-org selection without a live Clerk or database.
+ */
+export function invitationAcceptanceDecision(input: {
+  token: Pick<
+    InvitationTokenPayload,
+    "email" | "membershipId" | "userId" | "orgId"
+  >;
+  authUserId: string | null | undefined;
+  localUser:
+    | {
+        id: string;
+        clerkId: string;
+      }
+    | null
+    | undefined;
+  verifiedEmails: readonly string[];
+  targetUser:
+    | {
+        id: string;
+        clerkId: string;
+        email: string;
+      }
+    | null
+    | undefined;
+  targetMembership:
+    | (InvitationMembershipBinding & { role: string })
+    | null
+    | undefined;
+  organization: { id: string } | null | undefined;
+}): InvitationAcceptanceDecision {
+  const {
+    token,
+    authUserId,
+    localUser,
+    verifiedEmails,
+    targetUser,
+    targetMembership,
+    organization,
+  } = input;
+
+  if (!authUserId || !localUser || localUser.clerkId !== authUserId) {
+    return {
+      accepted: false,
+      status: 403,
+      error: "Invitation is not valid for this account",
+    };
+  }
+
+  const invitedEmail = token.email.toLowerCase().trim();
+  if (
+    !verifiedEmails.some(
+      (email) => email.toLowerCase().trim() === invitedEmail,
+    )
+  ) {
+    return {
+      accepted: false,
+      status: 403,
+      error: "Verify the invited email address in Clerk before accepting",
+    };
+  }
+
+  if (
+    !targetUser ||
+    targetUser.id !== token.userId ||
+    !targetMembership ||
+    !invitationMembershipMatches(token, targetMembership)
+  ) {
+    return {
+      accepted: false,
+      status: 410,
+      error: "Invitation is no longer available",
+    };
+  }
+
+  if (!organization || organization.id !== token.orgId) {
+    return {
+      accepted: false,
+      status: 410,
+      error: "Invitation is no longer available",
+    };
+  }
+
+  const transferMembership = localUser.id !== token.userId;
+  if (
+    transferMembership &&
+    (targetUser.email.toLowerCase().trim() !== invitedEmail ||
+      !isPendingUserForVerifiedEmail(targetUser, verifiedEmails))
+  ) {
+    return {
+      accepted: false,
+      status: 403,
+      error: "Invitation is not valid for this account",
+    };
+  }
+
+  return {
+    accepted: true,
+    transferMembership,
+    orgId: organization.id,
+    membershipId: targetMembership.id,
+    role: targetMembership.role,
+  };
+}
 
 export function invitationMembershipMatches(
   token: Pick<InvitationTokenPayload, "membershipId" | "userId" | "orgId">,

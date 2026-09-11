@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/react";
 import {
   useListLeads, getListLeadsQueryKey,
   useUpdateLead, useDeleteLead, useQualifyLead, useRescoreLeads,
@@ -43,6 +44,7 @@ const OPERATORS = ["equals", "not_equals", "contains", "gt", "gte", "lt", "lte",
 
 export default function Leads() {
   const { selectedOrgId } = useOrgStore();
+  const { userId } = useAuth();
   const orgId = selectedOrgId || "";
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -87,15 +89,15 @@ export default function Leads() {
 
   useEffect(
     () =>
-      subscribeToLeadQueue(({ syncedLead, orgId: syncedOrgId }) => {
-        if (syncedLead && syncedOrgId === orgId) {
+      subscribeToLeadQueue(({ syncedLead, orgId: syncedOrgId, clerkUserId: syncedUserId }) => {
+        if (syncedLead && syncedOrgId === orgId && syncedUserId === userId) {
           queryClient.setQueryData<Lead[]>(getListLeadsQueryKey(orgId), (current = []) =>
             current.some((lead) => lead.id === syncedLead.id) ? current : [syncedLead, ...current],
           );
           void queryClient.invalidateQueries({ queryKey: getListLeadsQueryKey(orgId) });
         }
       }),
-    [orgId, queryClient],
+    [orgId, queryClient, userId],
   );
 
   const invalidateLeads = () => queryClient.invalidateQueries({ queryKey: getListLeadsQueryKey(orgId) });

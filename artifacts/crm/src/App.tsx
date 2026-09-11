@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk } from '@clerk/react';
+import { ClerkProvider, SignIn, SignUp, Show, useAuth, useClerk, useUser } from '@clerk/react';
 import { shadcn } from '@clerk/themes';
 import { Switch, Route, Redirect, useLocation, Router as WouterRouter } from 'wouter';
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
@@ -26,8 +26,13 @@ import Reports from "@/pages/Reports";
 import Documents from "@/pages/Documents";
 import Signatures from "@/pages/Signatures";
 import { Button } from "@/components/ui/button";
-import { useAcceptInvitation } from "@workspace/api-client-react";
+import {
+  getGetMeQueryKey,
+  getGetMeQueryOptions,
+  useAcceptInvitation,
+} from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
+import { getSafeAuthRedirectUrl, isInvitationAuthRedirect } from "@/lib/auth-redirect";
 
 const queryClient = new QueryClient();
 
@@ -97,12 +102,14 @@ const clerkAppearance = {
 
 function SignInPage() {
   const redirectUrl = getAuthRedirectUrl(`${basePath}/dashboard`);
+  const invitationRedirect = isInvitationAuthRedirect(redirectUrl, basePath);
   return (
     <AuthLayout>
       <SignIn
         routing="path"
         path={`${basePath}/sign-in`}
         signUpUrl={`${basePath}/sign-up?redirect_url=${encodeURIComponent(redirectUrl)}`}
+        forceRedirectUrl={invitationRedirect ? redirectUrl : undefined}
         fallbackRedirectUrl={redirectUrl}
       />
     </AuthLayout>
@@ -111,12 +118,14 @@ function SignInPage() {
 
 function SignUpPage() {
   const redirectUrl = getAuthRedirectUrl(`${basePath}/dashboard`);
+  const invitationRedirect = isInvitationAuthRedirect(redirectUrl, basePath);
   return (
     <AuthLayout>
       <SignUp
         routing="path"
         path={`${basePath}/sign-up`}
         signInUrl={`${basePath}/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`}
+        forceRedirectUrl={invitationRedirect ? redirectUrl : undefined}
         fallbackRedirectUrl={redirectUrl}
       />
     </AuthLayout>
@@ -125,22 +134,35 @@ function SignUpPage() {
 
 function getAuthRedirectUrl(defaultPath: string): string {
   const requested = new URLSearchParams(window.location.search).get("redirect_url");
-  if (!requested || !requested.startsWith("/") || requested.startsWith("//")) {
-    return defaultPath;
-  }
-  return requested;
+  return getSafeAuthRedirectUrl(requested, defaultPath, window.location.origin);
 }
 
 const INVITATION_TOKEN_STORAGE_KEY = "aegis_horizon_invitation_token";
 
-function readInvitationToken(): string | null {
+interface InvitationTokenState {
+  token: string | null;
+  error: string | null;
+}
+
+function readInvitationToken(): InvitationTokenState {
   let token: string | null = null;
   try {
     const hash = window.location.hash.replace(/^#/, "");
     const hashParams = new URLSearchParams(hash.startsWith("?") ? hash.slice(1) : hash);
     token = hashParams.get("token");
     if (token) {
-      sessionStorage.setItem(INVITATION_TOKEN_STORAGE_KEY, token);
+      try {
+        sessionStorage.setItem(INVITATION_TOKEN_STORAGE_KEY, token);
+      } catch {
+        // A wouter navigation to Clerk's sign-in route does not preserve the
+        // current fragment. Do not continue with an invitation we cannot
+        // safely retain for that navigation.
+        return {
+          token: null,
+          error:
+            "This browser cannot preserve the invitation securely. Enable site storage and open the invitation again.",
+        };
+      }
       // Fragments are not sent to the API, but clear the token from browser
       // history as soon as it has been persisted for the auth redirect.
       window.history.replaceState(
@@ -152,26 +174,89 @@ function readInvitationToken(): string | null {
       token = sessionStorage.getItem(INVITATION_TOKEN_STORAGE_KEY);
     }
   } catch {
-    // Private browsing modes can disable sessionStorage. The API still
-    // receives the token when it is present in the current URL.
+    return {
+      token: null,
+      error:
+        "This browser cannot preserve the invitation securely. Enable site storage and open the invitation again.",
+    };
   }
-  return token;
+  return { token, error: null };
+}
+
+type InvitationStatus = "confirm" | "accepting" | "error";
+
+function getInvitationErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  const detail = message.replace(/^HTTP \d+ [^:]+:\s*/, "").trim();
+  if (detail.toLowerCase().includes("not valid for this account")) {
+    return "This invitation belongs to a different email address. Sign out and use the invited account.";
+  }
+  if (detail.toLowerCase().includes("verify the invited email")) {
+    return "The invited email is not verified on this account. Verify it in Clerk or switch accounts.";
+  }
+  return detail || "We could not accept this invitation. It may be invalid, expired, or no longer available.";
 }
 
 function InvitationAcceptance({ token }: { token: string }) {
   const [, setLocation] = useLocation();
+  const { isLoaded: userLoaded, isSignedIn, user } = useUser();
+  const { signOut } = useClerk();
+  const queryClient = useQueryClient();
   const setSelectedOrgId = useOrgStore((state) => state.setSelectedOrgId);
   const acceptInvitation = useAcceptInvitation();
-  const started = useRef(false);
-  const [failed, setFailed] = useState(false);
+  const [status, setStatus] = useState<InvitationStatus>("confirm");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
 
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
+  const email =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses[0]?.emailAddress ??
+    "your signed-in email";
+  const returnUrl = `${basePath}/invite`;
+
+  const switchAccount = async () => {
+    setSwitchingAccount(true);
+    try {
+      // Do not clear the invitation token: it is the return context for the
+      // next account and is intentionally kept out of auth query URLs.
+      await signOut();
+      setLocation(`/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`, { replace: true });
+    } catch {
+      setSwitchingAccount(false);
+      setStatus("error");
+      setErrorMessage("We could not sign out this account. Please try again.");
+    }
+  };
+
+  const accept = () => {
+    if (status === "accepting" || switchingAccount || !isSignedIn) return;
+    setStatus("accepting");
+    setErrorMessage(null);
     acceptInvitation.mutate(
       { data: { token } },
       {
-        onSuccess: (result) => {
+        onSuccess: async (result) => {
+          // The acceptance endpoint can transfer a pending membership. Remove
+          // any pre-acceptance /auth/me result before fetching so Shell cannot
+          // immediately restore a stale org selection after navigation.
+          queryClient.removeQueries({ queryKey: getGetMeQueryKey() });
+          try {
+            const freshMe = await queryClient.fetchQuery(
+              getGetMeQueryOptions({
+                query: {
+                  queryKey: getGetMeQueryKey(),
+                  staleTime: 0,
+                },
+              }),
+            );
+            if (!freshMe.orgs.some((membership) => membership.org.id === result.org.id)) {
+              throw new Error("Accepted organization is not present in the refreshed memberships.");
+            }
+          } catch {
+            // Keep the stale result removed. Shell will make a fresh request
+            // after navigation instead of flashing the previous user's orgs.
+            queryClient.removeQueries({ queryKey: getGetMeQueryKey() });
+          }
           try {
             sessionStorage.removeItem(INVITATION_TOKEN_STORAGE_KEY);
           } catch {
@@ -180,31 +265,99 @@ function InvitationAcceptance({ token }: { token: string }) {
           setSelectedOrgId(result.org.id);
           setLocation("/dashboard", { replace: true });
         },
-        onError: () => setFailed(true),
+        onError: (error) => {
+          // Keep the token and remain on the invitation route so a recipient
+          // can switch to the invited account without losing the link.
+          setStatus("error");
+          setErrorMessage(getInvitationErrorMessage(error));
+        },
       },
     );
-  }, [acceptInvitation, setLocation, setSelectedOrgId, token]);
+  };
+
+  if (!userLoaded || !isSignedIn || !user) {
+    return (
+      <div className="min-h-[100dvh] bg-background flex items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card p-8 text-center shadow-xl">
+          <p className="text-sm text-muted-foreground" data-testid="status-invitation-auth">
+            Waiting for the account session…
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-background flex items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card p-8 text-center shadow-xl">
-        {failed ? (
+        {status === "error" ? (
           <>
-            <h1 className="text-2xl font-bold font-display">Invitation unavailable</h1>
-            <p className="mt-3 text-sm text-muted-foreground">
-              This invitation is invalid, expired, removed, or belongs to a
-              different verified email address.
+            <h1 className="text-2xl font-bold font-display">Invitation not accepted</h1>
+            <p className="mt-3 text-sm text-muted-foreground" data-testid="status-invitation-error">
+              {errorMessage}
             </p>
-            <Button className="mt-6" onClick={() => setLocation("/dashboard")}>
-              Continue to workspace
-            </Button>
+            <div className="mt-6 flex flex-col gap-3">
+              <Button
+                className="w-full"
+                onClick={switchAccount}
+                disabled={switchingAccount}
+                data-testid="button-switch-invitation-account"
+              >
+                {switchingAccount ? "Signing out…" : "Sign out and use another account"}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setStatus("confirm");
+                  setErrorMessage(null);
+                }}
+                disabled={switchingAccount}
+                data-testid="button-retry-invitation"
+              >
+                Try this account again
+              </Button>
+            </div>
           </>
         ) : (
           <>
-            <h1 className="text-2xl font-bold font-display">Confirming invitation</h1>
+            <h1 className="text-2xl font-bold font-display">
+              {status === "accepting" ? "Accepting invitation" : "Confirm your account"}
+            </h1>
             <p className="mt-3 text-sm text-muted-foreground">
-              We are verifying your signed-in email and selecting the invited
-              organization.
+              {status === "accepting"
+                ? "We are verifying this account and selecting the invited organization."
+                : "Before accepting, confirm that this is the account you want to use for this invitation."}
+            </p>
+            <div
+              className="mt-6 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3"
+              data-testid="text-invitation-account-email"
+            >
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Signed-in email
+              </p>
+              <p className="mt-1 break-all font-semibold text-foreground">{email}</p>
+            </div>
+            <Button
+              className="mt-6 w-full"
+              onClick={accept}
+              disabled={status === "accepting" || switchingAccount}
+              data-testid="button-accept-invitation"
+            >
+              {status === "accepting" ? "Accepting…" : `Accept invitation as ${email}`}
+            </Button>
+            <Button
+              variant="outline"
+              className="mt-3 w-full"
+              onClick={switchAccount}
+              disabled={status === "accepting" || switchingAccount}
+              data-testid="button-switch-invitation-account"
+            >
+              {switchingAccount ? "Signing out…" : "Sign out and use another account"}
+            </Button>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Invitation acceptance is never automatic. If this is not the invited
+              email, switch accounts before continuing.
             </p>
           </>
         )}
@@ -214,19 +367,21 @@ function InvitationAcceptance({ token }: { token: string }) {
 }
 
 function InvitationPage() {
-  const [token] = useState(readInvitationToken);
+  const [{ token, error: tokenError }] = useState(readInvitationToken);
   const returnUrl = `${basePath}/invite`;
+  const [, setLocation] = useLocation();
+  const { isLoaded, isSignedIn } = useAuth();
 
-  if (!token) {
+  if (tokenError || !token) {
     return (
       <div className="min-h-[100dvh] bg-background flex items-center justify-center p-6">
         <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card p-8 text-center shadow-xl">
           <h1 className="text-2xl font-bold font-display">Invitation unavailable</h1>
-          <p className="mt-3 text-sm text-muted-foreground">
-            This invitation link is missing its signed token. Ask an organization
-            administrator to resend it.
+          <p className="mt-3 text-sm text-muted-foreground" data-testid="status-invitation-token">
+            {tokenError ??
+              "This invitation link is missing its signed token. Ask an organization administrator to resend it."}
           </p>
-          <Button className="mt-6" onClick={() => window.location.assign("/")}>
+          <Button className="mt-6" onClick={() => setLocation("/")} data-testid="button-invitation-home">
             Go home
           </Button>
         </div>
@@ -234,36 +389,74 @@ function InvitationPage() {
     );
   }
 
+  if (!isLoaded) {
+    return (
+      <div className="min-h-[100dvh] bg-background flex items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card p-8 text-center shadow-xl">
+          <p className="text-sm text-muted-foreground" data-testid="status-invitation-loading">
+            Loading invitation…
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    const signInUrl = `/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`;
+    const signUpUrl = `/sign-up?redirect_url=${encodeURIComponent(returnUrl)}`;
+    return (
+      <div className="min-h-[100dvh] bg-background flex items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card p-8 text-center shadow-xl">
+          <h1 className="text-2xl font-bold font-display">You’re invited</h1>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Sign in with the invited email, or create your own account to continue.
+            Your invitation will be preserved while you switch between forms.
+          </p>
+          <div className="mt-6 flex flex-col gap-3">
+            <Button
+              className="w-full"
+              onClick={() => setLocation(signInUrl)}
+              data-testid="button-invitation-sign-in"
+            >
+              Sign in
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setLocation(signUpUrl)}
+              data-testid="button-invitation-sign-up"
+            >
+              Create an account
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <>
-      <Show when="signed-out">
-        <Redirect to={`/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`} />
-      </Show>
-      <Show when="signed-in">
-        <InvitationAcceptance token={token} />
-      </Show>
-    </>
+    <InvitationAcceptance token={token} />
   );
 }
 
 function ClerkQueryClientCacheInvalidator() {
-  const { addListener } = useClerk();
+  const { isLoaded, userId } = useAuth();
   const queryClient = useQueryClient();
+  const setSelectedOrgId = useOrgStore((state) => state.setSelectedOrgId);
   const prevUserIdRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
-    const unsubscribe = addListener(({ user }) => {
-      const userId = user?.id ?? null;
-      if (
-        prevUserIdRef.current !== undefined &&
-        prevUserIdRef.current !== userId
-      ) {
-        queryClient.clear();
-      }
-      prevUserIdRef.current = userId;
-    });
-    return unsubscribe;
-  }, [addListener, queryClient]);
+    if (!isLoaded) return;
+    const nextUserId = userId ?? null;
+    if (prevUserIdRef.current !== undefined && prevUserIdRef.current !== nextUserId) {
+      // Query keys are shared by the generated client. Clear them before the
+      // next identity can render, and never carry an org selection across
+      // accounts.
+      queryClient.clear();
+      setSelectedOrgId(null);
+    }
+    prevUserIdRef.current = nextUserId;
+  }, [isLoaded, queryClient, setSelectedOrgId, userId]);
 
   return null;
 }

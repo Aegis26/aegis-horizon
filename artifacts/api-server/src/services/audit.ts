@@ -15,9 +15,15 @@ export type AuditEventInput = {
   metadata?: Record<string, unknown>;
 };
 
+/** The transaction and top-level database expose the same insert operation. */
+export type AuditDatabase = Pick<typeof db, "insert">;
+
 /** Inserts one immutable audit event. Audit records are never updated/deleted. */
-export async function appendAuditEvent(input: AuditEventInput): Promise<void> {
-  await db.insert(auditEvents).values({
+export async function appendAuditEvent(
+  input: AuditEventInput,
+  database: AuditDatabase = db,
+): Promise<void> {
+  await database.insert(auditEvents).values({
     orgId: input.orgId,
     action: input.action,
     entityType: input.entityType,

@@ -6,5 +6,5 @@
 - [Manual call scope](manual-call-scope.md) — calls remain manual account activities; automated recording and transcription are deferred unless explicitly requested later.
 - [AI automation safety](ai-automation-safety.md) — browser speech only; agents plan before writes, workflows require current dry-runs, and mutations require explicit confirmation.
 - [External Clerk on Railway](external-clerk-railway.md) — Railway uses external Clerk keys directly; its Clerk custom-domain DNS must remain verified.
-- [CRM row access policy](crm-row-access-policy.md) — users/viewers see owned-or-created rows; creator access survives reassignment; unassigned rows are management-only.
+- [CRM row access policy](crm-row-access-policy.md) — users see owned-or-created rows; viewers owned-only; unassigned rows are management-only.
 - [Invitation compatibility](invitation-semantics.md) — email delivery preserves pre-provisioned membership; acceptance-gated access needs an explicit migration.

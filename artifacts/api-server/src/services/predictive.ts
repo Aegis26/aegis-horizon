@@ -1,4 +1,5 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import type { Request } from "express";
+import { and, desc, eq, exists, sql, type SQL } from "drizzle-orm";
 import {
   accounts,
   activities,
@@ -12,9 +13,42 @@ import {
   opportunities,
   quotes,
 } from "@workspace/db";
+import { withCrmVisibility } from "./crmAccess";
 
 type Factor = { factor: string; weight: number; detail: string };
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
+
+export function closeContactVisibilityCondition(
+  req: Request,
+  orgId: string,
+  accountId: string,
+): SQL {
+  return and(
+    eq(contacts.orgId, orgId),
+    eq(contacts.accountId, accountId),
+    ...withCrmVisibility(
+      req,
+      contacts.ownerUserId,
+      contacts.createdByUserId,
+    ),
+    exists(
+      db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.id, contacts.accountId),
+            eq(accounts.orgId, orgId),
+            ...withCrmVisibility(
+              req,
+              accounts.ownerUserId,
+              accounts.createdByUserId,
+            ),
+          ),
+        ),
+    ),
+  )!;
+}
 
 export async function calculateChurn(orgId: string, accountId: string) {
   const [account] = await db.select().from(accounts).where(and(eq(accounts.orgId, orgId), eq(accounts.id, accountId)));
@@ -81,7 +115,11 @@ export async function calculateConversion(orgId: string, leadId: string) {
   return row;
 }
 
-export async function calculateClose(orgId: string, opportunityId: string) {
+export async function calculateClose(
+  orgId: string,
+  opportunityId: string,
+  req: Request,
+) {
   const [opportunity] = await db.select().from(opportunities).where(and(eq(opportunities.orgId, orgId), eq(opportunities.id, opportunityId)));
   if (!opportunity) throw new Error("Opportunity not found");
   const baselineMap: Record<string, number> = { prospecting: 0.1, qualified: 0.25, proposal: 0.5, negotiation: 0.75, closed_won: 1, closed_lost: 0 };
@@ -105,7 +143,12 @@ export async function calculateClose(orgId: string, opportunityId: string) {
     if (sentQuote) { score += 0.08; factors.push({ factor: "quote_sent", weight: 0.08, detail: "Quote sent" }); }
   }
   if ((opportunity.daysInStage ?? 0) > 14) { score -= 0.15; factors.push({ factor: "stalled_stage", weight: -0.15, detail: `${opportunity.daysInStage} days in stage` }); }
-  const [{ count: contactCount }] = await db.select({ count: sql<number>`count(*)::int` }).from(contacts).where(and(eq(contacts.orgId, orgId), eq(contacts.accountId, opportunity.accountId)));
+  const [{ count: contactCount }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(contacts)
+    .where(
+      closeContactVisibilityCondition(req, orgId, opportunity.accountId),
+    );
   if (contactCount >= 2) { score += 0.1; factors.push({ factor: "multiple_stakeholders", weight: 0.1, detail: `${contactCount} contacts` }); }
   score = clamp(score);
   const [row] = await db.insert(closePredictions).values({

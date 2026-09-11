@@ -1,5 +1,13 @@
 import type { Request } from "express";
-import { and, eq, isNotNull, or, type SQL, type AnyColumn } from "drizzle-orm";
+import {
+  and,
+  eq,
+  isNotNull,
+  or,
+  sql,
+  type SQL,
+  type AnyColumn,
+} from "drizzle-orm";
 import { accounts, contacts, db, leads, opportunities } from "@workspace/db";
 
 const MANAGEMENT_ROLES = new Set(["owner", "admin", "manager"]);
@@ -15,7 +23,14 @@ export function hasCrmManagementAccess(req: Request): boolean {
   return MANAGEMENT_ROLES.has(req.currentMembership?.role ?? "");
 }
 
-/** Management sees every tenant row; others see rows they own or created. */
+/**
+ * Build the row predicate for a CRM resource.
+ *
+ * Owners, admins, and managers have organization-wide visibility. Regular
+ * users retain access after reassignment when they created a row, but only
+ * rows with a non-null owner are eligible. Viewers deliberately do not get
+ * creator access: they can read only rows they currently own.
+ */
 export function crmVisibility(
   req: Request,
   ownerColumn: AnyColumn,
@@ -23,6 +38,14 @@ export function crmVisibility(
 ): SQL | undefined {
   if (hasCrmManagementAccess(req)) return undefined;
   const userId = req.currentUser!.id;
+  if (req.currentMembership?.role === "viewer") {
+    return and(isNotNull(ownerColumn), eq(ownerColumn, userId));
+  }
+  if (req.currentMembership?.role !== "user") {
+    // The membership role is a database enum, but fail closed if an invalid
+    // value ever reaches this helper instead of broadening visibility.
+    return sql`false`;
+  }
   return and(
     isNotNull(ownerColumn),
     or(eq(ownerColumn, userId), eq(createdByColumn, userId)),
@@ -93,23 +116,22 @@ export async function canAccessCrmRecord(
     );
   }
   if (type === "contact") {
+    const [contact] = await db
+      .select({ id: contacts.id, accountId: contacts.accountId })
+      .from(contacts)
+      .where(crmRecordCondition(req, type, id));
     return Boolean(
-      (
-        await db
-          .select({ id: contacts.id })
-          .from(contacts)
-          .where(crmRecordCondition(req, type, id))
-      )[0],
+      contact && (await canAccessCrmRecord(req, "account", contact.accountId)),
     );
   }
   if (type === "opportunity") {
+    const [opportunity] = await db
+      .select({ id: opportunities.id, accountId: opportunities.accountId })
+      .from(opportunities)
+      .where(crmRecordCondition(req, type, id));
     return Boolean(
-      (
-        await db
-          .select({ id: opportunities.id })
-          .from(opportunities)
-          .where(crmRecordCondition(req, type, id))
-      )[0],
+      opportunity &&
+        (await canAccessCrmRecord(req, "account", opportunity.accountId)),
     );
   }
   return Boolean(

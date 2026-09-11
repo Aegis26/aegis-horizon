@@ -116,7 +116,45 @@ export async function getObjectAclPolicy(
   if (!aclPolicy) {
     return null;
   }
-  return JSON.parse(aclPolicy as string);
+  try {
+    const parsed: unknown = JSON.parse(aclPolicy as string);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const value = parsed as {
+      owner?: unknown;
+      visibility?: unknown;
+      aclRules?: unknown;
+    };
+    if (
+      typeof value.owner !== 'string' ||
+      (value.visibility !== 'public' && value.visibility !== 'private') ||
+      (value.aclRules !== undefined && !Array.isArray(value.aclRules))
+    ) {
+      return null;
+    }
+    if (
+      Array.isArray(value.aclRules) &&
+      value.aclRules.some((rule) => {
+        if (!rule || typeof rule !== 'object') return true;
+        const group = (rule as { group?: unknown }).group;
+        const permission = (rule as { permission?: unknown }).permission;
+        return (
+          !group ||
+          typeof group !== 'object' ||
+          (group as { type?: unknown }).type !== ObjectAccessGroupType.ORG_MEMBER ||
+          typeof (group as { id?: unknown }).id !== 'string' ||
+          (permission !== ObjectPermission.READ &&
+            permission !== ObjectPermission.WRITE)
+        );
+      })
+    ) {
+      return null;
+    }
+    return parsed as ObjectAclPolicy;
+  } catch {
+    // Treat malformed metadata as an absent policy.  A corrupt ACL must fail
+    // closed rather than turning a private-object GET into a server error.
+    return null;
+  }
 }
 
 export async function canAccessObject({

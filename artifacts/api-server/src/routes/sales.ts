@@ -75,6 +75,7 @@ import { appendAuditEvent, auditContext } from "../services/audit";
 import {
   hasCrmManagementAccess,
   canAccessCrmRecord,
+  crmRecordCondition,
   withCrmVisibility,
 } from "../services/crmAccess";
 
@@ -261,17 +262,24 @@ function opportunitySummary(o: Opportunity) {
   };
 }
 
-async function opportunityDetail(o: Opportunity) {
+async function opportunityDetail(o: Opportunity, req: Request) {
   const [[account], [owner], history] = await Promise.all([
     db
       .select({ name: accounts.name })
       .from(accounts)
-      .where(eq(accounts.id, o.accountId)),
+      .where(
+        and(
+          eq(accounts.id, o.accountId),
+          eq(accounts.orgId, o.orgId),
+          ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+        ),
+      ),
     o.ownerUserId
       ? db
           .select({ fullName: users.fullName, email: users.email })
           .from(users)
-          .where(eq(users.id, o.ownerUserId))
+          .innerJoin(orgUsers, eq(orgUsers.userId, users.id))
+          .where(and(eq(users.id, o.ownerUserId), eq(orgUsers.orgId, o.orgId)))
       : Promise.resolve([undefined]),
     db
       .select({
@@ -281,7 +289,17 @@ async function opportunityDetail(o: Opportunity) {
       })
       .from(opportunityStageHistory)
       .leftJoin(users, eq(opportunityStageHistory.changedByUserId, users.id))
-      .where(eq(opportunityStageHistory.opportunityId, o.id))
+      .leftJoin(
+        orgUsers,
+        and(eq(orgUsers.userId, users.id), eq(orgUsers.orgId, o.orgId)),
+      )
+      .where(
+        and(
+          eq(opportunityStageHistory.opportunityId, o.id),
+          eq(opportunityStageHistory.orgId, o.orgId),
+          or(isNull(users.id), eq(orgUsers.orgId, o.orgId)),
+        ),
+      )
       .orderBy(desc(opportunityStageHistory.createdAt)),
   ]);
   return {
@@ -324,7 +342,22 @@ async function findOpportunity(req: Request): Promise<Opportunity | undefined> {
         ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
       ),
     );
+  if (!row || !(await canAccessCrmRecord(req, "account", row.accountId))) {
+    return undefined;
+  }
   return row;
+}
+
+async function visibleOpportunities(
+  req: Request,
+  rows: Opportunity[],
+): Promise<Opportunity[]> {
+  const visible = await Promise.all(
+    rows.map(async (row) =>
+      (await canAccessCrmRecord(req, "account", row.accountId)) ? row : undefined,
+    ),
+  );
+  return visible.filter((row): row is Opportunity => Boolean(row));
 }
 
 async function orgPipeline(
@@ -347,7 +380,8 @@ router.get("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<void
     .from(opportunities)
     .where(and(...where))
     .orderBy(desc(opportunities.createdAt));
-  res.json(ListOpportunitiesResponse.parse(rows.map(opportunitySummary)));
+  const visibleRows = await visibleOpportunities(req, rows);
+  res.json(ListOpportunitiesResponse.parse(visibleRows.map(opportunitySummary)));
 });
 
 router.post("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<void> => {
@@ -434,7 +468,9 @@ router.post("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<voi
     actorUserId: req.currentUser!.id,
   });
   void publishWebhookEvent(orgId, "opportunity.created", row.id, { id: row.id, name: row.name, stage: row.stage });
-  res.status(201).json(CreateOpportunityResponse.parse(await opportunityDetail(row)));
+  res
+    .status(201)
+    .json(CreateOpportunityResponse.parse(await opportunityDetail(row, req)));
 });
 
 router.get(
@@ -446,7 +482,7 @@ router.get(
       res.status(404).json({ error: "Opportunity not found" });
       return;
     }
-    res.json(GetOpportunityResponse.parse(await opportunityDetail(opp)));
+    res.json(GetOpportunityResponse.parse(await opportunityDetail(opp, req)));
   },
 );
 
@@ -540,7 +576,7 @@ router.patch(
         actorUserId: req.currentUser!.id,
       });
     }
-    res.json(UpdateOpportunityResponse.parse(await opportunityDetail(row)));
+    res.json(UpdateOpportunityResponse.parse(await opportunityDetail(row, req)));
   },
 );
 
@@ -657,14 +693,16 @@ router.post(
         metadata: { operation: "convert_opportunity_to_customer" },
       });
     }
-    res.json(ConvertOpportunityToCustomerResponse.parse(await opportunityDetail(row)));
+    res.json(
+      ConvertOpportunityToCustomerResponse.parse(await opportunityDetail(row, req)),
+    );
   },
 );
 
 /* -------------------------------- leads -------------------------------- */
 
-async function leadOut(l: Lead) {
-  const [assignee, territory] = await Promise.all([
+async function leadOut(req: Request, l: Lead) {
+  const [assignee, territory, convertedOpportunityVisible] = await Promise.all([
     l.assignedToUserId
       ? db
           .select({ fullName: users.fullName, email: users.email })
@@ -680,6 +718,9 @@ async function leadOut(l: Lead) {
           .where(and(eq(territories.id, l.territoryId), eq(territories.orgId, l.orgId)))
           .then((r) => r[0])
       : Promise.resolve(undefined),
+    l.convertedOpportunityId
+      ? canAccessCrmRecord(req, "opportunity", l.convertedOpportunityId)
+      : Promise.resolve(false),
   ]);
   return {
     id: l.id,
@@ -704,7 +745,9 @@ async function leadOut(l: Lead) {
     assignedToName: assignee ? (assignee.fullName ?? assignee.email) : null,
     territoryId: l.territoryId,
     territoryName: territory?.name ?? null,
-    convertedOpportunityId: l.convertedOpportunityId,
+    convertedOpportunityId: convertedOpportunityVisible
+      ? l.convertedOpportunityId
+      : null,
     createdAt: l.createdAt.toISOString(),
   };
 }
@@ -730,7 +773,9 @@ router.get("/orgs/:orgId/leads", ...gate, async (req, res): Promise<void> => {
     .from(leads)
     .where(and(...where))
     .orderBy(desc(leads.score), desc(leads.createdAt));
-  res.json(ListLeadsResponse.parse(await Promise.all(rows.map(leadOut))));
+  res.json(
+    ListLeadsResponse.parse(await Promise.all(rows.map((lead) => leadOut(req, lead)))),
+  );
 });
 
 router.post("/orgs/:orgId/leads", ...gate, async (req, res): Promise<void> => {
@@ -784,7 +829,9 @@ router.post("/orgs/:orgId/leads", ...gate, async (req, res): Promise<void> => {
   void processNewLead(orgId, row.id, req.currentUser!.id).catch((err) => {
     req.log.error({ err, leadId: row.id }, "Lead qualifier agent failed");
   });
-  res.status(201).json(CreateLeadResponse.parse(await leadOut(row)));
+  res
+    .status(201)
+    .json(CreateLeadResponse.parse(await leadOut(req, row)));
 });
 
 async function findLead(req: Request): Promise<Lead | undefined> {
@@ -857,7 +904,7 @@ router.patch("/orgs/:orgId/leads/:leadId", ...gate, async (req, res): Promise<vo
     metadata: { before: leadAudit(lead), after: leadAudit(row) },
   });
   void publishWebhookEvent(orgId, "lead.updated", row.id, { id: row.id, email: row.email, status: row.status, score: row.score });
-  res.json(UpdateLeadResponse.parse(await leadOut(row)));
+  res.json(UpdateLeadResponse.parse(await leadOut(req, row)));
 });
 
 router.delete("/orgs/:orgId/leads/:leadId", ...gate, async (req, res): Promise<void> => {
@@ -1017,7 +1064,9 @@ router.post(
       payload: { stage: opp.stage },
       actorUserId: req.currentUser!.id,
     });
-    res.status(201).json(QualifyLeadResponse.parse(await opportunityDetail(opp)));
+    res
+      .status(201)
+      .json(QualifyLeadResponse.parse(await opportunityDetail(opp, req)));
   },
 );
 
@@ -1153,13 +1202,20 @@ router.delete(
 
 /* -------------------------------- quotes -------------------------------- */
 
-async function quoteOut(q: Quote) {
+async function quoteOut(q: Quote, req: Request) {
+  const [canViewOpportunity, canViewAccount] = await Promise.all([
+    canAccessCrmRecord(req, "opportunity", q.opportunityId),
+    canAccessCrmRecord(req, "account", q.accountId),
+  ]);
   const [[opp], [account]] = await Promise.all([
-    db
+    canViewOpportunity ? db
       .select({ name: opportunities.name })
       .from(opportunities)
-      .where(eq(opportunities.id, q.opportunityId)),
-    db.select({ name: accounts.name }).from(accounts).where(eq(accounts.id, q.accountId)),
+      .where(crmRecordCondition(req, "opportunity", q.opportunityId)) : Promise.resolve([]),
+    canViewAccount ? db
+      .select({ name: accounts.name })
+      .from(accounts)
+      .where(crmRecordCondition(req, "account", q.accountId)) : Promise.resolve([]),
   ]);
   const lineItems = (q.lineItems ?? []) as QuoteLineItem[];
   const discountPercent = Number(q.discountPercent ?? 0);
@@ -1195,9 +1251,10 @@ router.get("/orgs/:orgId/quotes", ...gate, async (req, res): Promise<void> => {
     .where(and(...where))
     .orderBy(desc(quotes.createdAt));
   const visible = await Promise.all(rows.map(async (quote) =>
-    (await canAccessCrmRecord(req, "opportunity", quote.opportunityId)) ? quote : undefined,
+    (await canAccessCrmRecord(req, "opportunity", quote.opportunityId)
+      && await canAccessCrmRecord(req, "account", quote.accountId)) ? quote : undefined,
   ));
-  res.json(ListQuotesResponse.parse(await Promise.all(visible.filter((q): q is Quote => Boolean(q)).map(quoteOut))));
+  res.json(ListQuotesResponse.parse(await Promise.all(visible.filter((q): q is Quote => Boolean(q)).map((quote) => quoteOut(quote, req)))));
 });
 
 router.post("/orgs/:orgId/quotes", ...gate, async (req, res): Promise<void> => {
@@ -1243,11 +1300,11 @@ router.post("/orgs/:orgId/quotes", ...gate, async (req, res): Promise<void> => {
     }).returning();
     return created;
   });
-  if (!row) {
+  if (!row || !(await canAccessCrmRecord(req, "account", row.accountId))) {
     res.status(404).json({ error: "Opportunity not found" });
     return;
   }
-  res.status(201).json(CreateQuoteResponse.parse(await quoteOut(row)));
+  res.status(201).json(CreateQuoteResponse.parse(await quoteOut(row, req)));
 });
 
 async function findQuote(req: Request): Promise<Quote | undefined> {
@@ -1260,7 +1317,11 @@ async function findQuote(req: Request): Promise<Quote | undefined> {
         eq(quotes.orgId, req.currentOrg!.id),
       ),
     );
-  if (!row || !(await canAccessCrmRecord(req, "opportunity", row.opportunityId))) return undefined;
+  if (
+    !row
+    || !(await canAccessCrmRecord(req, "opportunity", row.opportunityId))
+    || !(await canAccessCrmRecord(req, "account", row.accountId))
+  ) return undefined;
   return row;
 }
 
@@ -1270,7 +1331,7 @@ router.get("/orgs/:orgId/quotes/:quoteId", ...gate, async (req, res): Promise<vo
     res.status(404).json({ error: "Quote not found" });
     return;
   }
-  res.json(GetQuoteResponse.parse(await quoteOut(quote)));
+  res.json(GetQuoteResponse.parse(await quoteOut(quote, req)));
 });
 
 router.patch("/orgs/:orgId/quotes/:quoteId", ...gate, async (req, res): Promise<void> => {
@@ -1311,7 +1372,7 @@ router.patch("/orgs/:orgId/quotes/:quoteId", ...gate, async (req, res): Promise<
     ))
     .returning();
   if (!row) { res.status(404).json({ error: "Quote not found" }); return; }
-  res.json(UpdateQuoteResponse.parse(await quoteOut(row)));
+  res.json(UpdateQuoteResponse.parse(await quoteOut(row, req)));
 });
 
 router.delete("/orgs/:orgId/quotes/:quoteId", ...gate, async (req, res): Promise<void> => {
@@ -1338,10 +1399,10 @@ router.delete("/orgs/:orgId/quotes/:quoteId", ...gate, async (req, res): Promise
   res.status(204).end();
 });
 
-async function buildQuotePdf(quote: Quote, orgName: string) {
+async function buildQuotePdf(quote: Quote, orgName: string, req: Request) {
   const [[opp], [account]] = await Promise.all([
-    db.select().from(opportunities).where(eq(opportunities.id, quote.opportunityId)),
-    db.select().from(accounts).where(eq(accounts.id, quote.accountId)),
+    db.select().from(opportunities).where(crmRecordCondition(req, "opportunity", quote.opportunityId)),
+    db.select().from(accounts).where(crmRecordCondition(req, "account", quote.accountId)),
   ]);
   if (!opp || !account) throw new Error("Quote is missing its opportunity or account");
   return renderQuotePdf({ quote, opportunity: opp, account, orgName });
@@ -1353,7 +1414,7 @@ router.get("/orgs/:orgId/quotes/:quoteId/pdf", ...gate, async (req, res): Promis
     res.status(404).json({ error: "Quote not found" });
     return;
   }
-  const pdf = await buildQuotePdf(quote, req.currentOrg!.name);
+  const pdf = await buildQuotePdf(quote, req.currentOrg!.name, req);
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
@@ -1383,7 +1444,7 @@ router.post("/orgs/:orgId/quotes/:quoteId/send", ...gate, async (req, res): Prom
     return;
   }
   const orgName = req.currentOrg!.name;
-  const pdf = await buildQuotePdf(quote, orgName);
+  const pdf = await buildQuotePdf(quote, orgName, req);
   const lineItems = (quote.lineItems ?? []) as QuoteLineItem[];
   const { total } = quoteTotals(lineItems, Number(quote.discountPercent ?? 0));
   const message = parsed.data.message
@@ -1440,7 +1501,7 @@ router.post("/orgs/:orgId/quotes/:quoteId/send", ...gate, async (req, res): Prom
     res.status(502).json({ error: (err as Error).message });
     return;
   }
-  res.json(SendQuoteResponse.parse(await quoteOut(claimed)));
+  res.json(SendQuoteResponse.parse(await quoteOut(claimed, req)));
 });
 
 router.post("/orgs/:orgId/quotes/:quoteId/accept", ...gate, async (req, res): Promise<void> => {
@@ -1472,7 +1533,7 @@ router.post("/orgs/:orgId/quotes/:quoteId/accept", ...gate, async (req, res): Pr
     res.status(409).json({ error: "Quote changed or is no longer accessible" });
     return;
   }
-  res.json(AcceptQuoteResponse.parse(await quoteOut(row)));
+  res.json(AcceptQuoteResponse.parse(await quoteOut(row, req)));
 });
 
 /* ------------------------------ territories ------------------------------ */
@@ -1482,7 +1543,11 @@ async function territoryOut(t: Territory) {
     ? await db
         .select({ fullName: users.fullName, email: users.email })
         .from(users)
-        .where(eq(users.id, t.ownerUserId))
+        .innerJoin(orgUsers, eq(orgUsers.userId, users.id))
+        .where(and(
+          eq(users.id, t.ownerUserId),
+          eq(orgUsers.orgId, t.orgId),
+        ))
         .then((r) => r[0])
     : undefined;
   return {
@@ -1670,7 +1735,11 @@ router.get(
           ? await db
               .select({ fullName: users.fullName, email: users.email })
               .from(users)
-              .where(eq(users.id, t.ownerUserId))
+              .innerJoin(orgUsers, eq(orgUsers.userId, users.id))
+              .where(and(
+                eq(users.id, t.ownerUserId),
+                eq(orgUsers.orgId, t.orgId),
+              ))
               .then((r) => r[0])
           : undefined;
         return {
@@ -1710,6 +1779,7 @@ router.get("/orgs/:orgId/forecast", ...gate, async (req, res): Promise<void> => 
     .select()
     .from(opportunities)
     .where(and(...where));
+  const visibleRows = await visibleOpportunities(req, rows);
 
   const now = new Date();
   const monthKeys: string[] = [];
@@ -1724,7 +1794,7 @@ router.get("/orgs/:orgId/forecast", ...gate, async (req, res): Promise<void> => 
     ]),
   );
 
-  for (const o of rows) {
+  for (const o of visibleRows) {
     const value = o.value ? Number(o.value) : 0;
     if (!value) continue;
     const cat = o.forecastCategory ?? "pipeline";
@@ -1796,6 +1866,7 @@ router.get("/orgs/:orgId/forecast/weighted", ...gate, async (req, res): Promise<
   const endDate = end.toISOString().slice(0, 10);
   const rows = await db
     .select({
+      accountId: opportunities.accountId,
       expectedCloseDate: opportunities.expectedCloseDate,
       forecastCategory: opportunities.forecastCategory,
       probability: opportunities.probability,
@@ -1808,7 +1879,15 @@ router.get("/orgs/:orgId/forecast/weighted", ...gate, async (req, res): Promise<
       gte(opportunities.expectedCloseDate, startDate),
       lt(opportunities.expectedCloseDate, endDate),
     ));
-  for (const opportunity of rows) {
+  const visibleRows = await Promise.all(
+    rows.map(async (opportunity) =>
+      (await canAccessCrmRecord(req, "account", opportunity.accountId))
+        ? opportunity
+        : undefined,
+    ),
+  );
+  for (const opportunity of visibleRows) {
+    if (!opportunity) continue;
     if (opportunity.forecastCategory === "closed_lost" || !opportunity.expectedCloseDate) continue;
     const close = new Date(`${opportunity.expectedCloseDate}T00:00:00.000Z`);
     if (close < start || close >= end) continue;

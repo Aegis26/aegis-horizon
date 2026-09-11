@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request } from "express";
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, exists } from "drizzle-orm";
 import {
   db,
   accounts,
@@ -42,6 +42,24 @@ async function recentActivity(req: Request, limit: number) {
 
 router.get("/orgs/:orgId/dashboard", async (req, res): Promise<void> => {
   const org = req.currentOrg!;
+  const opportunityCountWhere = [
+    eq(opportunities.orgId, org.id),
+    ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+  ];
+  if (!hasCrmManagementAccess(req)) {
+    opportunityCountWhere.push(
+      exists(
+        db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(and(
+            eq(accounts.id, opportunities.accountId),
+            eq(accounts.orgId, org.id),
+            ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+          )),
+      ),
+    );
+  }
   const [[members], [accountCount], [oppCount], activity] = await Promise.all([
     db.select({ value: count() }).from(orgUsers).where(eq(orgUsers.orgId, org.id)),
     db.select({ value: count() }).from(accounts).where(and(
@@ -51,10 +69,7 @@ router.get("/orgs/:orgId/dashboard", async (req, res): Promise<void> => {
     db
       .select({ value: count() })
       .from(opportunities)
-      .where(and(
-        eq(opportunities.orgId, org.id),
-        ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
-      )),
+      .where(and(...opportunityCountWhere)),
     recentActivity(req, 10),
   ]);
 

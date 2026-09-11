@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GET row-access audit</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #526078;
+      --line: #d9e0eb;
+      --soft: #f5f7fb;
+      --blue: #174ea6;
+      --blue-soft: #eaf1ff;
+      --green: #146c43;
+      --green-soft: #eaf8f0;
+      --amber: #8a5800;
+      --amber-soft: #fff6dd;
+    }
+    * { box-sizing: border-box; }
+    html { background: #eef2f7; }
+    body {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 30px 24px 60px;
+      color: var(--ink);
+      background: white;
+      font: 15px/1.58 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    h1, h2, h3 { color: #112b55; line-height: 1.2; }
+    h1 { font-size: 2.15rem; margin: 0 0 8px; }
+    h2 { margin: 36px 0 12px; padding-bottom: 7px; border-bottom: 2px solid var(--line); }
+    h3 { margin: 26px 0 8px; }
+    p { max-width: 1050px; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    code { font-size: .9em; background: #f0f3f8; padding: 1px 4px; border-radius: 4px; }
+    pre {
+      max-width: 1100px;
+      overflow-x: auto;
+      padding: 15px 17px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #111827;
+      color: #e5edf9;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .lead { color: var(--muted); font-size: 1.05rem; max-width: 1000px; }
+    .banner {
+      margin: 18px 0 24px;
+      padding: 15px 18px;
+      border-left: 5px solid var(--blue);
+      border-radius: 6px;
+      background: var(--blue-soft);
+    }
+    .note {
+      margin: 16px 0;
+      padding: 13px 16px;
+      border-left: 4px solid var(--amber);
+      background: var(--amber-soft);
+    }
+    .pass { color: var(--green); font-weight: 650; }
+    .muted { color: var(--muted); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 22px;
+      font-size: 13px;
+    }
+    caption {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 650;
+      padding: 0 0 8px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 8px 9px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th { background: #eaf0f8; color: #173b70; }
+    tbody tr:nth-child(even) { background: #fbfcfe; }
+    .inventory td:first-child, .inventory th:first-child { width: 48px; text-align: center; }
+    .inventory td:nth-child(2) { min-width: 290px; white-space: nowrap; }
+    .inventory td:nth-child(3) { min-width: 155px; white-space: nowrap; }
+    .inventory td:nth-child(4) { min-width: 190px; }
+    ul, ol { max-width: 1050px; }
+    .sources { columns: 2 360px; }
+    footer {
+      margin-top: 45px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .9rem;
+    }
+    @media (max-width: 900px) {
+      body { padding: 20px 12px 40px; }
+      .inventory { display: block; overflow-x: auto; white-space: normal; }
+      .inventory table { min-width: 1080px; }
+      .inventory td:nth-child(2) { white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>GET row-access audit</h1>
+    <p class="lead"><strong>Scope:</strong> the 60 registered API <code>GET</code> handlers in the current checkout, mounted under <code>/api</code>. This report consolidates the inventory, core CRM pass, derived-data pass, remaining-route pass, and the current access-control implementation. It is a code audit, not a production-data report.</p>
+    <div class="banner"><strong>Result:</strong> the current implementation has a consistent organization boundary, shared CRM row predicates, parent-row checks for derived data, and a second logical-row check for private object bytes. The findings distinguish employee CRM rows from organization configuration, operational metadata, public capabilities, and aggregate responses.</div>
+  </header>
+
+  <main>
+    <h2>Executive summary</h2>
+    <p>The effective CRM policy is:</p>
+    <table>
+      <caption>Effective CRM row policy</caption>
+      <thead><tr><th>Membership role</th><th>CRM row visibility</th></tr></thead>
+      <tbody>
+        <tr><td><code>owner</code>, <code>admin</code>, <code>manager</code></td><td>All rows in the current organization.</td></tr>
+        <tr><td><code>user</code></td><td>Rows with a non-null owner/assignee where the current user is the owner/assignee <strong>or</strong> the creator. This creator fallback survives reassignment.</td></tr>
+        <tr><td><code>viewer</code></td><td>Rows with a non-null owner/assignee where the current user is the current owner/assignee only. Viewer creator access is not granted.</td></tr>
+      </tbody>
+    </table>
+    <p><code>attachUser</code> requires a signed-in Clerk session and loads the local user. <code>attachOrg</code> requires membership in the requested organization and applies the organization IP policy. Feature and role middleware then apply the route's product boundary. The Clerk middleware installed before <code>/api</code> does not itself replace those route-level checks.</p>
+    <p>Viewers remain read-only. <code>isViewerMutation</code> allows <code>GET</code>, <code>HEAD</code>, and <code>OPTIONS</code>, while <code>attachOrg</code> rejects viewer <code>POST</code>, <code>PUT</code>, <code>PATCH</code>, and <code>DELETE</code> requests. The document gate is deliberately <code>requireRole("viewer")</code>: viewers can read documents subject to the derived-document predicate, but they cannot mutate them.</p>
+
+    <h3>Inventory accounting</h3>
+    <p>The inventory below contains every registered API <code>GET</code> path exactly once:</p>
+    <ul>
+      <li><strong>Core CRM:</strong> 7</li>
+      <li><strong>Derived data:</strong> 17</li>
+      <li><strong>Remaining routes:</strong> 36</li>
+      <li><strong>Total:</strong> 60</li>
+    </ul>
+    <p>The production SPA fallback accepts browser <code>GET</code>/<code>HEAD</code> requests outside <code>/api</code>; it is not part of this API count and does not expose database rows. The mounted invitation and public API-token routers are POST-only and have no additional <code>GET</code> handler beyond the paths listed below. Their token-authenticated lead batch write is not an employee-row <code>GET</code> feed.</p>
+
+    <h2>Complete GET inventory and finding index</h2>
+    <p>The ID in this table is used by the detailed findings later in the report. Paths are listed only in this inventory so that coverage is auditable without repeating endpoint strings in the narrative.</p>
+    <table class="inventory">
+      <caption>All registered API GET paths</caption>
+      <thead><tr><th>ID</th><th>GET path</th><th>Source module</th><th>Gate / classification</th><th>Finding</th></tr></thead>
+      <tbody>
+        <tr><td>G01</td><td><code>/api/healthz</code></td><td><code>routes/health.ts</code></td><td>Public · remaining</td><td>Constant health response; no tenant or employee data. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G02</td><td><code>/api/auth/me</code></td><td><code>routes/auth.ts</code></td><td><code>attachUser</code> · remaining</td><td>Returns the signed-in local user and memberships, and organizations reached through those memberships. Intentionally cross-organization for that user, not an employee-row feed. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G03</td><td><code>/api/billing/catalog</code></td><td><code>routes/billing.ts</code></td><td>Public catalog · remaining</td><td>Static plans and feature metadata; no tenant rows. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G04</td><td><code>/api/orgs/:orgId/api-tokens</code></td><td><code>routes/enterprise.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, admin · remaining</td><td>Organization token metadata is organization/admin scoped and omits token hashes. Shared configuration, not employee CRM data. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G05</td><td><code>/api/orgs/:orgId/security-policy</code></td><td><code>routes/enterprise.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, admin · remaining</td><td>One organization security-policy/status row or a server-derived default. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G06</td><td><code>/api/orgs/:orgId/audit-events</code></td><td><code>routes/enterprise.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, admin · remaining</td><td>Organization-filtered audit ledger, intentionally admin-wide. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G07</td><td><code>/api/orgs/:orgId/industry-templates</code></td><td><code>routes/enterprise.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, admin · remaining</td><td>Static template catalog with no database rows. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G08</td><td><code>/api/orgs/:orgId/reports</code></td><td><code>routes/reports.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, manager · derived</td><td>Manager-only organization report definitions. Access is intentionally management-wide. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G09</td><td><code>/api/orgs/:orgId/reports/:reportId</code></td><td><code>routes/reports.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, manager · derived</td><td>Report ID and current organization are both required. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G10</td><td><code>/api/orgs/:orgId/reports/:reportId/runs</code></td><td><code>routes/reports.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, manager · derived</td><td>Resolves the organization-scoped parent report before returning its runs. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G11</td><td><code>/api/orgs/:orgId/reports/exports/:exportId/download</code></td><td><code>routes/reports.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, manager · derived</td><td>Requires a current organization export with <code>completed</code> status, then redirects to authenticated storage for the second binding check. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G12</td><td><code>/api/orgs/:orgId/reports/:reportId/schedules</code></td><td><code>routes/reports.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, manager · derived</td><td>Schedule query is constrained by organization and report ID. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G13</td><td><code>/api/orgs/:orgId/documents</code></td><td><code>routes/documents.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, viewer · derived</td><td>Management sees organization documents; users need visible parents or, only when entirely unlinked, creator fallback; viewers get owned-parent visibility and no creator fallback. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G14</td><td><code>/api/orgs/:orgId/documents/:documentId</code></td><td><code>routes/documents.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, viewer · derived</td><td>The same document predicate protects detail; returned versions remain organization-scoped. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G15</td><td><code>/api/orgs/:orgId/documents/:documentId/download</code></td><td><code>routes/documents.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, viewer · derived</td><td>Document is checked before redirect and the current version is constrained by document, version, and organization. Storage checks the binding again. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G16</td><td><code>/api/signatures/:token</code></td><td><code>routes/documents.ts</code></td><td>Public bearer capability · derived</td><td>Hashes the token and requires a matching pending, non-expired signer request. Returns signer/request metadata only; no document or CRM parents. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G17</td><td><code>/api/orgs/:orgId/webhooks</code></td><td><code>routes/webhooks.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, manager · remaining</td><td>Shared organization integration configuration; encrypted secret fields are removed. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G18</td><td><code>/api/orgs/:orgId/webhooks/:webhookId/deliveries</code></td><td><code>routes/webhooks.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, manager · remaining</td><td>Delivery rows require current organization and webhook ID. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G19</td><td><code>/api/orgs/:orgId/accounts</code></td><td><code>routes/crm.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, CRM feature · core</td><td>Account list uses the shared CRM predicate. A <code>segmentId</code> lookup uses segment creator/management scope before conditions are applied. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G20</td><td><code>/api/orgs/:orgId/accounts/:accountId</code></td><td><code>routes/crm.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, CRM feature · core</td><td>Detail requires organization and shared account visibility; related contacts and opportunities are filtered before serialization. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G21</td><td><code>/api/orgs/:orgId/accounts/:accountId/contacts</code></td><td><code>routes/crm.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, CRM feature · core</td><td>Visible account parent is required; contacts use their own predicate, and an inaccessible reporting contact is nulled. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G22</td><td><code>/api/orgs/:orgId/contacts/:contactId</code></td><td><code>routes/crm.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, CRM feature · core</td><td>Contact and parent-account visibility are both required; reporting-contact data is sanitized. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G23</td><td><code>/api/orgs/:orgId/accounts/:accountId/timeline</code></td><td><code>routes/crm.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, CRM feature · remaining</td><td>Visible account parent and organization-scoped activities are required; contact/opportunity relationship IDs are retained only when visible. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G24</td><td><code>/api/orgs/:orgId/segments</code></td><td><code>routes/crm.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, CRM feature · derived</td><td>Management sees all organization segments; other members see only segments they created. Match counts independently apply CRM row visibility. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G25</td><td><code>/api/orgs/:orgId/providers</code></td><td><code>routes/communications.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, CRM feature · remaining</td><td>Provider availability, organization sync state, and binding status are shared operational metadata, not employee CRM rows. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G26</td><td><code>/api/orgs/:orgId/communication-settings</code></td><td><code>routes/communications.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, CRM feature · remaining</td><td>Returns one shared organization communication setting. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G27</td><td><code>/api/orgs/:orgId/accounts/:accountId/email-threads</code></td><td><code>routes/communications.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, CRM feature, visible account · remaining</td><td>Account visibility is checked before organization/account-scoped threads are read. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G28</td><td><code>/api/orgs/:orgId/email-threads/:threadId</code></td><td><code>routes/communications.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, CRM feature, thread account check · remaining</td><td>Thread is organization-scoped and its account is checked before messages are returned; inaccessible threads are 404. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G29</td><td><code>/api/orgs/:orgId/accounts/:accountId/calendar-events</code></td><td><code>routes/communications.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, CRM feature, visible account · remaining</td><td>Account visibility precedes organization/account-scoped calendar events. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G30</td><td><code>/api/orgs/:orgId/accounts/:accountId/notes</code></td><td><code>routes/communications.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, CRM feature, visible account · remaining</td><td>Visible account, non-deleted rows, and private-note authorship are enforced. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G31</td><td><code>/api/orgs/:orgId/pipelines</code></td><td><code>routes/sales.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, sales feature · remaining</td><td>Shared organization sales configuration; no CRM owner column is exposed. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G32</td><td><code>/api/orgs/:orgId/opportunities</code></td><td><code>routes/sales.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, sales feature · core</td><td>Shared opportunity visibility is followed by a parent-account check before serialization. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G33</td><td><code>/api/orgs/:orgId/opportunities/:opportunityId</code></td><td><code>routes/sales.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, sales feature · core</td><td>Detail requires visible opportunity and account; account name, owner membership, and stage history are policy scoped. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G34</td><td><code>/api/orgs/:orgId/leads</code></td><td><code>routes/sales.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, sales feature · core</td><td>Assigned-owner/creator predicate applies; a converted opportunity ID is returned only when visible. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G35</td><td><code>/api/orgs/:orgId/lead-scoring-rules</code></td><td><code>routes/sales.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, sales feature · remaining</td><td>Shared organization scoring configuration, not an employee CRM row feed. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G36</td><td><code>/api/orgs/:orgId/quotes</code></td><td><code>routes/sales.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, sales feature · derived</td><td>Quote rows require visible opportunity and account; related names use policy-aware lookups. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G37</td><td><code>/api/orgs/:orgId/quotes/:quoteId</code></td><td><code>routes/sales.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, sales feature · derived</td><td>Detail requires both linked parents and returns 404 when the child or either parent is inaccessible. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G38</td><td><code>/api/orgs/:orgId/quotes/:quoteId/pdf</code></td><td><code>routes/sales.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, sales feature · derived</td><td>PDF source rows use the linked-parent predicate; the alternate representation cannot bypass detail access. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G39</td><td><code>/api/orgs/:orgId/territories</code></td><td><code>routes/sales.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, sales feature · remaining</td><td>Shared routing configuration; owner display is joined through current organization membership. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G40</td><td><code>/api/orgs/:orgId/territories/coverage</code></td><td><code>routes/sales.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, sales feature · remaining</td><td>Shared territory metadata; account/opportunity aggregates and owner display are organization/policy scoped. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G41</td><td><code>/api/orgs/:orgId/forecast</code></td><td><code>routes/sales.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, sales feature · derived</td><td>Forecast rows use opportunity visibility and visible parent accounts before month aggregation. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G42</td><td><code>/api/orgs/:orgId/forecast/weighted</code></td><td><code>routes/sales.ts</code></td><td><code>attachUser</code>, <code>attachOrg</code>, sales feature · derived</td><td>Date-bounded rows use opportunity visibility and are dropped when parent account is hidden before revenue/count aggregation. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G43</td><td><code>/api/storage/public-objects/*filePath</code></td><td><code>routes/storage.ts</code></td><td>Public-object handler · remaining</td><td>Reads only configured public search paths. Intentional public asset endpoint, not a private-row ACL bypass. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G44</td><td><code>/api/storage/objects/*path</code></td><td><code>routes/storage.ts</code></td><td>Clerk session, object ACL, logical binding · remaining</td><td>Private bytes require storage ACL and current document/report binding. Known unauthorized bindings fail closed; report exports require management membership and completed status. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G45</td><td><code>/api/orgs/:orgId/dashboard</code></td><td><code>routes/dashboard.ts</code></td><td>router-level <code>attachUser</code>, <code>attachOrg</code> · derived</td><td>CRM counts use shared visibility and visible parent accounts; member/features are org metadata; activity is management-wide or current-user-only. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G46</td><td><code>/api/orgs/:orgId/usage</code></td><td><code>routes/dashboard.ts</code></td><td>router-level <code>attachUser</code>, <code>attachOrg</code> · derived</td><td>Usage activity is organization-scoped for management and current-user-scoped for other roles. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G47</td><td><code>/api/orgs/:orgId/ai/copilot/budget</code></td><td><code>routes/automation.ts</code></td><td>user/org, AI feature · remaining</td><td>Consent, plan budget, and aggregate usage metadata; no CRM row list. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G48</td><td><code>/api/orgs/:orgId/predictions/churn</code></td><td><code>routes/automation.ts</code></td><td>user/org, AI feature and consent · remaining</td><td>Organization prediction rows are filtered by visible account before response. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G49</td><td><code>/api/orgs/:orgId/predictions/churn/:accountId</code></td><td><code>routes/automation.ts</code></td><td>user/org, AI feature and consent · remaining</td><td>Account visibility is required before calculation; inaccessible IDs return the same 404 as missing rows. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G50</td><td><code>/api/orgs/:orgId/predictions/conversion/:leadId</code></td><td><code>routes/automation.ts</code></td><td>user/org, AI feature and consent · remaining</td><td>Lead visibility is required before calculation; inaccessible IDs return 404. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G51</td><td><code>/api/orgs/:orgId/predictions/close/:opportunityId</code></td><td><code>routes/automation.ts</code></td><td>user/org, AI feature and consent · remaining</td><td>Opportunity visibility is required; stakeholder count is filtered by visible contacts and parent account. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G52</td><td><code>/api/orgs/:orgId/workflows</code></td><td><code>routes/automation.ts</code></td><td>user/org, automation feature · remaining</td><td>Shared organization automation definitions. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G53</td><td><code>/api/orgs/:orgId/workflow-executions</code></td><td><code>routes/automation.ts</code></td><td>user/org, automation feature · remaining</td><td>Management sees organization history; other roles see only executions linked to visible account/lead/opportunity rows; unknown or unscoped entities are hidden. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G54</td><td><code>/api/orgs/:orgId/tasks</code></td><td><code>routes/automation.ts</code></td><td>user/org, tasks feature · remaining</td><td>Management sees organization tasks; <code>user</code> sees assigned-or-created tasks; <code>viewer</code> is assignee-only. Linked CRM parents must be visible. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G55</td><td><code>/api/orgs/:orgId/agents</code></td><td><code>routes/automation.ts</code></td><td>user/org, automation feature · remaining</td><td>Shared organization agent definitions. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G56</td><td><code>/api/orgs/:orgId/agent-executions</code></td><td><code>routes/automation.ts</code></td><td>user/org, automation feature · remaining</td><td>Management sees organization history; other roles see only executions linked to visible CRM entities. <span class="pass">Pass after fix.</span></td></tr>
+        <tr><td>G57</td><td><code>/api/orgs/:orgId/commands/history</code></td><td><code>routes/automation.ts</code></td><td>user/org, AI feature and consent · remaining</td><td>Transcript/result history is filtered by current organization and initiating user. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G58</td><td><code>/api/orgs/:orgId</code></td><td><code>routes/orgs.ts</code></td><td>router-level user/org · remaining</td><td>Current organization metadata after membership verification. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G59</td><td><code>/api/orgs/:orgId/members</code></td><td><code>routes/orgs.ts</code></td><td>router-level user/org · remaining</td><td>Members and user fields are joined through current organization membership. Organization membership metadata, not employee CRM rows. <span class="pass">Pass.</span></td></tr>
+        <tr><td>G60</td><td><code>/api/orgs/:orgId/features</code></td><td><code>routes/orgs.ts</code></td><td>router-level user/org · remaining</td><td>Enabled feature keys are derived from the current organization. <span class="pass">Pass.</span></td></tr>
+      </tbody>
+    </table>
+
+    <h2>Detailed findings</h2>
+    <h3>Shared CRM predicate and role behavior</h3>
+    <p><code>artifacts/api-server/src/services/crmAccess.ts</code> is the source of truth for accounts, contacts, opportunities, and leads. <code>crmRecordCondition</code> always includes record ID and organization ID. For contacts and opportunities, <code>canAccessCrmRecord</code> additionally checks the parent account, so a visible child cannot disclose an inaccessible parent.</p>
+    <p>The current predicate is intentionally explicit:</p>
+    <pre><code>if (hasCrmManagementAccess(req)) return undefined;
+
+const userId = req.currentUser!.id;
+if (req.currentMembership?.role === "viewer") {
+  return and(isNotNull(ownerColumn), eq(ownerColumn, userId));
+}
+if (req.currentMembership?.role !== "user") return sql`false`;
+return and(
+  isNotNull(ownerColumn),
+  or(eq(ownerColumn, userId), eq(createdByColumn, userId)),
+);</code></pre>
+    <p>This is the important post-fix distinction: a <code>viewer</code> is <strong>owned-only</strong>, not owner-or-creator. A regular <code>user</code> retains creator access after reassignment, but only while the row has a non-null owner. Leads use <code>assignedToUserId</code> as their owner column.</p>
+
+    <h3>Core CRM findings (G19–G22, G32–G34)</h3>
+    <ul>
+      <li>Account list/detail and contact list/detail use the shared predicate rather than a bare organization filter.</li>
+      <li>Account detail serializes only visible related contacts and opportunities. Contact detail also requires its parent account. An inaccessible <code>reportsToContactId</code> is not disclosed.</li>
+      <li>Opportunity list/detail requires both opportunity visibility and parent account visibility. Related account names, owner membership, and stage history are scoped to the current organization and policy.</li>
+      <li>Leads use assigned-owner/creator visibility. A <code>convertedOpportunityId</code> is null unless the linked opportunity is visible.</li>
+    </ul>
+
+    <h3>Child and aggregate findings (G23, G40–G42, G45–G46)</h3>
+    <ul>
+      <li>Timeline first resolves a visible account, then adds the organization predicate to activities. Relationship identifiers for hidden contacts or opportunities are suppressed.</li>
+      <li>Territory coverage remains shared territory configuration, but its account and opportunity aggregate inputs use CRM visibility; owner display joins organization membership.</li>
+      <li>Forecast and weighted forecast calculate only from visible opportunities with visible parent accounts. The weighted endpoint selects the account ID internally only to enforce the check and does not return it.</li>
+      <li>Dashboard account and opportunity counts use the shared helper. For non-management callers, opportunity count adds a correlated visible-account predicate. Member count, plan, enabled features, and usage metadata are organization/usage data rather than employee CRM rows. Recent activity is organization-wide for management and current-user-only for other roles.</li>
+    </ul>
+
+    <h3>Segments and saved conditions (G19, G24)</h3>
+    <p>Segments are saved configuration that can contain sensitive CRM conditions. <code>segmentVisibilityScope</code> combines organization scope with the current creator for non-management roles; management has organization-wide segment access. The same scope is used for the segment <code>GET</code> list, the <code>segmentId</code> lookup used while filtering the account list, the segment lookup used by <code>PATCH</code>, and the lookup/update/delete predicate used by <code>DELETE</code>.</p>
+    <p>Thus an employee cannot apply, edit, or delete another member's hidden saved segment by guessing its ID. A segment with a null creator remains management-only. Each returned segment's live match count is computed through the account query path, which applies CRM row visibility independently of segment-definition visibility.</p>
+
+    <h3>Quotes and alternate representations (G36–G38)</h3>
+    <p>Quotes have no owner column and depend on both an opportunity and an account. The list, detail, and PDF paths all require both linked parents to be visible. <code>quoteOut</code> and the PDF builder use <code>crmRecordCondition</code> for related names and source rows. This closes the former gap in which a visible quote or detail could cause an unscoped account/opportunity lookup in a secondary representation.</p>
+
+    <h3>Documents, versions, and signatures (G13–G16)</h3>
+    <p>Documents are derived records. Their predicate is an intersection, not an OR: every populated account/opportunity parent must be visible. The current implementation is equivalent to:</p>
+    <pre><code>const allLinkedParentsVisible = and(
+  or(isNull(documents.accountId), accountAccess),
+  or(isNull(documents.opportunityId), opportunityAccess),
+  or(isNotNull(documents.accountId), isNotNull(documents.opportunityId)),
+)!;
+
+if (req.currentMembership?.role === "viewer") {
+  return allLinkedParentsVisible;
+}
+
+return or(
+  and(
+    isNull(documents.accountId),
+    isNull(documents.opportunityId),
+    eq(documents.createdByUserId, req.currentUser!.id),
+  ),
+  allLinkedParentsVisible,
+)!;</code></pre>
+    <p>The creator fallback is limited to an <strong>entirely unlinked document</strong> and regular <code>user</code> roles. A linked document cannot be rescued by creator authorship when either parent is hidden. Viewer creator fallback is disabled; viewers see only documents whose populated parents are currently owned by the viewer. Management remains organization-wide. Detail versions and download lookups remain subordinate to the visible document and organization.</p>
+    <p>The public signature capability is deliberately different from an authenticated CRM read. Possession of the high-entropy bearer token is the capability; the handler hashes it, requires a matching signer and pending request, checks expiry, and returns only signer name/email and request message/expiry. It does not expose the document or its CRM parents.</p>
+
+    <h3>Reports and private object storage (G08–G12, G44)</h3>
+    <p>Reports are manager-only. Their definitions, runs, schedules, previews, and exports are intentionally organization-wide within the management gate; the report execution function reads organization CRM rows only behind that trusted manager boundary. Regular users and viewers do not receive report definitions, run histories, or exports.</p>
+    <p>Scheduled execution is a trusted server-side operation with no request principal and is used by manager-owned schedules. If report previews, runs, or exports are ever opened to non-management callers, the execution function must accept a request context and apply the shared CRM predicate before it is used for that caller.</p>
+    <p>The export download handler first requires the current organization, export ID, and <code>completed</code> status. It redirects only to the authenticated private-object handler. The storage binding check then requires:</p>
+    <ul>
+      <li>a live <code>customReports</code> row joined to the export's organization;</li>
+      <li>the export binding to be current rather than stale;</li>
+      <li><code>reportExports.status === "completed"</code>; and</li>
+      <li>a membership in that binding organization with role <code>owner</code>, <code>admin</code>, or <code>manager</code>.</li>
+    </ul>
+    <p>The storage ACL's <code>ORG_MEMBER</code> read permission is intentionally not sufficient for report bytes. This is the completed/current-binding management check that prevents an organization member from turning a broad object ACL into a report export read.</p>
+    <p>Document object paths use the same second boundary: the private object ACL must pass and the bound document must satisfy the document predicate. A known binding that fails its logical-row predicate cannot fall back to the broader ACL. An unbound object can be read by the exact ACL owner; a shared unbound object may additionally be read by a management member of an ACL-listed organization. That unbound-object behavior is not an employee CRM row feed.</p>
+    <p>Public objects (G43) are separate by design and are searched only in configured public paths. They do not authorize private object bytes.</p>
+
+    <h3>Automation and task rows (G47–G57)</h3>
+    <p>AI budget, workflow definitions, and agent definitions are shared organization configuration/usage metadata. They are not employee CRM row feeds. History rows are different because payloads may contain CRM data: non-management workflow and agent execution responses require a linked, visible account, lead, or opportunity. Unknown and unscoped entities are hidden rather than treated as organization-wide.</p>
+    <p>Task access has a dedicated predicate shared by list and mutation paths:</p>
+    <pre><code>const ownership =
+  req.currentMembership?.role === "viewer"
+    ? eq(tasks.assignedToUserId, userId)
+    : or(
+        eq(tasks.assignedToUserId, userId),
+        eq(tasks.createdByUserId, userId),
+      );
+return and(ownership, accountVisible, opportunityVisible);</code></pre>
+    <p>The creator fallback is for regular <code>user</code> members, <strong>not viewers</strong>. Viewers are assignee-only. Management sees organization tasks. Optional account and opportunity links are independently checked with the CRM helper. The same visibility predicate is placed in <code>UPDATE</code> conditions for task edits and completion, avoiding an ID-only mutation race.</p>
+    <p>Prediction access is also row-aware:</p>
+    <ul>
+      <li>the churn list filters every prediction by visible account;</li>
+      <li>churn detail requires visible account;</li>
+      <li>conversion detail requires visible lead;</li>
+      <li>close detail requires visible opportunity; and</li>
+      <li>the close prediction's stakeholder <code>count(*)</code> is restricted to visible contacts whose parent account is visible.</li>
+    </ul>
+    <p>The last item matters because a filtered prediction row could still leak a hidden stakeholder count if the calculation query were organization-only. The current <code>closeContactVisibilityCondition</code> applies both contact and account visibility.</p>
+
+    <h3>Communications and CRM-linked operational data (G25–G30)</h3>
+    <p>Provider status, binding status, and communication settings are shared organization configuration. They may describe connector state but do not return employee CRM rows. Account-linked threads, messages, calendar events, and notes first pass the visible-account check and then add organization and parent identifiers. Notes additionally exclude deleted rows and hide private notes from non-authors. An inaccessible thread or parent returns 404 rather than a cross-user response.</p>
+
+    <h3>Shared configuration and public capability boundaries (G01–G07, G17–G18, G31, G35, G39, G43, G47, G52, G55, G58–G60)</h3>
+    <p>The following responses are intentionally shared, static, public, or organization metadata rather than employee row feeds:</p>
+    <ul>
+      <li>health and public billing catalog;</li>
+      <li>the signed-in user's own membership/org list;</li>
+      <li>admin-only token metadata, security policy, audit ledger, and templates;</li>
+      <li>manager-only webhook definitions and same-organization deliveries;</li>
+      <li>pipelines, lead scoring rules, and territories;</li>
+      <li>provider/communication settings;</li>
+      <li>AI budget, workflows, and agents;</li>
+      <li>current organization metadata, members, and enabled feature keys; and</li>
+      <li>public assets under configured public-object search paths.</li>
+    </ul>
+    <p>The public API-token mount is POST-only. Its token authorizes a scoped lead batch write and is not a public employee-row read. The only public token-shaped <code>GET</code> in this inventory is the signature capability in G16; it returns signer/request metadata rather than a document or CRM parent.</p>
+    <p>These endpoints still have their documented authentication, membership, and role/feature gates. “Shared” means the object is configuration or metadata whose organization-wide visibility is intentional; it does not mean employee-owned account/contact/opportunity/lead rows are organization-wide.</p>
+
+    <h2>Findings fixed in the current implementation</h2>
+    <ol>
+      <li>Viewer CRM access is explicitly current-owner/assignee-only; creator access belongs to regular <code>user</code> members, not viewers.</li>
+      <li>Account, contact, opportunity, and lead detail/list paths enforce shared visibility, organization scope, and relevant parent checks.</li>
+      <li>Nested account/contact/timeline and converted-opportunity fields are filtered or sanitized rather than copied from raw IDs.</li>
+      <li>Dashboard and forecast opportunity aggregates reject hidden parent accounts.</li>
+      <li>Segment list, account segment lookup, and segment mutations share creator or management scope.</li>
+      <li>Documents use every-populated-parent visibility with creator fallback only for entirely unlinked regular-user documents; viewers are owned-only.</li>
+      <li>Quote list/detail/PDF all use both linked-parent checks and scoped related lookups.</li>
+      <li>Private storage requires both object ACL and logical binding authorization; report bindings require a live report, completed export, and management membership.</li>
+      <li>Workflow/agent histories, tasks, and prediction lists no longer treat organization scope alone as sufficient where payloads can carry CRM data.</li>
+      <li>Territory owner lookups and all reviewed related-user joins are constrained to the current organization where appropriate.</li>
+    </ol>
+
+    <h2>Checks and verification evidence</h2>
+    <h3>Source-level checks present</h3>
+    <p>The current checkout includes focused checks for:</p>
+    <ul>
+      <li>management visibility, regular-user owner-or-creator visibility, viewer owned-only visibility, reassignment creator access, and viewer lead ownership in <code>services/crmAccess.test.ts</code>;</li>
+      <li>segment list/lookup/update/delete SQL scope in <code>services/crmAccess.test.ts</code>;</li>
+      <li>viewer task mutation assignee-only SQL and close-prediction visible contact and account predicates in <code>services/visibility-regression.test.ts</code>;</li>
+      <li>linked-document parent intersection, unlinked regular-user creator fallback, viewer no-creator-fallback behavior, and management document access in <code>routes/documents.test.ts</code>; and</li>
+      <li>private-object owner and malformed-ACL fail-closed behavior in <code>services/objectAcl.test.ts</code>.</li>
+    </ul>
+    <div class="note">The tests are still being finished. This report deliberately does <strong>not</strong> claim final test totals, a final pass count, or a completed end-to-end test run.</div>
+
+    <h3>Development database boundary</h3>
+    <p>The integration case in <code>services/crmAccess.test.ts</code> is designed to use the development <code>DATABASE_URL</code> and a real Drizzle transaction. It creates synthetic UUID users, memberships, and CRM rows with <code>example.invalid</code> addresses, checks role predicates and denied details, and then throws a private rollback sentinel. The transaction is expected to roll back all synthetic organization, user, membership, and CRM rows.</p>
+    <p>That is development verification of predicates, not a query against user production data and not a production row-count report. In particular, this audit makes no claim that an owner has exactly six or four rows, or any other production count. No user production counts are inferred from the synthetic fixtures.</p>
+
+    <h3>Production role boundary</h3>
+    <p>No production role assignments, role definitions, or membership data were changed by this report. The implementation continues to treat <code>owner</code>, <code>admin</code>, and <code>manager</code> as CRM-management roles; <code>user</code> as owner-or-creator with a non-null owner; and <code>viewer</code> as read-only and owned-only. The document read gate is widened to include viewers without widening document mutation access.</p>
+
+    <h2>Reviewed source modules</h2>
+    <ul class="sources">
+      <li><code>artifacts/api-server/src/app.ts</code> and <code>src/routes/index.ts</code></li>
+      <li><code>src/middlewares/auth.ts</code></li>
+      <li><code>src/services/crmAccess.ts</code>, <code>taskAccess.ts</code>, <code>predictive.ts</code>, and <code>objectAccess.ts</code></li>
+      <li>Route modules for auth, billing, enterprise, reports, documents, webhooks, CRM, communications, sales, storage, dashboard, automation, and orgs</li>
+      <li>Focused access-control test sources listed above</li>
+    </ul>
+  </main>
+
+  <footer>The report files are the only outputs of this documentation task. No workflow, production data, role assignment, commit, or application code change is claimed here.</footer>
+</body>
+</html>

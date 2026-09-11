@@ -173,7 +173,7 @@ function accountDetail(a: Account) {
   };
 }
 
-function contactOut(c: Contact) {
+function contactOut(c: Contact, exposeReportsToContactId = true) {
   return {
     id: c.id,
     accountId: c.accountId,
@@ -184,7 +184,7 @@ function contactOut(c: Contact) {
     title: c.title,
     department: c.department,
     seniority: c.seniority,
-    reportsToContactId: c.reportsToContactId,
+    reportsToContactId: exposeReportsToContactId ? c.reportsToContactId : null,
     isActive: c.isActive,
     ownerUserId: c.ownerUserId,
     createdByUserId: c.createdByUserId,
@@ -193,12 +193,27 @@ function contactOut(c: Contact) {
   };
 }
 
-function activityOut(a: Activity, createdByName?: string | null) {
+async function contactOutForRequest(req: Request, c: Contact) {
+  const exposeReportsToContactId =
+    !c.reportsToContactId ||
+    (await canAccessCrmRecord(req, "contact", c.reportsToContactId));
+  return contactOut(c, exposeReportsToContactId);
+}
+
+function activityOut(
+  a: Activity,
+  createdByName?: string | null,
+  relatedVisibility?: { contact: boolean; opportunity: boolean },
+) {
   return {
     id: a.id,
     accountId: a.accountId,
-    contactId: a.contactId,
-    opportunityId: a.opportunityId,
+    contactId:
+      relatedVisibility && !relatedVisibility.contact ? null : a.contactId,
+    opportunityId:
+      relatedVisibility && !relatedVisibility.opportunity
+        ? null
+        : a.opportunityId,
     threadId: a.threadId,
     callRecordingId: a.callRecordingId,
     calendarEventId: a.calendarEventId,
@@ -383,6 +398,17 @@ async function queryAccountsByConditions(
     .orderBy(desc(accounts.createdAt));
 }
 
+export function segmentVisibilityScope(req: Request, segmentId?: string): SQL[] {
+  const where: SQL[] = [eq(segments.orgId, req.currentOrg!.id)];
+  if (segmentId) {
+    where.push(eq(segments.id, segmentId));
+  }
+  if (!hasCrmManagementAccess(req)) {
+    where.push(eq(segments.createdByUserId, req.currentUser!.id));
+  }
+  return where;
+}
+
 /* ------------------------------- accounts ------------------------------ */
 
 function accountAudit(a: Account) {
@@ -463,9 +489,7 @@ router.get(
       const [seg] = await db
         .select()
         .from(segments)
-        .where(
-          and(eq(segments.id, segmentId), eq(segments.orgId, req.currentOrg!.id)),
-        );
+        .where(and(...segmentVisibilityScope(req, segmentId)));
       if (!seg) {
         res.status(404).json({ error: "Segment not found" });
         return;
@@ -642,7 +666,9 @@ router.get(
     res.json(
       GetAccountResponse.parse({
         ...accountDetail(account),
-        contacts: relContacts.map(contactOut),
+        contacts: await Promise.all(
+          relContacts.map((contact) => contactOutForRequest(req, contact)),
+        ),
         opportunities: relOpps.map((o) => ({
           id: o.id,
           accountId: o.accountId,
@@ -759,7 +785,11 @@ router.get(
         ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
       ))
       .orderBy(contacts.lastName);
-    res.json(ListContactsResponse.parse(rows.map(contactOut)));
+    res.json(
+      ListContactsResponse.parse(
+        await Promise.all(rows.map((contact) => contactOutForRequest(req, contact))),
+      ),
+    );
   },
 );
 
@@ -818,7 +848,9 @@ router.post(
       ...auditContext(req),
       metadata: { after: contactAudit(row) },
     });
-    res.status(201).json(CreateContactResponse.parse(contactOut(row)));
+    res
+      .status(201)
+      .json(CreateContactResponse.parse(await contactOutForRequest(req, row)));
   },
 );
 
@@ -833,6 +865,9 @@ async function findContact(req: Request): Promise<Contact | undefined> {
         ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
       ),
     );
+  if (!row || !(await canAccessCrmRecord(req, "account", row.accountId))) {
+    return undefined;
+  }
   return row;
 }
 
@@ -847,7 +882,9 @@ router.get(
       res.status(404).json({ error: "Contact not found" });
       return;
     }
-    res.json(GetContactResponse.parse(contactOut(contact)));
+    res.json(
+      GetContactResponse.parse(await contactOutForRequest(req, contact)),
+    );
   },
 );
 
@@ -916,7 +953,9 @@ router.patch(
       ...auditContext(req),
       metadata: { before: contactAudit(contact), after: contactAudit(row) },
     });
-    res.json(UpdateContactResponse.parse(contactOut(row)));
+    res.json(
+      UpdateContactResponse.parse(await contactOutForRequest(req, row)),
+    );
   },
 );
 
@@ -1033,11 +1072,39 @@ router.get(
       .select({ activity: activities, userName: users.fullName, userEmail: users.email })
       .from(activities)
       .leftJoin(users, eq(activities.createdByUserId, users.id))
-      .where(eq(activities.accountId, account.id))
+      .where(
+        and(
+          eq(activities.accountId, account.id),
+          eq(activities.orgId, req.currentOrg!.id),
+        ),
+      )
       .orderBy(desc(activities.createdAt));
+    const visibleRows = await Promise.all(
+      rows.map(async (r) => ({
+        ...r,
+        relatedVisibility: {
+          contact:
+            !r.activity.contactId ||
+            (await canAccessCrmRecord(req, "contact", r.activity.contactId)),
+          opportunity:
+            !r.activity.opportunityId ||
+            (await canAccessCrmRecord(
+              req,
+              "opportunity",
+              r.activity.opportunityId,
+            )),
+        },
+      })),
+    );
     res.json(
       GetAccountTimelineResponse.parse(
-        rows.map((r) => activityOut(r.activity, r.userName ?? r.userEmail)),
+        visibleRows.map((r) =>
+          activityOut(
+            r.activity,
+            r.userName ?? r.userEmail,
+            r.relatedVisibility,
+          ),
+        ),
       ),
     );
   },
@@ -1156,10 +1223,15 @@ router.get(
   attachOrg,
   requireFeature("crm"),
   async (req, res): Promise<void> => {
+    // A segment's conditions are a saved view over CRM rows.  Management may
+    // see all saved views; other members may only see views they created.
+    // queryAccountsByConditions below independently applies CRM row
+    // visibility when calculating each match count.
+    const where = segmentVisibilityScope(req);
     const rows = await db
       .select()
       .from(segments)
-      .where(eq(segments.orgId, req.currentOrg!.id))
+      .where(and(...where))
       .orderBy(desc(segments.createdAt));
     // Segments auto-update: compute live match counts on every read.
     const withCounts = await Promise.all(
@@ -1204,12 +1276,7 @@ async function findSegment(req: Request): Promise<Segment | undefined> {
   const [row] = await db
     .select()
     .from(segments)
-    .where(
-      and(
-        eq(segments.id, req.params.segmentId as string),
-        eq(segments.orgId, req.currentOrg!.id),
-      ),
-    );
+    .where(and(...segmentVisibilityScope(req, req.params.segmentId as string)));
   return row;
 }
 
@@ -1236,8 +1303,12 @@ router.patch(
         description: parsed.data.description,
         conditions: parsed.data.conditions,
       })
-      .where(eq(segments.id, segment.id))
+      .where(and(...segmentVisibilityScope(req, req.params.segmentId as string)))
       .returning();
+    if (!row) {
+      res.status(404).json({ error: "Segment not found" });
+      return;
+    }
     res.json(UpdateSegmentResponse.parse(segmentOut(row)));
   },
 );
@@ -1253,7 +1324,14 @@ router.delete(
       res.status(404).json({ error: "Segment not found" });
       return;
     }
-    await db.delete(segments).where(eq(segments.id, segment.id));
+    const [deleted] = await db
+      .delete(segments)
+      .where(and(...segmentVisibilityScope(req, req.params.segmentId as string)))
+      .returning({ id: segments.id });
+    if (!deleted) {
+      res.status(404).json({ error: "Segment not found" });
+      return;
+    }
     res.status(204).end();
   },
 );

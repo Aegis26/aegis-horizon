@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { Router, type IRouter } from "express";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { Router, type IRouter, type Request } from "express";
+import { and, desc, eq, exists, isNotNull, isNull, or, type SQL } from "drizzle-orm";
 import { z } from "zod/v4";
 import PDFDocument from "pdfkit";
 import { getAuth } from "@clerk/express";
@@ -11,11 +11,85 @@ import { ObjectStorageService, objectStorageClient } from "../lib/objectStorage"
 import { sendEmail } from "../lib/email";
 import { appendAuditEvent, auditContext } from "../services/audit";
 import { getClientIp } from "../lib/clientIp";
+import { hasCrmManagementAccess, withCrmVisibility } from "../services/crmAccess";
 
-const router: IRouter = Router(); const gate = [attachUser, attachOrg, requireRole("user")] as const;
+const router: IRouter = Router(); const gate = [attachUser, attachOrg, requireRole("viewer")] as const;
 const upload = z.object({ objectPath: z.string().regex(/^\/objects\/uploads\/[a-z0-9-]+$/), fileName: z.string().min(1).max(255), contentType: z.enum(["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"]), sizeBytes: z.number().int().positive().max(25 * 1024 * 1024) }).strict();
 const create = z.object({ name: z.string().min(1).max(255), description: z.string().max(2000).optional(), accountId: z.string().uuid().optional(), opportunityId: z.string().uuid().optional(), signatureFields: z.array(z.object({ key: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/), page: z.number().int().min(1), required: z.boolean().default(true) }).strict()).max(50).default([]), upload }).strict();
-async function owned(req: any) { const [document] = await db.select().from(documents).where(and(eq(documents.id, req.params.documentId), eq(documents.orgId, req.currentOrg.id))); return document; }
+/**
+ * Documents do not have an owner column of their own.  A document is a
+ * derived/child record, so every populated account/opportunity parent must be
+ * visible. An entirely unlinked document remains available to its creator for
+ * regular users. Viewers are intentionally limited to currently-owned CRM
+ * parents and do not receive creator access.
+ */
+export function documentVisibility(req: Request): SQL | undefined {
+  if (hasCrmManagementAccess(req)) return undefined;
+
+  const accountAccess = exists(
+    db
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(and(
+        eq(accounts.id, documents.accountId),
+        eq(accounts.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+      )),
+  );
+  const opportunityAccess = exists(
+    db
+      .select({ id: opportunities.id })
+      .from(opportunities)
+      .where(and(
+        eq(opportunities.id, documents.opportunityId),
+        eq(opportunities.orgId, req.currentOrg!.id),
+        ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+        exists(
+          db
+            .select({ id: accounts.id })
+            .from(accounts)
+            .where(and(
+              eq(accounts.id, opportunities.accountId),
+              eq(accounts.orgId, req.currentOrg!.id),
+              ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+            )),
+        ),
+      )),
+  );
+
+  // A linked document is visible only when every populated parent is
+  // visible. Null parent links are intentionally treated as not applicable.
+  const allLinkedParentsVisible = and(
+    or(isNull(documents.accountId), accountAccess),
+    or(isNull(documents.opportunityId), opportunityAccess),
+    or(isNotNull(documents.accountId), isNotNull(documents.opportunityId)),
+  )!;
+  if (req.currentMembership?.role === "viewer") {
+    return allLinkedParentsVisible;
+  }
+
+  // Creator access is only an ownership fallback for a document with no CRM
+  // parent. It must not bypass a hidden account or opportunity.
+  return or(
+    and(
+      isNull(documents.accountId),
+      isNull(documents.opportunityId),
+      eq(documents.createdByUserId, req.currentUser!.id),
+    ),
+    allLinkedParentsVisible,
+  )!;
+}
+
+async function owned(req: Request) {
+  const visibility = documentVisibility(req);
+  const where = [
+    eq(documents.id, req.params.documentId as string),
+    eq(documents.orgId, req.currentOrg!.id),
+    ...(visibility ? [visibility] : []),
+  ];
+  const [document] = await db.select().from(documents).where(and(...where));
+  return document;
+}
 async function bind(path: string, orgId: string, clerkId: string) { return new ObjectStorageService().trySetObjectEntityAclPolicy(path, { owner: clerkId, visibility: "private", aclRules: [{ group: { type: ObjectAccessGroupType.ORG_MEMBER, id: orgId }, permission: ObjectPermission.READ }] }); }
 async function signedCertificate(input: { orgId: string; documentId: string; sourceVersion: number; sourcePath: string; requestId: string; signers: typeof signatureSigners.$inferSelect[]; auditIds: string[] }) {
   const text = [
@@ -32,7 +106,15 @@ async function signedCertificate(input: { orgId: string; documentId: string; sou
   return { objectPath: `/objects/${relative}`, sizeBytes: bytes.length, sha256: digest };
 }
 
-router.get("/orgs/:orgId/documents", ...gate, async (req, res) => res.json(await db.select().from(documents).where(and(eq(documents.orgId, req.currentOrg!.id), isNull(documents.archivedAt))).orderBy(desc(documents.updatedAt))));
+router.get("/orgs/:orgId/documents", ...gate, async (req, res) => {
+  const visibility = documentVisibility(req);
+  const where = [
+    eq(documents.orgId, req.currentOrg!.id),
+    isNull(documents.archivedAt),
+    ...(visibility ? [visibility] : []),
+  ];
+  res.json(await db.select().from(documents).where(and(...where)).orderBy(desc(documents.updatedAt)));
+});
 router.post("/orgs/:orgId/documents", ...gate, async (req, res): Promise<void> => {
   const parsed = create.safeParse(req.body); if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message }); return; } const value = parsed.data; const orgId = req.currentOrg!.id;
   if (value.accountId && !(await db.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.id, value.accountId), eq(accounts.orgId, orgId)))).length) { res.status(400).json({ error: "accountId must belong to this organization" }); return; }
@@ -46,7 +128,7 @@ router.post("/orgs/:orgId/documents", ...gate, async (req, res): Promise<void> =
   await appendAuditEvent({ orgId, action: "document.created", entityType: "document", entityId: document.id, ...auditContext(req) }); res.status(201).json(document);
 });
 router.get("/orgs/:orgId/documents/:documentId", ...gate, async (req, res): Promise<void> => { const doc = await owned(req); if (!doc) { res.status(404).json({ error: "Document not found" }); return; } const versions = await db.select().from(documentVersions).where(and(eq(documentVersions.documentId, doc.id), eq(documentVersions.orgId, doc.orgId))).orderBy(desc(documentVersions.version)); res.json({ ...doc, versions }); });
-router.get("/orgs/:orgId/documents/:documentId/download", ...gate, async (req, res): Promise<void> => { const doc = await owned(req); if (!doc) { res.status(404).json({ error: "Document not found" }); return; } const [version] = await db.select().from(documentVersions).where(and(eq(documentVersions.documentId, doc.id), eq(documentVersions.version, doc.currentVersion))); if (!version) { res.status(404).json({ error: "Version not found" }); return; } res.redirect(302, `/api/storage${version.objectPath}`); });
+router.get("/orgs/:orgId/documents/:documentId/download", ...gate, async (req, res): Promise<void> => { const doc = await owned(req); if (!doc) { res.status(404).json({ error: "Document not found" }); return; } const [version] = await db.select().from(documentVersions).where(and(eq(documentVersions.documentId, doc.id), eq(documentVersions.orgId, doc.orgId), eq(documentVersions.version, doc.currentVersion))); if (!version) { res.status(404).json({ error: "Version not found" }); return; } res.redirect(302, `/api/storage${version.objectPath}`); });
 router.post("/orgs/:orgId/documents/:documentId/versions", ...gate, async (req, res): Promise<void> => { const doc = await owned(req); const parsed = upload.safeParse(req.body); if (!doc) { res.status(404).json({ error: "Document not found" }); return; } if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message }); return; } let path: string; try { path = await bind(parsed.data.objectPath, doc.orgId, getAuth(req).userId!); } catch { res.status(400).json({ error: "Uploaded object was not found" }); return; } const [version] = await db.transaction(async (tx) => { const next = doc.currentVersion + 1; const [created] = await tx.insert(documentVersions).values({ orgId: doc.orgId, documentId: doc.id, version: next, objectPath: path, fileName: parsed.data.fileName, contentType: parsed.data.contentType, sizeBytes: parsed.data.sizeBytes, createdByUserId: req.currentUser!.id }).returning(); await tx.update(documents).set({ currentVersion: next }).where(eq(documents.id, doc.id)); return [created]; }); res.status(201).json(version); });
 
 router.post("/orgs/:orgId/documents/:documentId/signature-requests", ...gate, async (req, res): Promise<void> => {

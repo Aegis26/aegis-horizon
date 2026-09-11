@@ -11,7 +11,12 @@ import {
   ObjectNotFoundError,
   ObjectStorageService,
 } from '../lib/objectStorage';
-import { ObjectPermission } from '../lib/objectAcl';
+import {
+  canAccessObject,
+  getObjectAclPolicy,
+  ObjectPermission,
+} from '../lib/objectAcl';
+import { authorizePrivateObjectBinding } from '../services/objectAccess';
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -125,14 +130,29 @@ router.get('/storage/objects/*path', async (req: Request, res: Response) => {
     const objectFile =
       await objectStorageService.getObjectEntityFile(objectPath);
 
-    // ACL check: the object must be owned by this Clerk user or shared with
-    // an org the user belongs to (ORG_MEMBER rule set at attach time).
-    const canAccess = await objectStorageService.canAccessObjectEntity({
+    // The object ACL is necessary but not sufficient.  ORG_MEMBER grants are
+    // intentionally broad at storage level; the logical document/report row
+    // below applies the narrower CRM/manager predicate before any bytes are
+    // streamed.
+    const aclPolicy = await getObjectAclPolicy(objectFile);
+    const canAccessAcl = aclPolicy?.visibility === 'private'
+      ? await canAccessObject({
+          userId,
+          objectFile,
+          requestedPermission: ObjectPermission.READ,
+        })
+      : false;
+    if (!canAccessAcl) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    const binding = await authorizePrivateObjectBinding(
+      req,
+      objectPath,
       userId,
-      objectFile,
-      requestedPermission: ObjectPermission.READ,
-    });
-    if (!canAccess) {
+      aclPolicy!,
+    );
+    if (!binding.allowed) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }

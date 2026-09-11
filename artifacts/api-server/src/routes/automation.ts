@@ -3,7 +3,6 @@ import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   agentExecutions,
-  accounts,
   aiAgents,
   churnPredictions,
   commandHistory,
@@ -22,7 +21,11 @@ import { calculateChurn, calculateClose, calculateConversion } from "../services
 import { executeWorkflow, planWorkflow, type WorkflowAction, type WorkflowCondition, type WorkflowTrigger } from "../services/workflow";
 import { runAgent } from "../services/agents";
 import { isOrgAccountId, isOrgMemberId, isOrgOpportunityId } from "../services/orgValidation";
-import { canAccessCrmRecord } from "../services/crmAccess";
+import {
+  canAccessCrmRecord,
+  hasCrmManagementAccess,
+} from "../services/crmAccess";
+import { taskVisibilityCondition } from "../services/taskAccess";
 
 const router: IRouter = Router();
 const base = [attachUser, attachOrg] as const;
@@ -50,6 +53,51 @@ async function requireVisible(
   if (await canAccessCrmRecord(req, type, id)) return true;
   res.status(404).json({ error: `${type[0].toUpperCase()}${type.slice(1)} not found` });
   return false;
+}
+
+/**
+ * Automation history is organization-wide configuration/operations, but its
+ * entity payloads can contain CRM data.  Non-management users may only see
+ * executions whose linked CRM record is visible to them.  Unknown or
+ * unscoped executions are intentionally hidden from non-management users
+ * rather than treating an absent entity as tenant-wide data.
+ */
+async function canSeeAutomationEntity(
+  req: Request,
+  entityType: string | null | undefined,
+  entityId: string | null | undefined,
+): Promise<boolean> {
+  if (hasCrmManagementAccess(req)) return true;
+  if (!entityType || !entityId) return false;
+  if (entityType !== "account" && entityType !== "lead" && entityType !== "opportunity") {
+    return false;
+  }
+  return canAccessCrmRecord(req, entityType, entityId);
+}
+
+async function canSeeTask(req: Request, task: typeof tasks.$inferSelect): Promise<boolean> {
+  if (hasCrmManagementAccess(req)) return true;
+
+  const userId = req.currentUser!.id;
+  // Tasks are owned operational records: a rep can see work assigned to them
+  // or created by them, but not another rep's unassigned work.
+  if (
+    task.assignedToUserId !== userId &&
+    (req.currentMembership?.role === "viewer" ||
+      task.createdByUserId !== userId)
+  ) {
+    return false;
+  }
+  if (task.accountId && !(await canAccessCrmRecord(req, "account", task.accountId))) {
+    return false;
+  }
+  if (
+    task.opportunityId &&
+    !(await canAccessCrmRecord(req, "opportunity", task.opportunityId))
+  ) {
+    return false;
+  }
+  return true;
 }
 
 router.get("/orgs/:orgId/ai/copilot/budget", ...aiGate, async (req, res) => {
@@ -103,10 +151,10 @@ router.post("/orgs/:orgId/predictions/conversion/:leadId/recompute", ...aiConsen
   try { if (!(await requireVisible(req, res, "lead", String(req.params.leadId)))) return; res.json(await calculateConversion(req.currentOrg!.id, String(req.params.leadId))); } catch (error) { fail(res, error); }
 });
 router.get("/orgs/:orgId/predictions/close/:opportunityId", ...aiConsentGate, async (req, res): Promise<void> => {
-  try { if (!(await requireVisible(req, res, "opportunity", String(req.params.opportunityId)))) return; res.json(await calculateClose(req.currentOrg!.id, String(req.params.opportunityId))); } catch (error) { fail(res, error); }
+  try { if (!(await requireVisible(req, res, "opportunity", String(req.params.opportunityId)))) return; res.json(await calculateClose(req.currentOrg!.id, String(req.params.opportunityId), req)); } catch (error) { fail(res, error); }
 });
 router.post("/orgs/:orgId/predictions/close/:opportunityId/recompute", ...aiConsentGate, async (req, res): Promise<void> => {
-  try { if (!(await requireVisible(req, res, "opportunity", String(req.params.opportunityId)))) return; res.json(await calculateClose(req.currentOrg!.id, String(req.params.opportunityId))); } catch (error) { fail(res, error); }
+  try { if (!(await requireVisible(req, res, "opportunity", String(req.params.opportunityId)))) return; res.json(await calculateClose(req.currentOrg!.id, String(req.params.opportunityId), req)); } catch (error) { fail(res, error); }
 });
 
 const workflowShapeBase = z.object({
@@ -181,7 +229,20 @@ router.post("/orgs/:orgId/workflows/:workflowId/toggle", ...automationAdmin, asy
   res.json(row);
 });
 router.get("/orgs/:orgId/workflow-executions", ...automationGate, async (req, res) => {
-  res.json(await db.select().from(workflowExecutions).where(eq(workflowExecutions.orgId, req.currentOrg!.id)).orderBy(desc(workflowExecutions.createdAt)).limit(500));
+  const rows = await db
+    .select()
+    .from(workflowExecutions)
+    .where(eq(workflowExecutions.orgId, req.currentOrg!.id))
+    .orderBy(desc(workflowExecutions.createdAt))
+    .limit(500);
+  const visible = await Promise.all(
+    rows.map(async (row) =>
+      (await canSeeAutomationEntity(req, row.entityType, row.entityId))
+        ? row
+        : undefined,
+    ),
+  );
+  res.json(visible.filter((row): row is (typeof rows)[number] => Boolean(row)));
 });
 
 const taskShape = z.object({
@@ -205,7 +266,15 @@ async function validateTaskForeignIds(orgId: string, data: z.infer<typeof taskSh
   return null;
 }
 router.get("/orgs/:orgId/tasks", ...taskGate, async (req, res) => {
-  res.json(await db.select().from(tasks).where(eq(tasks.orgId, req.currentOrg!.id)).orderBy(desc(tasks.createdAt)));
+  const rows = await db
+    .select()
+    .from(tasks)
+    .where(eq(tasks.orgId, req.currentOrg!.id))
+    .orderBy(desc(tasks.createdAt));
+  const visible = await Promise.all(
+    rows.map(async (row) => ((await canSeeTask(req, row)) ? row : undefined)),
+  );
+  res.json(visible.filter((row): row is (typeof rows)[number] => Boolean(row)));
 });
 router.post("/orgs/:orgId/tasks", ...taskGate, async (req, res): Promise<void> => {
   const parsed = taskShape.safeParse(req.body);
@@ -221,12 +290,22 @@ router.patch("/orgs/:orgId/tasks/:taskId", ...taskGate, async (req, res): Promis
   const foreignError = await validateTaskForeignIds(req.currentOrg!.id, parsed.data as z.infer<typeof taskShape>);
   if (foreignError) { res.status(400).json({ error: foreignError }); return; }
   const updates = { ...parsed.data, completedAt: parsed.data.status === "completed" ? new Date() : undefined };
-  const [row] = await db.update(tasks).set(updates).where(and(eq(tasks.orgId, req.currentOrg!.id), eq(tasks.id, String(req.params.taskId)))).returning();
+  const visibility = taskVisibilityCondition(req);
+  const [row] = await db.update(tasks).set(updates).where(and(
+    eq(tasks.orgId, req.currentOrg!.id),
+    eq(tasks.id, String(req.params.taskId)),
+    ...(visibility ? [visibility] : []),
+  )).returning();
   if (!row) { res.status(404).json({ error: "Task not found" }); return; }
   res.json(row);
 });
 router.post("/orgs/:orgId/tasks/:taskId/complete", ...taskGate, async (req, res): Promise<void> => {
-  const [row] = await db.update(tasks).set({ status: "completed", completedAt: new Date() }).where(and(eq(tasks.orgId, req.currentOrg!.id), eq(tasks.id, String(req.params.taskId)))).returning();
+  const visibility = taskVisibilityCondition(req);
+  const [row] = await db.update(tasks).set({ status: "completed", completedAt: new Date() }).where(and(
+    eq(tasks.orgId, req.currentOrg!.id),
+    eq(tasks.id, String(req.params.taskId)),
+    ...(visibility ? [visibility] : []),
+  )).returning();
   if (!row) { res.status(404).json({ error: "Task not found" }); return; }
   res.json(row);
 });
@@ -264,7 +343,20 @@ router.post("/orgs/:orgId/agents/:agentId/run", ...automationAdmin, async (req, 
   try { res.json(await runAgent(req.currentOrg!.id, String(req.params.agentId), parsed.data.entityType, parsed.data.entityId, req.currentUser!.id)); } catch (error) { fail(res, error); }
 });
 router.get("/orgs/:orgId/agent-executions", ...automationGate, async (req, res) => {
-  res.json(await db.select().from(agentExecutions).where(eq(agentExecutions.orgId, req.currentOrg!.id)).orderBy(desc(agentExecutions.executedAt)).limit(500));
+  const rows = await db
+    .select()
+    .from(agentExecutions)
+    .where(eq(agentExecutions.orgId, req.currentOrg!.id))
+    .orderBy(desc(agentExecutions.executedAt))
+    .limit(500);
+  const visible = await Promise.all(
+    rows.map(async (row) =>
+      (await canSeeAutomationEntity(req, row.entityType, row.entityId))
+        ? row
+        : undefined,
+    ),
+  );
+  res.json(visible.filter((row): row is (typeof rows)[number] => Boolean(row)));
 });
 
 type ParsedCommand = { commands: { action: "query_largest_open_deal" | "schedule_call_task"; date?: string; time?: string }[] };

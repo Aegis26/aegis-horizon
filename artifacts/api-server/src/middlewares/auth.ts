@@ -16,10 +16,17 @@ import {
 import { featuresForPlan } from "../lib/catalog";
 import { getClientIp, isIpAllowed } from "../lib/clientIp";
 import {
+  acquireOrganizationSharedLock,
+  type OrganizationLock,
+} from "../lib/orgWriteLock";
+import {
   isPendingUserForVerifiedEmail,
   verifiedClerkEmails,
 } from "../lib/invitationIdentity";
 import { isViewerMutation } from "../services/crmAccess";
+import {
+  getOrganizationDeletionRecord,
+} from "../services/orgDeletionGuard";
 
 declare global {
   namespace Express {
@@ -27,6 +34,8 @@ declare global {
       currentUser?: User;
       currentOrg?: Organization;
       currentMembership?: OrgUser;
+      organizationDeletionCompleted?: boolean;
+      organizationWriteLock?: OrganizationLock;
     }
   }
 }
@@ -62,6 +71,7 @@ export async function attachUser(
   }
 
   let [user] = await db.select().from(users).where(eq(users.clerkId, auth.userId));
+  let createdThisRequest = false;
 
   if (!user) {
     const clerkUser = await clerkClient.users.getUser(auth.userId);
@@ -130,6 +140,7 @@ export async function attachUser(
           .insert(users)
           .values({ clerkId: auth.userId, email, fullName })
           .returning();
+        createdThisRequest = Boolean(user);
       } catch {
         // A concurrent first sign-in may have claimed the same identity.
         [user] = await db
@@ -150,7 +161,7 @@ export async function attachUser(
     .from(orgUsers)
     .where(eq(orgUsers.userId, user.id));
 
-  if (memberships.length === 0) {
+  if (memberships.length === 0 && createdThisRequest) {
     const orgName = user.fullName ? `${user.fullName}'s Workspace` : "My Workspace";
     const enabled = featuresForPlan("professional");
     const [org] = await db
@@ -183,6 +194,103 @@ function orgIdParam(req: Request): string {
   return Array.isArray(raw) ? raw[0] : raw;
 }
 
+function isOrganizationDeletionEndpoint(req: Request, orgId: string): boolean {
+  const paths = [
+    req.path,
+    `${req.baseUrl}${req.path}`,
+    req.originalUrl.split("?")[0],
+  ];
+  return paths.some(
+    (path) =>
+      path === `/orgs/${orgId}` ||
+      path === `/organizations/${orgId}` ||
+      path === `/api/orgs/${orgId}` ||
+      path === `/api/organizations/${orgId}`,
+  );
+}
+
+function isMutation(req: Request): boolean {
+  return !["GET", "HEAD", "OPTIONS"].includes(req.method.toUpperCase());
+}
+
+/** Blocks non-org-authenticated writers (for example API-token routes) while
+ * an organization is being deleted. attachOrg performs the same check for
+ * normal session routes. */
+export async function rejectOrganizationDeletionWrite(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (!isMutation(req)) {
+    next();
+    return;
+  }
+  const orgId = req.currentOrg?.id ?? req.currentApiToken?.orgId;
+  if (!orgId) {
+    next();
+    return;
+  }
+  if (!(await holdOrganizationSharedLock(req, res, orgId))) return;
+  if (await getOrganizationDeletionRecord(orgId)) {
+    await releaseOrganizationSharedLock(req);
+    res.status(409).json({
+      error: "Organization deletion is in progress; retry after it completes",
+    });
+    return;
+  }
+  next();
+}
+
+export async function holdOrganizationSharedLock(
+  req: Request,
+  res: Response,
+  orgId: string,
+): Promise<boolean> {
+  if (req.organizationWriteLock) return true;
+  try {
+    req.organizationWriteLock = await acquireOrganizationSharedLock(orgId);
+  } catch (error) {
+    req.log?.warn?.({ err: error }, "Organization writer lock unavailable");
+    res.status(503).json({
+      error: "Organization is busy; retry the request",
+    });
+    return false;
+  }
+  const release = () => {
+    void releaseOrganizationSharedLock(req).catch((error) => {
+      req.log?.warn?.({ err: error }, "Organization writer lock release failed");
+    });
+  };
+  res.once("finish", release);
+  res.once("close", release);
+  return true;
+}
+
+export async function releaseOrganizationSharedLock(
+  req: Request,
+): Promise<void> {
+  const lock = req.organizationWriteLock;
+  if (!lock) return;
+  req.organizationWriteLock = undefined;
+  await lock.release();
+}
+
+export async function acquireOrganizationMutationLock(
+  req: Request,
+  res: Response,
+  orgId: string,
+): Promise<boolean> {
+  if (!(await holdOrganizationSharedLock(req, res, orgId))) return false;
+  if (await getOrganizationDeletionRecord(orgId)) {
+    await releaseOrganizationSharedLock(req);
+    res.status(409).json({
+      error: "Organization deletion is in progress; retry after it completes",
+    });
+    return false;
+  }
+  return true;
+}
+
 /** Requires attachUser first. Loads the org from :orgId and verifies membership. */
 export async function attachOrg(
   req: Request,
@@ -200,6 +308,18 @@ export async function attachOrg(
     return;
   }
 
+  const deletionRecord = await getOrganizationDeletionRecord(orgId);
+  if (
+    deletionRecord?.status === "completed" &&
+    deletionRecord.requestedByUserId === user.id &&
+    req.method.toUpperCase() === "DELETE" &&
+    isOrganizationDeletionEndpoint(req, orgId)
+  ) {
+    req.organizationDeletionCompleted = true;
+    next();
+    return;
+  }
+
   const [membership] = await db
     .select()
     .from(orgUsers)
@@ -213,13 +333,52 @@ export async function attachOrg(
     return;
   }
 
-  const [org] = await db
+  let [org] = await db
     .select()
     .from(organizations)
     .where(eq(organizations.id, orgId));
   if (!org) {
     res.status(404).json({ error: "Organization not found" });
     return;
+  }
+
+  if (
+    isMutation(req) &&
+    !isOrganizationDeletionEndpoint(req, orgId) &&
+    !(await holdOrganizationSharedLock(req, res, orgId))
+  ) {
+    return;
+  }
+  const statusAfterLock = await getOrganizationDeletionRecord(orgId);
+  const deletionActive =
+    statusAfterLock !== null && statusAfterLock.status !== "completed";
+  if (req.organizationWriteLock && statusAfterLock) {
+    await releaseOrganizationSharedLock(req);
+    res.status(409).json({
+      error: "Organization deletion has already completed",
+    });
+    return;
+  }
+  if (
+    statusAfterLock &&
+    isMutation(req) &&
+    !isOrganizationDeletionEndpoint(req, orgId)
+  ) {
+    res.status(409).json({
+      error: "Organization deletion is in progress; retry after it completes",
+    });
+    return;
+  }
+  if (req.organizationWriteLock) {
+    [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, orgId));
+    if (!org) {
+      await releaseOrganizationSharedLock(req);
+      res.status(404).json({ error: "Organization not found" });
+      return;
+    }
   }
 
   const [securityPolicy] = await db
@@ -237,6 +396,15 @@ export async function attachOrg(
   // Viewer requests must be strictly read-only, including GET middleware.
   // Return the loaded context without plan-reconciliation writes.
   if (membership.role === "viewer") {
+    req.currentOrg = org;
+    req.currentMembership = membership;
+    next();
+    return;
+  }
+
+  // Plan reconciliation is a write and must not race a deletion, even for a
+  // read request that would otherwise trigger the reconciliation path.
+  if (deletionActive) {
     req.currentOrg = org;
     req.currentMembership = membership;
     next();
@@ -269,6 +437,10 @@ export async function attachOrg(
 /** Role gate: requires attachOrg first. */
 export function requireRole(minRole: keyof typeof ROLE_RANK) {
   return (req: Request, res: Response, next: NextFunction): void => {
+    if (req.organizationDeletionCompleted && minRole === "owner") {
+      next();
+      return;
+    }
     const membership = req.currentMembership;
     if (!membership || ROLE_RANK[membership.role] < ROLE_RANK[minRole]) {
       res.status(403).json({ error: "Insufficient role" });

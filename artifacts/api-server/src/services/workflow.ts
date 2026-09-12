@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import {
   accounts,
   aiRecommendations,
@@ -8,13 +8,16 @@ import {
   opportunities,
   opportunityStageHistory,
   orgUsers,
+  organizationDeletionLedger,
   tasks,
   workflowExecutions,
   workflows,
   type Workflow,
 } from "@workspace/db";
 import { logger } from "../lib/logger";
+import { withOrganizationSharedLock } from "../lib/orgWriteLock";
 import { appendAuditEvent } from "./audit";
+import { isOrganizationDeletionActive } from "./orgDeletionGuard";
 
 export type WorkflowTrigger = {
   type: "record_created" | "field_change" | "time_based";
@@ -195,11 +198,43 @@ export async function executeWorkflow(
   triggerData: Record<string, unknown>,
   actorUserId?: string,
 ) {
+  return withOrganizationSharedLock(workflow.orgId, () =>
+    executeWorkflowUnlocked(
+      workflow,
+      entityType,
+      entityId,
+      idempotencyKey,
+      triggerData,
+      actorUserId,
+    ),
+  );
+}
+
+async function executeWorkflowUnlocked(
+  workflow: Workflow,
+  entityType: string,
+  entityId: string,
+  idempotencyKey: string,
+  triggerData: Record<string, unknown>,
+  actorUserId?: string,
+) {
+  if (await isOrganizationDeletionActive(workflow.orgId)) {
+    throw new Error("Organization deletion is in progress");
+  }
   const dayStart = new Date();
   dayStart.setUTCHours(0, 0, 0, 0);
   // A transaction-scoped advisory lock serializes quota check + durable claim
   // for one workflow/day. Duplicate keys are claimed first and consume no quota.
   const [execution] = await db.transaction(async (tx) => {
+    const [deletion] = await tx
+      .select({ id: organizationDeletionLedger.id })
+      .from(organizationDeletionLedger)
+      .where(and(
+        eq(organizationDeletionLedger.organizationId, workflow.orgId),
+        ne(organizationDeletionLedger.status, "completed"),
+      ))
+      .for("update");
+    if (deletion) throw new Error("Organization deletion is in progress");
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${workflow.id}:${dayStart.toISOString().slice(0, 10)}`}))`);
     const [alreadyClaimed] = await tx.select({ id: workflowExecutions.id }).from(workflowExecutions)
       .where(and(eq(workflowExecutions.orgId, workflow.orgId), eq(workflowExecutions.idempotencyKey, idempotencyKey)));
@@ -234,6 +269,16 @@ export async function publishAutomationEvent(input: {
   orgId: string; eventKey: string; eventType: string; entityType: string; entityId: string;
   payload?: Record<string, unknown>; actorUserId?: string;
 }) {
+  return withOrganizationSharedLock(input.orgId, () =>
+    publishAutomationEventUnlocked(input),
+  );
+}
+
+async function publishAutomationEventUnlocked(input: {
+  orgId: string; eventKey: string; eventType: string; entityType: string; entityId: string;
+  payload?: Record<string, unknown>; actorUserId?: string;
+}) {
+  if (await isOrganizationDeletionActive(input.orgId)) return;
   let eventId: string | undefined;
   try {
     const [event] = await db.insert(automationEvents).values({ ...input, payload: input.payload ?? {} }).onConflictDoNothing().returning();
@@ -268,6 +313,7 @@ export function startWorkflowScheduler() {
 async function runTimeBasedWorkflows() {
   const rows = await db.select().from(workflows).where(eq(workflows.active, true));
   for (const workflow of rows) {
+    if (await isOrganizationDeletionActive(workflow.orgId)) continue;
     const trigger = workflow.trigger as WorkflowTrigger | null;
     if (!trigger || trigger.type !== "time_based") continue;
     let entities: { id: string }[] = [];

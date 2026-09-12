@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ClerkProvider, SignIn, SignUp, Show, useAuth } from '@clerk/react';
+import { ClerkProvider, SignIn, SignUp, Show, useAuth, useClerk } from '@clerk/react';
 import { shadcn } from '@clerk/themes';
 import { Switch, Route, Redirect, useLocation, Router as WouterRouter } from 'wouter';
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
@@ -30,9 +30,11 @@ import { Button } from "@/components/ui/button";
 import {
   getGetMeQueryKey,
   getGetMeQueryOptions,
+  useGetMe,
 } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { getSafeAuthRedirectUrl, isInvitationAuthRedirect } from "@/lib/auth-redirect";
+import { belongsToAuthenticatedUser } from "@/lib/auth-scope";
 
 const queryClient = new QueryClient();
 
@@ -230,15 +232,103 @@ function ClerkQueryClientCacheInvalidator() {
 }
 
 function HomeRedirect() {
+  const { isLoaded, isSignedIn, userId } = useAuth();
+  const { data: me, isLoading, isError, refetch } = useGetMe({
+    query: {
+      enabled: isLoaded && isSignedIn === true && Boolean(userId),
+      queryKey: getGetMeQueryKey(),
+    },
+  });
+
+  if (!isLoaded) {
+    return <HomeStatus message="Loading your account..." />;
+  }
+  if (!isSignedIn) {
+    return <Landing />;
+  }
+  if (isError) {
+    return (
+      <HomeStatus
+        message="We could not load your workspace."
+        actionLabel="Try again"
+        onAction={() => void refetch()}
+      />
+    );
+  }
+  if (isLoading || !me) {
+    return <HomeStatus message="Loading your workspace..." />;
+  }
+  if (!belongsToAuthenticatedUser(me.user, userId)) {
+    return <HomeStatus message="Loading your account..." />;
+  }
+  if (me.orgs.length === 0) {
+    return <NoOrganizationHome />;
+  }
+
+  return <Redirect to="/dashboard" />;
+}
+
+function HomeStatus({
+  message,
+  actionLabel,
+  onAction,
+}: {
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
-    <>
-      <Show when="signed-in">
-        <Redirect to="/dashboard" />
-      </Show>
-      <Show when="signed-out">
-        <Landing />
-      </Show>
-    </>
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <div className="w-full max-w-md space-y-4 text-center">
+        <img
+          src={`${basePath}/logo-icon.png`}
+          alt="Aegis Horizon"
+          className="mx-auto h-12 w-12 object-contain"
+        />
+        <p className="text-sm text-muted-foreground">{message}</p>
+        {actionLabel && onAction && (
+          <Button variant="outline" onClick={onAction}>
+            {actionLabel}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NoOrganizationHome() {
+  const { signOut } = useClerk();
+  const [showLanding, setShowLanding] = useState(false);
+
+  if (showLanding) {
+    return <Landing />;
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <div className="w-full max-w-lg space-y-6 rounded-2xl border border-primary/20 bg-card p-8 text-center shadow-xl">
+        <img
+          src={`${basePath}/logo-icon.png`}
+          alt="Aegis Horizon"
+          className="mx-auto h-12 w-12 object-contain"
+        />
+        <div className="space-y-2">
+          <h1 className="font-display text-2xl font-bold">Your organization was deleted</h1>
+          <p className="text-sm text-muted-foreground">
+            Your organization and its data are gone, but your login account is still active.
+          </p>
+        </div>
+        <div className="flex flex-col justify-center gap-3 sm:flex-row">
+          <Button onClick={() => setShowLanding(true)}>Continue to landing page</Button>
+          <Button
+            variant="outline"
+            onClick={() => void signOut({ redirectUrl: import.meta.env.BASE_URL })}
+          >
+            Sign out
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

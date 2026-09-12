@@ -1,11 +1,18 @@
 import { randomUUID } from 'crypto';
 import { Readable } from 'stream';
 import { File, Storage } from '@google-cloud/storage';
+import { eq, inArray } from 'drizzle-orm';
+import {
+  db,
+  organizationObjectBindings,
+} from '@workspace/db';
 
 import {
   canAccessObject,
   getObjectAclPolicy,
-  ObjectAclPolicy,
+  isPrivatelyBoundOnlyToOrganization,
+  organizationBindings,
+  ObjectAccessGroupType,
   ObjectPermission,
   setObjectAclPolicy,
 } from './objectAcl';
@@ -61,7 +68,7 @@ export class ObjectStorageService {
   }
 
   getPrivateObjectDir(): string {
-    const dir = process.env.PRIVATE_OBJECT_DIR || '';
+    const dir = process.env.PRIVATE_OBJECT_DIR?.trim() || '';
     if (!dir) {
       throw new Error(
         "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
@@ -69,6 +76,10 @@ export class ObjectStorageService {
       );
     }
     return dir;
+  }
+
+  hasPrivateObjectDir(): boolean {
+    return Boolean(process.env.PRIVATE_OBJECT_DIR?.trim());
   }
 
   async searchPublicObject(filePath: string): Promise<File | null> {
@@ -159,6 +170,110 @@ export class ObjectStorageService {
     return objectFile;
   }
 
+  /**
+   * Deletes only an object whose private ACL explicitly binds it to this
+   * organization.  Database references are treated as untrusted hints: a
+   * corrupted or tampered row must never make this method delete another
+   * tenant's object.
+   */
+  async deleteObjectEntityForOrganization(
+    objectPath: string,
+    orgId: string,
+  ): Promise<void> {
+    if (!objectPath.startsWith('/objects/')) {
+      throw new Error('Invalid private object path');
+    }
+    const entityId = objectPath.slice('/objects/'.length);
+    if (
+      !entityId ||
+      entityId.split('/').some((part) => !part || part === '.' || part === '..') ||
+      entityId.includes('\\')
+    ) {
+      throw new Error('Invalid private object path');
+    }
+    const [authoritativeBinding] = await db
+      .select({
+        organizationId: organizationObjectBindings.organizationId,
+      })
+      .from(organizationObjectBindings)
+      .where(eq(organizationObjectBindings.objectPath, objectPath));
+    if (authoritativeBinding && authoritativeBinding.organizationId !== orgId) {
+      throw new Error('Object is authoritatively bound to another organization');
+    }
+
+    let objectFile: File;
+    try {
+      objectFile = await this.getObjectEntityFile(objectPath);
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) return;
+      throw error;
+    }
+
+    const aclPolicy = await getObjectAclPolicy(objectFile);
+    const boundToOrganization = isPrivatelyBoundOnlyToOrganization(
+      aclPolicy,
+      orgId,
+    );
+    if (!boundToOrganization) {
+      throw new Error('Object is not privately bound to this organization');
+    }
+
+    await objectFile.delete({ ignoreNotFound: true });
+  }
+
+  /**
+   * Finds private objects that still carry this organization's ACL, including
+   * uploaded objects whose logical database row was lost before association.
+   * Objects without a valid org ACL are deliberately ignored.
+   */
+  async listObjectEntitiesForOrganization(orgId: string): Promise<string[]> {
+    const privateDir = this.getPrivateObjectDir();
+    const { bucketName, objectName } = parseObjectPath(privateDir);
+    const prefix = objectName
+      ? `${objectName.replace(/\/+$/, '')}/`
+      : '';
+    const [files] = await objectStorageClient
+      .bucket(bucketName)
+      .getFiles({ prefix });
+    const paths: string[] = [];
+    for (const file of files) {
+      const aclPolicy = await getObjectAclPolicy(file);
+      const boundToOrganization = isPrivatelyBoundOnlyToOrganization(
+        aclPolicy,
+        orgId,
+      );
+      if (!boundToOrganization) continue;
+      const relative = objectName
+        ? file.name.slice(`${objectName.replace(/\/+$/, '')}/`.length)
+        : file.name;
+      if (relative && !relative.includes('..')) {
+        paths.push(`/objects/${relative}`);
+      }
+    }
+    if (paths.length > 0) {
+      const authoritativeBindings = await db
+        .select({
+          objectPath: organizationObjectBindings.objectPath,
+          organizationId: organizationObjectBindings.organizationId,
+        })
+        .from(organizationObjectBindings)
+        .where(inArray(organizationObjectBindings.objectPath, paths));
+      const bindingByPath = new Map(
+        authoritativeBindings.map((binding) => [
+          binding.objectPath,
+          binding.organizationId,
+        ]),
+      );
+      for (const objectPath of paths) {
+        const authoritativeOrgId = bindingByPath.get(objectPath);
+        if (authoritativeOrgId && authoritativeOrgId !== orgId) {
+          throw new Error('Object is authoritatively bound to another organization');
+        }
+      }
+    }
+    return paths;
+  }
+
   normalizeObjectEntityPath(rawPath: string): string {
     if (!rawPath.startsWith('https://storage.googleapis.com/')) {
       return rawPath;
@@ -180,18 +295,75 @@ export class ObjectStorageService {
     return `/objects/${entityId}`;
   }
 
-  async trySetObjectEntityAclPolicy(
+  /**
+   * Binds an uploaded object exactly once. Existing metadata is never
+   * overwritten: a path already bound to another owner or organization, or
+   * ambiguously bound to multiple organizations, is rejected.
+   */
+  async bindObjectEntityToOrganization(
     rawPath: string,
-    aclPolicy: ObjectAclPolicy,
+    orgId: string,
+    clerkUserId: string,
   ): Promise<string> {
     const normalizedPath = this.normalizeObjectEntityPath(rawPath);
-    if (!normalizedPath.startsWith('/')) {
-      return normalizedPath;
+    if (!normalizedPath.startsWith('/objects/')) {
+      throw new Error('Invalid private object path');
     }
-
     const objectFile = await this.getObjectEntityFile(normalizedPath);
-    await setObjectAclPolicy(objectFile, aclPolicy);
-    return normalizedPath;
+    return db.transaction(async (tx) => {
+      const [binding] = await tx
+        .select()
+        .from(organizationObjectBindings)
+        .where(eq(organizationObjectBindings.objectPath, normalizedPath))
+        .for('update');
+      if (binding) {
+        if (
+          binding.organizationId !== orgId ||
+          binding.ownerUserId !== clerkUserId
+        ) {
+          throw new Error('Object is already bound to a different owner or organization');
+        }
+        const existing = await getObjectAclPolicy(objectFile);
+        if (!isPrivatelyBoundOnlyToOrganization(existing, orgId) ||
+            existing?.owner !== clerkUserId) {
+          throw new Error('Object ACL binding is invalid or ambiguous');
+        }
+        return normalizedPath;
+      }
+
+      const existing = await getObjectAclPolicy(objectFile);
+      if (existing) {
+        const boundOrganizationIds = organizationBindings(existing);
+        if (
+          existing.visibility !== 'private' ||
+          boundOrganizationIds.length !== 1 ||
+          boundOrganizationIds[0] !== orgId ||
+          existing.owner !== clerkUserId
+        ) {
+          throw new Error('Object is already bound to a different owner or organization');
+        }
+      }
+
+      await tx.insert(organizationObjectBindings).values({
+        id: randomUUID(),
+        objectPath: normalizedPath,
+        organizationId: orgId,
+        ownerUserId: clerkUserId,
+      });
+      if (!existing) {
+        await setObjectAclPolicy(objectFile, {
+          owner: clerkUserId,
+          visibility: 'private',
+          aclRules: [
+            {
+              group: { type: ObjectAccessGroupType.ORG_MEMBER, id: orgId },
+              permission: ObjectPermission.READ,
+            },
+          ],
+        });
+      }
+      return normalizedPath;
+    });
   }
 
   async canAccessObjectEntity({

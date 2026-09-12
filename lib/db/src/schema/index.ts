@@ -6,3 +6,4 @@ export * from "./platform";
 export * from "./stubs";
 export * from "./automation";
 export * from "./enterprise";
+export * from "./orgDeletion";

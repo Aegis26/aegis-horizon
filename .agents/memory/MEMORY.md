@@ -8,3 +8,4 @@
 - [External Clerk on Railway](external-clerk-railway.md) — Railway uses external Clerk keys directly; its Clerk custom-domain DNS must remain verified.
 - [CRM row access policy](crm-row-access-policy.md) — users see owned-or-created rows; viewers owned-only; unassigned rows are management-only.
 - [Invitation compatibility](invitation-semantics.md) — email delivery preserves pre-provisioned membership; acceptance-gated access needs an explicit migration.
+- [Workspace deletion safety](workspace-deletion-safety.md) — drain admitted writers before external cleanup; separate advisory-lock pools and preserve only minimal deletion audit.

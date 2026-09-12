@@ -1,5 +1,5 @@
-import { and, eq, isNull, lte } from "drizzle-orm";
-import { db, reportSchedules } from "@workspace/db";
+import { and, eq, isNull, lte, ne, notExists } from "drizzle-orm";
+import { db, organizationDeletionLedger, reportSchedules } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { executeScheduledReport } from "../routes/reports";
 
@@ -14,7 +14,19 @@ export function startReportScheduler() {
 async function runDueReports() {
   const now = new Date();
   const due = await db.select({ id: reportSchedules.id }).from(reportSchedules)
-    .where(and(eq(reportSchedules.enabled, true), lte(reportSchedules.nextRunAt, now), isNull(reportSchedules.claimToken))).limit(25);
+    .where(and(
+      eq(reportSchedules.enabled, true),
+      lte(reportSchedules.nextRunAt, now),
+      isNull(reportSchedules.claimToken),
+      notExists(
+        db.select({ id: organizationDeletionLedger.id })
+          .from(organizationDeletionLedger)
+          .where(and(
+            eq(organizationDeletionLedger.organizationId, reportSchedules.orgId),
+            ne(organizationDeletionLedger.status, "completed"),
+          )),
+      ),
+    )).limit(25);
   for (const item of due) {
     const claimToken = crypto.randomUUID();
     // Compare-and-set claim makes concurrent interval workers safe without

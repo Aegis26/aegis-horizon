@@ -65,13 +65,6 @@ import {
 } from "../services/crmAccess";
 import { isOrgMemberId } from "../services/orgValidation";
 import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
-import {
-  getObjectAclPolicy,
-  setObjectAclPolicy,
-  ObjectAccessGroupType,
-  ObjectPermission,
-} from "../lib/objectAcl";
-
 const router: IRouter = Router();
 const objectStorage = new ObjectStorageService();
 
@@ -88,37 +81,19 @@ async function secureAttachmentPath(
   if (!objectPath.startsWith("/objects/")) {
     return "Invalid attachment path";
   }
-  let objectFile;
   try {
-    objectFile = await objectStorage.getObjectEntityFile(objectPath);
+    return await objectStorage.bindObjectEntityToOrganization(
+      objectPath,
+      req.currentOrg!.id,
+      req.currentUser!.clerkId,
+    ).then(() => null);
   } catch (err) {
     if (err instanceof ObjectNotFoundError) return "Attachment object not found";
-    throw err;
-  }
-  const clerkId = req.currentUser!.clerkId;
-  const orgId = req.currentOrg!.id;
-  const existing = await getObjectAclPolicy(objectFile);
-  if (existing) {
-    const boundToThisOrg = existing.aclRules?.some(
-      (r) =>
-        r.group.type === ObjectAccessGroupType.ORG_MEMBER && r.group.id === orgId,
-    );
-    if (!boundToThisOrg && existing.owner !== clerkId) {
+    if ((err as Error).message.includes("already bound")) {
       return "Attachment does not belong to this organization";
     }
-    if (boundToThisOrg) return null; // already bound correctly
+    throw err;
   }
-  await setObjectAclPolicy(objectFile, {
-    owner: clerkId ?? "",
-    visibility: "private",
-    aclRules: [
-      {
-        group: { type: ObjectAccessGroupType.ORG_MEMBER, id: orgId },
-        permission: ObjectPermission.READ,
-      },
-    ],
-  });
-  return null;
 }
 
 /* ----------------------------- serializers ----------------------------- */

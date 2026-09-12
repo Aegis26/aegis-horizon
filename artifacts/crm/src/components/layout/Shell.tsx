@@ -51,7 +51,7 @@ const NAV_ITEMS = [
 ];
 
 export function Shell({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const { isLoaded: authLoaded, isSignedIn, userId } = useAuth();
@@ -75,7 +75,11 @@ export function Shell({ children }: { children: ReactNode }) {
   // never render a persisted org selection while it belongs to another
   // account or while the current account's memberships are still loading.
   const meBelongsToSignedInUser = belongsToAuthenticatedUser(me?.user, userId);
-  const membershipsReady = authLoaded && isSignedIn === true && meBelongsToSignedInUser;
+  const membershipsReady =
+    authLoaded &&
+    isSignedIn === true &&
+    Boolean(userId) &&
+    meBelongsToSignedInUser;
 
   // Set default org if none selected (in an effect — updating the store during
   // render triggers React's "cannot update a component while rendering" warning)
@@ -87,6 +91,25 @@ export function Shell({ children }: { children: ReactNode }) {
       setSelectedOrgId(orgs[0].org.id);
     }
   }, [membershipsReady, orgs, selectedMembership, selectedOrgId, setSelectedOrgId]);
+
+  useEffect(() => {
+    if (!membershipsReady || orgs.length > 0) return;
+    setSelectedOrgId(null);
+    if (location !== "/") {
+      setLocation("/");
+    }
+  }, [location, membershipsReady, orgs.length, setLocation, setSelectedOrgId]);
+
+  if (membershipsReady && orgs.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <Building2 className="h-8 w-8 text-primary/50" aria-hidden="true" />
+          <p className="text-muted-foreground text-sm font-medium">Returning home...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!membershipsReady || !currentOrg || !selectedOrgId) {
     return (

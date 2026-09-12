@@ -10,6 +10,7 @@ import {
 import { db, organizations, orgUsers, users } from "@workspace/db";
 import {
   attachUser,
+  acquireOrganizationMutationLock,
 } from "../middlewares/auth";
 import {
   invitationAcceptanceDecision,
@@ -184,6 +185,7 @@ router.post(
       res.status(400).json({ error: "Invalid or expired invitation" });
       return;
     }
+    if (!(await acquireOrganizationMutationLock(req, res, token.orgId))) return;
 
     const authUserId = getAuth(req).userId;
     const localUser = req.currentUser;

@@ -4,6 +4,8 @@ import test from "node:test";
 import type { Lead, LeadCreate } from "@workspace/api-client-react";
 import {
   createLeadRequestOptions,
+  shouldDiscardQueuedLeadUpdate,
+  shouldPurgeQueuedLead,
   syncLeadQueue,
   syncLeadQueueForUser,
   type LeadQueueSyncDependencies,
@@ -133,5 +135,42 @@ test("keeps sync promises separate for simultaneous Clerk identities", async () 
   assert.deepEqual(
     sentTokens.sort(),
     [tokenFor("clerk-a"), tokenFor("clerk-b")].sort(),
+  );
+});
+
+test("organization purge only selects the deleted org's drafts", () => {
+  const records = [
+    queuedLead("deleted-a", "clerk-a"),
+    { ...queuedLead("other-org", "clerk-a"), orgId: "other-org" },
+    { ...queuedLead("deleted-b", "clerk-b"), orgId: "shared-org" },
+  ];
+
+  const deleted = records
+    .filter((record) => shouldPurgeQueuedLead(record, "shared-org"))
+    .map((record) => record.id);
+  const preserved = records
+    .filter((record) => !shouldPurgeQueuedLead(record, "shared-org"))
+    .map((record) => record.id);
+
+  assert.deepEqual(deleted, ["deleted-a", "deleted-b"]);
+  assert.deepEqual(preserved, ["other-org"]);
+});
+
+test("in-flight updates for a purged org are discarded", () => {
+  const purgedOrgIds = new Set(["shared-org"]);
+
+  assert.equal(
+    shouldDiscardQueuedLeadUpdate(
+      { orgId: "shared-org" },
+      purgedOrgIds,
+    ),
+    true,
+  );
+  assert.equal(
+    shouldDiscardQueuedLeadUpdate(
+      { orgId: "other-org" },
+      purgedOrgIds,
+    ),
+    false,
   );
 });

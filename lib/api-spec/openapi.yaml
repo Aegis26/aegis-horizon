@@ -133,6 +133,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Organization"
+    delete:
+      operationId: deleteOrganization
+      tags: [orgs]
+      summary: Permanently delete an organization (owner only)
+      description: Requires the authenticated organization owner to type DELETE. All organization data and private objects are permanently removed; global user accounts are preserved.
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationDeletionConfirmation"
+      responses:
+        "200":
+          description: Organization deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationDeletionResponse"
+        "400":
+          description: Confirmation must be exactly DELETE
+        "401":
+          description: Not authenticated
+        "403":
+          description: Only the organization owner can delete
+        "404":
+          description: Organization not found
+        "409":
+          description: A deletion is already in progress
+        "502":
+          description: An external deletion dependency failed; retry is safe
+        "500":
+          description: The relational purge failed and was rolled back; retry is safe
+  /organizations/{orgId}:
+    delete:
+      operationId: deleteOrganizationAlias
+      tags: [orgs]
+      summary: Permanently delete an organization (owner-only alias)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationDeletionConfirmation"
+      responses:
+        "200":
+          description: Organization deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationDeletionResponse"
+        "400":
+          description: Confirmation must be exactly DELETE
+        "401":
+          description: Not authenticated
+        "403":
+          description: Only the organization owner can delete
+        "404":
+          description: Organization not found
+        "409":
+          description: A deletion is already in progress
+        "502":
+          description: An external deletion dependency failed; retry is safe
+        "500":
+          description: The relational purge failed and was rolled back; retry is safe
   /orgs/{orgId}/members:
     get:
       operationId: listMembers
@@ -2392,6 +2460,18 @@ components:
         plan:
           type: string
           enum: [essential, professional, enterprise, custom]
+    OrganizationDeletionConfirmation:
+      type: object
+      additionalProperties: false
+      required: [confirmation]
+      properties:
+        confirmation: { type: string, enum: [DELETE] }
+    OrganizationDeletionResponse:
+      type: object
+      additionalProperties: false
+      required: [success]
+      properties:
+        success: { type: boolean, enum: [true] }
     Member:
       type: object
       required: [id, role, user]

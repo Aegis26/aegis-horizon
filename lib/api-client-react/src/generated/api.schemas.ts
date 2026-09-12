@@ -654,6 +654,21 @@ export interface OrganizationUpdate {
   plan?: OrganizationUpdatePlan;
 }
 
+export type OrganizationDeletionConfirmationConfirmation = typeof OrganizationDeletionConfirmationConfirmation[keyof typeof OrganizationDeletionConfirmationConfirmation];
+
+
+export const OrganizationDeletionConfirmationConfirmation = {
+  DELETE: 'DELETE',
+} as const;
+
+export interface OrganizationDeletionConfirmation {
+  confirmation: OrganizationDeletionConfirmationConfirmation;
+}
+
+export interface OrganizationDeletionResponse {
+  success: true;
+}
+
 export type MemberRole = typeof MemberRole[keyof typeof MemberRole];
 
 

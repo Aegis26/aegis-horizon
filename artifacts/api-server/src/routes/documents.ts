@@ -5,7 +5,12 @@ import { z } from "zod/v4";
 import PDFDocument from "pdfkit";
 import { getAuth } from "@clerk/express";
 import { accounts, db, documents, documentVersions, opportunities, signatureAuditEvents, signatureRequests, signatureSigners } from "@workspace/db";
-import { attachOrg, attachUser, requireRole } from "../middlewares/auth";
+import {
+  attachOrg,
+  attachUser,
+  acquireOrganizationMutationLock,
+  requireRole,
+} from "../middlewares/auth";
 import { ObjectAccessGroupType, ObjectPermission } from "../lib/objectAcl";
 import { ObjectStorageService, objectStorageClient } from "../lib/objectStorage";
 import { sendEmail } from "../lib/email";
@@ -90,7 +95,9 @@ async function owned(req: Request) {
   const [document] = await db.select().from(documents).where(and(...where));
   return document;
 }
-async function bind(path: string, orgId: string, clerkId: string) { return new ObjectStorageService().trySetObjectEntityAclPolicy(path, { owner: clerkId, visibility: "private", aclRules: [{ group: { type: ObjectAccessGroupType.ORG_MEMBER, id: orgId }, permission: ObjectPermission.READ }] }); }
+async function bind(path: string, orgId: string, clerkId: string) {
+  return new ObjectStorageService().bindObjectEntityToOrganization(path, orgId, clerkId);
+}
 async function signedCertificate(input: { orgId: string; documentId: string; sourceVersion: number; sourcePath: string; requestId: string; signers: typeof signatureSigners.$inferSelect[]; auditIds: string[] }) {
   const text = [
     "Aegis Horizon — Signed Document Certificate", `Document ID: ${input.documentId}`, `Source version: ${input.sourceVersion}`,
@@ -196,11 +203,13 @@ router.post("/orgs/:orgId/documents/:documentId/signature-requests", ...gate, as
   }
   res.status(201).json({ request, signingLinks: issued });
 });
-router.get("/signatures/:token", async (req, res): Promise<void> => { const hash = createHash("sha256").update(req.params.token as string).digest("hex"); const [signer] = await db.select().from(signatureSigners).where(eq(signatureSigners.tokenHash, hash)); if (!signer) { res.status(404).json({ error: "Signature request not found" }); return; } const [request] = await db.select().from(signatureRequests).where(and(eq(signatureRequests.id, signer.signatureRequestId), eq(signatureRequests.status, "pending"))); if (!request || (request.expiresAt && request.expiresAt < new Date())) { res.status(410).json({ error: "Signature request expired or unavailable" }); return; } await db.update(signatureSigners).set({ viewedAt: signer.viewedAt ?? new Date() }).where(eq(signatureSigners.id, signer.id)); res.json({ signer: { name: signer.name, email: signer.email }, request: { id: request.id, message: request.message, expiresAt: request.expiresAt } }); });
+router.get("/signatures/:token", async (req, res): Promise<void> => { const hash = createHash("sha256").update(req.params.token as string).digest("hex"); const [signer] = await db.select().from(signatureSigners).where(eq(signatureSigners.tokenHash, hash)); if (!signer) { res.status(404).json({ error: "Signature request not found" }); return; } const [request] = await db.select().from(signatureRequests).where(and(eq(signatureRequests.id, signer.signatureRequestId), eq(signatureRequests.status, "pending"))); if (!request || (request.expiresAt && request.expiresAt < new Date())) { res.status(410).json({ error: "Signature request expired or unavailable" }); return; } if (!(await acquireOrganizationMutationLock(req, res, signer.orgId))) return; await db.update(signatureSigners).set({ viewedAt: signer.viewedAt ?? new Date() }).where(eq(signatureSigners.id, signer.id)); res.json({ signer: { name: signer.name, email: signer.email }, request: { id: request.id, message: request.message, expiresAt: request.expiresAt } }); });
 router.post("/signatures/:token/complete", async (req, res): Promise<void> => {
   const parsed = z.object({ typedSignature: z.string().min(1).max(200), consent: z.literal(true) }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Typed signature and consent are required" }); return; }
   const hash = createHash("sha256").update(req.params.token as string).digest("hex"); const now = new Date();
+  const [targetSigner] = await db.select({ orgId: signatureSigners.orgId }).from(signatureSigners).where(and(eq(signatureSigners.tokenHash, hash), eq(signatureSigners.status, "pending")));
+  if (targetSigner && !(await acquireOrganizationMutationLock(req, res, targetSigner.orgId))) return;
   const [signer] = await db.update(signatureSigners).set({ status: "signed", signedAt: now, signingIp: getClientIp(req), userAgent: req.get("user-agent")?.slice(0, 1000), signatureData: { typedSignature: parsed.data.typedSignature, consent: true } }).where(and(eq(signatureSigners.tokenHash, hash), eq(signatureSigners.status, "pending"))).returning();
   if (!signer) { res.status(409).json({ error: "Signature link is invalid or already used" }); return; }
   const [request] = await db.select().from(signatureRequests).where(eq(signatureRequests.id, signer.signatureRequestId));

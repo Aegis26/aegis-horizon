@@ -136,6 +136,39 @@ export const UpdateOrgResponse = zod.object({
 
 
 /**
+ * Requires the authenticated organization owner to type DELETE. All organization data and private objects are permanently removed; global user accounts are preserved.
+ * @summary Permanently delete an organization (owner only)
+ */
+export const DeleteOrganizationParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const DeleteOrganizationBody = zod.object({
+  "confirmation": zod.enum(['DELETE'])
+})
+
+export const DeleteOrganizationResponse = zod.object({
+  "success": zod.literal(true)
+})
+
+
+/**
+ * @summary Permanently delete an organization (owner-only alias)
+ */
+export const DeleteOrganizationAliasParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const DeleteOrganizationAliasBody = zod.object({
+  "confirmation": zod.enum(['DELETE'])
+})
+
+export const DeleteOrganizationAliasResponse = zod.object({
+  "success": zod.literal(true)
+})
+
+
+/**
  * @summary List org members
  */
 export const ListMembersParams = zod.object({

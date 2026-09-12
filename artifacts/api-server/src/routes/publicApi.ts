@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
 import { db, leads } from "@workspace/db";
 import { requireApiToken } from "../middlewares/apiToken";
+import { rejectOrganizationDeletionWrite } from "../middlewares/auth";
 import { appendAuditEvent } from "../services/audit";
 
 const router: IRouter = Router();
@@ -19,7 +20,14 @@ const leadInput = z.object({
   productInterest: z.string().max(500).nullable().optional(),
 }).strict();
 
-router.post("/orgs/:orgId/leads/batch", requireApiToken, async (req, res): Promise<void> => {
+router.post("/orgs/:orgId/leads/batch", requireApiToken, (req, res, next) => {
+  const orgId = req.params.orgId as string;
+  if (!/^[0-9a-f-]{36}$/i.test(orgId) || req.currentApiToken!.orgId !== orgId) {
+    res.status(403).json({ error: "API token is not authorized for this organization" });
+    return;
+  }
+  next();
+}, rejectOrganizationDeletionWrite, async (req, res): Promise<void> => {
   const orgId = req.params.orgId as string;
   if (!/^[0-9a-f-]{36}$/i.test(orgId) || req.currentApiToken!.orgId !== orgId) {
     res.status(403).json({ error: "API token is not authorized for this organization" });

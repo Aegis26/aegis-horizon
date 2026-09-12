@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { and, eq } from "drizzle-orm";
 import {
   db,
@@ -20,6 +20,8 @@ import {
   ListFeaturesResponse,
   UpdateFeaturesBody,
   UpdateFeaturesResponse,
+  DeleteOrganizationBody,
+  DeleteOrganizationResponse,
 } from "@workspace/api-zod";
 import {
   attachUser,
@@ -34,6 +36,10 @@ import {
   invitationLink,
 } from "../lib/invitations";
 import { logger } from "../lib/logger";
+import {
+  deleteOrganization,
+  OrganizationDeletionError,
+} from "../services/orgDeletion";
 
 const router: IRouter = Router();
 
@@ -96,6 +102,72 @@ function memberResponse(
 router.get("/orgs/:orgId", async (req, res): Promise<void> => {
   res.json(GetOrgResponse.parse(serializeOrg(req.currentOrg!)));
 });
+
+async function handleOrganizationDeletion(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const parsed = DeleteOrganizationBody.safeParse(req.body);
+  if (
+    !parsed.success ||
+    !req.body ||
+    typeof req.body !== "object" ||
+    Object.keys(req.body).length !== 1
+  ) {
+    res.status(400).json({ error: 'Type "DELETE" in the confirmation field' });
+    return;
+  }
+
+  if (req.organizationDeletionCompleted) {
+    res.json(DeleteOrganizationResponse.parse({ success: true }));
+    return;
+  }
+
+  try {
+    await deleteOrganization(req.params.orgId as string, req.currentUser!.id);
+    res.json(DeleteOrganizationResponse.parse({ success: true }));
+  } catch (error) {
+    if (!(error instanceof OrganizationDeletionError)) throw error;
+    if (error.code === "not_found") {
+      res.status(404).json({ error: "Organization not found" });
+      return;
+    }
+    if (error.code === "forbidden") {
+      res.status(403).json({ error: "Only the organization owner can delete" });
+      return;
+    }
+    if (error.code === "in_progress") {
+      res.status(409).json({ error: "Organization deletion is already in progress" });
+      return;
+    }
+    if (error.code === "relational_delete_failed") {
+      res.status(500).json({
+        error: "Organization deletion was not completed. Retry is safe.",
+      });
+      return;
+    }
+    res.status(502).json({
+      error: "Organization deletion was not completed. Retry is safe.",
+    });
+  }
+}
+
+// Canonical route. The org router middleware has already attached the user and
+// organization context; requireRole("owner") is an exact owner-only gate.
+router.delete(
+  "/orgs/:orgId",
+  requireRole("owner"),
+  handleOrganizationDeletion,
+);
+
+// Compatibility alias for clients using the long-form resource name.
+router.delete(
+  "/organizations/:orgId",
+  attachUser,
+  attachOrg,
+  requireRole("owner"),
+  handleOrganizationDeletion,
+);
 
 router.patch(
   "/orgs/:orgId",

@@ -42,6 +42,25 @@ export interface ObjectAclPolicy {
   aclRules?: Array<ObjectAclRule>;
 }
 
+export function organizationBindings(aclPolicy: ObjectAclPolicy): string[] {
+  return [
+    ...new Set(
+      (aclPolicy.aclRules ?? [])
+        .filter((rule) => rule.group.type === ObjectAccessGroupType.ORG_MEMBER)
+        .map((rule) => rule.group.id),
+    ),
+  ];
+}
+
+export function isPrivatelyBoundOnlyToOrganization(
+  aclPolicy: ObjectAclPolicy | null,
+  orgId: string,
+): boolean {
+  if (!aclPolicy || aclPolicy.visibility !== "private") return false;
+  const bindings = organizationBindings(aclPolicy);
+  return bindings.length === 1 && bindings[0] === orgId;
+}
+
 function isPermissionAllowed(
   requested: ObjectPermission,
   granted: ObjectPermission,

@@ -8,7 +8,7 @@ import {
   useListWebhooks, useCreateWebhook, useDeleteWebhook, getListWebhooksQueryKey, useRevokeApiToken, useTestWebhookDelivery,
   useListAuditEvents, getListAuditEventsQueryKey,
   useListIndustryTemplates, useApplyIndustryTemplate, getListIndustryTemplatesQueryKey,
-  useListWebhookDeliveries
+  useListWebhookDeliveries, useGetMe, getGetMeQueryKey
 } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { useQueryClient } from "@tanstack/react-query";
@@ -27,6 +27,7 @@ import { getInitials, formatDate } from "@/lib/format";
 import { Building2, Users, Save, Trash2, Mail, ShieldCheck, Key, Webhook, ActivitySquare, LayoutTemplate, Plus, Copy, CheckCircle2, LogOut, Settings as SettingsIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { ProviderSettings } from "@/components/settings/ProviderSettings";
+import { DeleteOrganizationDangerZone } from "@/components/settings/DeleteOrganizationDangerZone";
 import { format, formatDistanceToNow } from "date-fns";
 
 
@@ -42,6 +43,7 @@ export default function Settings() {
   const { selectedOrgId } = useOrgStore();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: me } = useGetMe({ query: { queryKey: getGetMeQueryKey() } });
 
   const handleSignOut = async () => {
     if (signingOut) return;
@@ -682,6 +684,15 @@ export default function Settings() {
 
           </div>
         </Tabs>
+        {selectedOrgId && org && (
+          <div className="max-w-5xl mx-auto mt-12">
+            <DeleteOrganizationDangerZone
+              orgId={selectedOrgId}
+              orgName={org.name}
+              role={me?.orgs.find((membership) => membership.org.id === selectedOrgId)?.role}
+            />
+          </div>
+        )}
         <section aria-labelledby="session-heading" className="max-w-5xl mx-auto mt-12 pt-8 border-t border-border">
           <h2 id="session-heading" className="text-lg font-bold font-display mb-2">Session</h2>
           <p className="text-sm text-muted-foreground mb-4">End your session and sign out.</p>

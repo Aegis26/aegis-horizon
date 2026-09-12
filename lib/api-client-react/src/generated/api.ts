@@ -109,6 +109,8 @@ import type {
   OpportunityDetail,
   OpportunityUpdate,
   Organization,
+  OrganizationDeletionConfirmation,
+  OrganizationDeletionResponse,
   OrganizationUpdate,
   Pipeline,
   PipelineCreate,
@@ -636,6 +638,151 @@ export const useUpdateOrg = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateOrgMutationOptions(options));
+    }
+
+export const getDeleteOrganizationUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}`
+}
+
+/**
+ * Requires the authenticated organization owner to type DELETE. All organization data and private objects are permanently removed; global user accounts are preserved.
+ * @summary Permanently delete an organization (owner only)
+ */
+export const deleteOrganization = async (orgId: string,
+    organizationDeletionConfirmation: OrganizationDeletionConfirmation, options?: Parameters<typeof customFetch>[1]): Promise<OrganizationDeletionResponse> => {
+
+  return customFetch<OrganizationDeletionResponse>(getDeleteOrganizationUrl(orgId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(organizationDeletionConfirmation)
+  }
+);}
+
+
+
+
+
+export const getDeleteOrganizationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteOrganization>>, TError,{orgId: string;data: BodyType<OrganizationDeletionConfirmation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteOrganization>>, TError,{orgId: string;data: BodyType<OrganizationDeletionConfirmation>}, TContext> => {
+
+const mutationKey = ['deleteOrganization'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteOrganization>>, {orgId: string;data: BodyType<OrganizationDeletionConfirmation>}> = (props) => {
+          const {orgId,data} = props ?? {};
+
+          return  deleteOrganization(orgId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteOrganizationMutationResult = NonNullable<Awaited<ReturnType<typeof deleteOrganization>>>
+    export type DeleteOrganizationMutationBody = BodyType<OrganizationDeletionConfirmation>
+    export type DeleteOrganizationMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete an organization (owner only)
+ */
+export const useDeleteOrganization = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteOrganization>>, TError,{orgId: string;data: BodyType<OrganizationDeletionConfirmation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteOrganization>>,
+        TError,
+        {orgId: string;data: BodyType<OrganizationDeletionConfirmation>},
+        TContext
+      > => {
+      return useMutation(getDeleteOrganizationMutationOptions(options));
+    }
+
+export const getDeleteOrganizationAliasUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/organizations/${orgId}`
+}
+
+/**
+ * @summary Permanently delete an organization (owner-only alias)
+ */
+export const deleteOrganizationAlias = async (orgId: string,
+    organizationDeletionConfirmation: OrganizationDeletionConfirmation, options?: Parameters<typeof customFetch>[1]): Promise<OrganizationDeletionResponse> => {
+
+  return customFetch<OrganizationDeletionResponse>(getDeleteOrganizationAliasUrl(orgId),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(organizationDeletionConfirmation)
+  }
+);}
+
+
+
+
+
+export const getDeleteOrganizationAliasMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteOrganizationAlias>>, TError,{orgId: string;data: BodyType<OrganizationDeletionConfirmation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteOrganizationAlias>>, TError,{orgId: string;data: BodyType<OrganizationDeletionConfirmation>}, TContext> => {
+
+const mutationKey = ['deleteOrganizationAlias'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteOrganizationAlias>>, {orgId: string;data: BodyType<OrganizationDeletionConfirmation>}> = (props) => {
+          const {orgId,data} = props ?? {};
+
+          return  deleteOrganizationAlias(orgId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteOrganizationAliasMutationResult = NonNullable<Awaited<ReturnType<typeof deleteOrganizationAlias>>>
+    export type DeleteOrganizationAliasMutationBody = BodyType<OrganizationDeletionConfirmation>
+    export type DeleteOrganizationAliasMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete an organization (owner-only alias)
+ */
+export const useDeleteOrganizationAlias = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteOrganizationAlias>>, TError,{orgId: string;data: BodyType<OrganizationDeletionConfirmation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteOrganizationAlias>>,
+        TError,
+        {orgId: string;data: BodyType<OrganizationDeletionConfirmation>},
+        TContext
+      > => {
+      return useMutation(getDeleteOrganizationAliasMutationOptions(options));
     }
 
 export const getListMembersUrl = (orgId: string,) => {

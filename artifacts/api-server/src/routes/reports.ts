@@ -10,6 +10,8 @@ import { appendAuditEvent, auditContext } from "../services/audit";
 import { ObjectAccessGroupType, ObjectPermission } from "../lib/objectAcl";
 import { objectStorageClient, ObjectStorageService } from "../lib/objectStorage";
 import { sendEmail } from "../lib/email";
+import { isOrganizationDeletionActive } from "../services/orgDeletionGuard";
+import { withOrganizationSharedLock } from "../lib/orgWriteLock";
 
 const router: IRouter = Router();
 const gate = [attachUser, attachOrg, requireRole("manager")] as const;
@@ -175,8 +177,24 @@ router.delete("/orgs/:orgId/reports/:reportId/schedules/:scheduleId", ...gate, a
 
 /** Called by the native scheduler. Claimed rows guarantee one delivery per due interval. */
 export async function executeScheduledReport(scheduleId: string, claimToken: string) {
+  const [claimedSchedule] = await db.select({ orgId: reportSchedules.orgId })
+    .from(reportSchedules)
+    .where(and(eq(reportSchedules.id, scheduleId), eq(reportSchedules.claimToken, claimToken)));
+  if (!claimedSchedule) return;
+  return withOrganizationSharedLock(claimedSchedule.orgId, () =>
+    executeScheduledReportUnlocked(scheduleId, claimToken),
+  );
+}
+
+async function executeScheduledReportUnlocked(scheduleId: string, claimToken: string) {
   const [schedule] = await db.select().from(reportSchedules).where(and(eq(reportSchedules.id, scheduleId), eq(reportSchedules.claimToken, claimToken)));
   if (!schedule) return;
+  if (await isOrganizationDeletionActive(schedule.orgId)) {
+    await db.update(reportSchedules)
+      .set({ claimedAt: null, claimToken: null })
+      .where(and(eq(reportSchedules.id, schedule.id), eq(reportSchedules.claimToken, claimToken)));
+    return;
+  }
   try {
     const [report] = await db.select().from(customReports).where(and(eq(customReports.id, schedule.reportId), eq(customReports.orgId, schedule.orgId)));
     const [creator] = schedule.createdByUserId ? await db.select({ clerkId: users.clerkId }).from(users).where(eq(users.id, schedule.createdByUserId)) : [];

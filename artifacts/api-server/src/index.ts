@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { startWorkflowScheduler } from "./services/workflow";
 import { startReportScheduler } from "./services/reportScheduler";
 import { startWebhookScheduler } from "./services/webhooks";
+import { ensureOrganizationDeletionLedgerSchema } from "./lib/organizationDeletionSchema";
 
 const rawPort = process.env["PORT"];
 
@@ -17,6 +18,8 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+await ensureOrganizationDeletionLedgerSchema();
 
 startWorkflowScheduler();
 startReportScheduler();

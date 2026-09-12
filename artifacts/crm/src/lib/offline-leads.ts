@@ -5,6 +5,7 @@ const DATABASE_NAME = "aegis-horizon-offline";
 const DATABASE_VERSION = 1;
 const STORE_NAME = "lead-mutations";
 const CHANGE_EVENT = "aegis:lead-queue-change";
+const purgedOrganizationIds = new Set<string>();
 
 export interface QueuedLead {
   id: string;
@@ -113,6 +114,10 @@ export async function enqueueLead(
   clerkUserId: string,
   auth: LeadSyncAuth,
 ): Promise<QueuedLead> {
+  if (purgedOrganizationIds.has(orgId)) {
+    throw new Error("This organization has been deleted.");
+  }
+
   const key = newIdempotencyKey();
   const record: QueuedLead = {
     id: `pending-${key}`,
@@ -129,11 +134,76 @@ export async function enqueueLead(
 }
 
 async function updateQueuedLead(record: QueuedLead): Promise<void> {
+  if (shouldDiscardQueuedLeadUpdate(record)) {
+    await deleteQueuedLead(record.id);
+    return;
+  }
   await withStore<IDBValidKey>("readwrite", (store) => store.put(record));
 }
 
 async function deleteQueuedLead(id: string): Promise<void> {
   await withStore<undefined>("readwrite", (store) => store.delete(id));
+}
+
+export function shouldPurgeQueuedLead(
+  record: Pick<QueuedLead, "orgId">,
+  deletedOrgId: string,
+): boolean {
+  return record.orgId === deletedOrgId;
+}
+
+/**
+ * An in-flight sync can finish after the IndexedDB purge. Discard its error
+ * update rather than allowing the stale deleted-organization draft to return.
+ */
+export function shouldDiscardQueuedLeadUpdate(
+  record: Pick<QueuedLead, "orgId">,
+  purgedOrgIds: ReadonlySet<string> = purgedOrganizationIds,
+): boolean {
+  return purgedOrgIds.has(record.orgId);
+}
+
+/**
+ * Remove unsynced leads that belong to a deleted organization. This is
+ * intentionally scoped by organization ID so drafts belonging to other
+ * organizations survive, regardless of which signed-in person authored them.
+ */
+export async function purgeQueuedLeadsForOrganization(orgId: string): Promise<void> {
+  purgedOrganizationIds.add(orgId);
+  const database = await openDatabase();
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, "readwrite");
+    const request = transaction.objectStore(STORE_NAME).openCursor();
+
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+
+      const record = cursor.value as QueuedLead;
+      if (shouldPurgeQueuedLead(record, orgId)) {
+        cursor.delete();
+      }
+      cursor.continue();
+    };
+    request.onerror = () => {
+      reject(request.error ?? new Error("Could not purge deleted organization drafts."));
+    };
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Could not purge deleted organization drafts."));
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Could not purge deleted organization drafts."));
+    };
+  });
+
+  notify({ orgId });
 }
 
 export function createLeadRequestOptions(

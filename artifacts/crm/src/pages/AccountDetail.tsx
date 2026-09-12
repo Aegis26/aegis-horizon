@@ -19,7 +19,7 @@ export default function AccountDetail() {
   const accountId = params?.accountId;
   const { selectedOrgId } = useOrgStore();
 
-  const { data: account, isLoading, error } = useGetAccount(selectedOrgId || "", accountId || "", {
+  const { data: account, isLoading, isFetching, error, refetch } = useGetAccount(selectedOrgId || "", accountId || "", {
     query: {
       enabled: !!selectedOrgId && !!accountId,
       queryKey: getGetAccountQueryKey(selectedOrgId || "", accountId || "")
@@ -35,15 +35,39 @@ export default function AccountDetail() {
 
   const accountChurn = churnPredictions?.find(p => p.accountId === accountId && !p.resolvedAt && (p.riskLevel === 'high' || p.riskLevel === 'critical'));
 
-  if (isLoading) {
+  if (!selectedOrgId || isLoading) {
     return <div className="p-8 flex justify-center"><div className="spinner" /></div>;
   }
 
   if (error || !account) {
+    const status = error && typeof error === "object" && "status" in error
+      ? Number(error.status)
+      : undefined;
+    const title = status === 404
+      ? "Account not found"
+      : status === 401
+        ? "Please sign in again"
+        : status === 403
+          ? "Account access denied"
+          : "Unable to load account";
+    const description = status === 404
+      ? "This account is unavailable in the selected workspace."
+      : status === 401
+        ? "This window’s session is no longer valid. Sign in again to continue."
+        : status === 403
+          ? "You do not have permission to open this account."
+          : "The account request failed. This does not mean the account was deleted. Please retry.";
     return (
       <div className="p-8 text-center text-destructive">
-        <h2 className="text-xl font-bold font-display">Account not found</h2>
-        <Link href="/accounts"><Button className="mt-4" variant="outline">Go back</Button></Link>
+        <h2 role="alert" className="text-xl font-bold font-display">{title}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+        {status && <p className="mt-1 text-xs text-muted-foreground">Request status: {status}</p>}
+        <div className="mt-4 flex justify-center gap-3">
+          <Link href="/accounts"><Button variant="outline">Go back</Button></Link>
+          {status === 401
+            ? <Link href="/sign-in"><Button>Sign in</Button></Link>
+            : <Button disabled={isFetching || !accountId} onClick={() => void refetch()}>{isFetching ? "Retrying..." : "Retry"}</Button>}
+        </div>
       </div>
     );
   }

@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { useAuth } from "@clerk/react";
+import { useAuth, useClerk } from "@clerk/react";
 import { Link, useLocation } from "wouter";
 import { 
   Building2, 
@@ -17,6 +17,7 @@ import {
   FolderKanban,
   CreditCard,
   Settings,
+  LogOut,
   ChevronDown,
    Menu,
    CloudOff
@@ -28,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { CommandCenter } from "@/components/ai/CommandCenter";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useOfflineLeads } from "@/hooks/use-offline-leads";
+import { useToast } from "@/hooks/use-toast";
 import {
   belongsToAuthenticatedUser,
   hasAuthenticatedOrganizationMembership,
@@ -53,6 +55,23 @@ const NAV_ITEMS = [
 export function Shell({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const { signOut } = useClerk();
+  const { toast } = useToast();
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOut({ redirectUrl: import.meta.env.BASE_URL });
+    } catch {
+      setSigningOut(false);
+      toast({
+        title: "Unable to sign out",
+        description: "Your session may still be active. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const { isLoaded: authLoaded, isSignedIn, userId } = useAuth();
   const { data: me } = useGetMe({
@@ -181,6 +200,15 @@ export function Shell({ children }: { children: ReactNode }) {
               <p className="text-xs text-muted-foreground truncate">{me?.user.email || "Changes remain on this device"}</p>
             </div>
           </div>
+          <Button
+            variant="ghost"
+            className="mt-3 w-full justify-start gap-3"
+            disabled={signingOut}
+            onClick={() => void handleSignOut()}
+          >
+            <LogOut className="h-5 w-5" aria-hidden="true" />
+            {signingOut ? "Signing out..." : "Sign Out"}
+          </Button>
         </div>
       </aside>
 
@@ -223,6 +251,17 @@ export function Shell({ children }: { children: ReactNode }) {
                 );
               })}
             </nav>
+            <div className="mt-4 border-t border-primary/10 pt-4">
+              <Button
+                variant="ghost"
+                className="min-h-11 w-full justify-start gap-3"
+                disabled={signingOut}
+                onClick={() => void handleSignOut()}
+              >
+                <LogOut className="h-5 w-5" aria-hidden="true" />
+                {signingOut ? "Signing out..." : "Sign Out"}
+              </Button>
+            </div>
           </SheetContent>
         </Sheet>
         

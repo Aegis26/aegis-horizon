@@ -1,0 +1,393 @@
+# Complete Account Deletion - Remove User + Clerk Account
+
+**Goal:** Allow users to COMPLETELY DELETE their account, including all organizations and Clerk user record.
+
+**Current Problem:**
+- Organization deletion works (accounts/opportunities/contacts deleted)
+- But user's Clerk account still exists
+- Email can't be used to sign up again
+- User is stuck with ghost account
+
+**Expected Behavior:**
+- User can delete their entire account
+- Removes from Clerk (login credentials gone)
+- Removes all organizations they own
+- Removes all org memberships
+- Email becomes available for new signup
+- User redirected to signup page
+- Complete wipe of all user data
+
+---
+
+## Task 1: Create Complete Account Deletion UI
+
+Add to Settings page, in the Danger Zone section (below or instead of org deletion):
+
+```typescript
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
+import { useClerk } from '@clerk/nextjs'
+
+export default function Settings() {
+  const router = useRouter()
+  const { signOut } = useClerk()
+  const [userRole, setUserRole] = useState(null)
+  const [showAccountDeleteConfirm, setShowAccountDeleteConfirm] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
+  // Fetch user role
+  useEffect(() => {
+    // ... existing role fetch code ...
+  }, [])
+
+  const handleCompleteAccountDeletion = async () => {
+    if (deleteConfirmText.toUpperCase() !== 'DELETE') {
+      setDeleteError('Please type DELETE to confirm')
+      return
+    }
+
+    setIsDeleting(true)
+    setDeleteError('')
+
+    try {
+      // Call backend to delete account (will delete from Clerk too)
+      const response = await fetch('/api/users/delete-account', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        setDeleteError(data.error || 'Failed to delete account')
+        setIsDeleting(false)
+        return
+      }
+
+      // Account deleted successfully
+      // Sign out and redirect to signup
+      await signOut()
+      router.push('/sign-up')
+    } catch (error) {
+      console.error('Delete error:', error)
+      setDeleteError('An error occurred. Please try again.')
+      setIsDeleting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* ... existing settings sections ... */}
+
+      {/* DANGER ZONE - Complete Account Deletion (ALL USERS) */}
+      <section className="mt-16 pt-8 border-t-2 border-red-900">
+        <div className="bg-red-500/5 border border-red-500/50 rounded-lg p-6">
+          <h2 className="text-xl font-bold text-red-400 mb-2">⚠ CRITICAL DANGER ZONE</h2>
+          <p className="text-gray-400 mb-6">
+            Permanently delete your entire user account and all associated data. This is IRREVERSIBLE.
+          </p>
+
+          {!showAccountDeleteConfirm ? (
+            <button
+              onClick={() => setShowAccountDeleteConfirm(true)}
+              className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium transition"
+            >
+              Delete My Entire Account
+            </button>
+          ) : (
+            <div className="space-y-4 bg-red-500/10 border border-red-500 rounded-lg p-4">
+              <div>
+                <h3 className="font-bold text-red-400 mb-2">⚠ DELETE ENTIRE ACCOUNT?</h3>
+                <p className="text-gray-400 text-sm mb-4">
+                  This will PERMANENTLY:
+                </p>
+                <ul className="text-gray-400 text-sm space-y-1 ml-4 mb-4 font-semibold">
+                  <li>🗑️ Delete your Clerk user account (login credentials)</li>
+                  <li>🗑️ Delete ALL organizations you own</li>
+                  <li>🗑️ Delete all accounts, opportunities, contacts, leads</li>
+                  <li>🗑️ Delete all documents, quotes, automations</li>
+                  <li>🗑️ Remove you from all teams (if member)</li>
+                  <li>🗑️ Make your email available for new signup</li>
+                  <li>🗑️ Erase all traces from the system</li>
+                </ul>
+                <p className="text-red-400 font-bold mb-4">
+                  ❌ THIS CANNOT BE UNDONE - NO RECOVERY POSSIBLE
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">
+                  Type "<span className="font-bold">DELETE</span>" to confirm complete account deletion:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => {
+                    setDeleteConfirmText(e.target.value)
+                    setDeleteError('')
+                  }}
+                  placeholder="Type DELETE here"
+                  className="w-full px-4 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-red-500 focus:outline-none"
+                  disabled={isDeleting}
+                />
+              </div>
+
+              {deleteError && (
+                <div className="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">
+                  {deleteError}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCompleteAccountDeletion}
+                  disabled={isDeleting || deleteConfirmText.toUpperCase() !== 'DELETE'}
+                  className="flex-1 px-6 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-500/50 text-white rounded font-medium transition"
+                >
+                  {isDeleting ? 'Deleting Account...' : '❌ PERMANENTLY DELETE ACCOUNT'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAccountDeleteConfirm(false)
+                    setDeleteConfirmText('')
+                    setDeleteError('')
+                  }}
+                  disabled={isDeleting}
+                  className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded font-medium transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+```
+
+---
+
+## Task 2: Create Backend Complete Account Deletion Endpoint
+
+Create endpoint: `artifacts/api-server/src/routes/users.ts` (or add to existing):
+
+```typescript
+import { db } from '@/db'
+import { users, organizations, orgUsers } from '@/db/schema'
+import { eq } from 'drizzle-orm'
+import { clerkClient } from '@clerk/backend'
+
+app.delete('/api/users/delete-account', async (req, res) => {
+  const userId = req.user.id // From auth middleware
+
+  try {
+    // Verify user exists
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    })
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    // Log the deletion
+    console.log(`[AUDIT] User ${userId} (${user.email}) is deleting their entire account`)
+
+    // Step 1: Find all organizations this user owns
+    const ownedOrgs = await db.query.organizations.findMany({
+      where: eq(organizations.founder_user_id, userId),
+    })
+
+    // Step 2: Delete all organizations and their data (cascade)
+    for (const org of ownedOrgs) {
+      console.log(`[DELETE] Deleting organization: ${org.id} (${org.name})`)
+
+      // Delete all activities, documents, automations, etc.
+      // (assuming CASCADE deletes are set up in database)
+      
+      // Delete the organization
+      await db.delete(organizations)
+        .where(eq(organizations.id, org.id))
+    }
+
+    // Step 3: Remove user from any teams they're a member of
+    await db.delete(orgUsers)
+      .where(eq(orgUsers.user_id, userId))
+
+    // Step 4: Delete the user from database
+    await db.delete(users)
+      .where(eq(users.id, userId))
+
+    // Step 5: Delete from Clerk (this is the KEY step)
+    try {
+      await clerkClient.users.deleteUser(userId)
+      console.log(`[DELETE] Deleted Clerk user: ${userId}`)
+    } catch (clerkError) {
+      console.error('[ERROR] Failed to delete Clerk user:', clerkError)
+      // Continue anyway - user is already deleted from app DB
+      // Clerk cleanup is secondary
+    }
+
+    // Step 6: Return success
+    res.json({
+      success: true,
+      message: 'Your account has been permanently deleted',
+    })
+  } catch (error) {
+    console.error('[ERROR] Account deletion failed:', error)
+    res.status(500).json({ error: 'Failed to delete account' })
+  }
+})
+```
+
+---
+
+## Task 3: Verify Clerk Integration
+
+Check that Clerk is properly imported:
+
+```bash
+grep -r "clerkClient\|@clerk/backend" artifacts/api-server/src/ --include="*.ts" | head -3
+```
+
+If not found, add to the imports:
+
+```typescript
+import { clerkClient } from '@clerk/backend'
+```
+
+And verify the Clerk API key is in Railway environment variables (should already be there).
+
+---
+
+## Task 4: Database Cascades (IMPORTANT)
+
+Verify the database schema has CASCADE deletes set up:
+
+```bash
+grep -r "CASCADE\|onDelete" artifacts/api-server/src/db/schema.ts
+```
+
+Key relationships that should cascade:
+- `organizations` → all org data (accounts, opportunities, etc.)
+- `orgUsers` → should be deleted when org deleted
+- `accounts` → activities, documents
+- `opportunities` → quotes, activities
+
+If CASCADE is NOT set up, the backend will need to manually delete child records in the correct order. The prompt above handles this.
+
+---
+
+## Task 5: Test Complete Deletion Flow
+
+After deployment:
+
+1. **Create a test account:**
+   - Sign up as `test@example.com`
+   - Create organization "Test Org"
+   - Add some data (accounts, opportunities)
+
+2. **Delete the entire account:**
+   - Go to Settings
+   - Scroll to "CRITICAL DANGER ZONE"
+   - Click "Delete My Entire Account"
+   - See scary warning with all consequences
+   - Type "DELETE"
+   - Click "PERMANENTLY DELETE ACCOUNT"
+
+3. **Verify complete deletion:**
+   - You're logged out and redirected to signup
+   - Try to login with `test@example.com` → Should fail (account gone)
+   - Try to sign up with `test@example.com` → Should work (email available)
+   - Verify organization is gone from database
+
+---
+
+## Task 6: Verify Clerk Deletion Works
+
+The critical part is deleting from Clerk. Verify:
+
+```typescript
+await clerkClient.users.deleteUser(userId)
+```
+
+This requires:
+- ✅ Clerk SDK imported
+- ✅ CLERK_SECRET_KEY in environment (for backend calls)
+- ✅ Proper permissions in Clerk
+
+Check environment variable:
+```bash
+grep -r "CLERK_SECRET_KEY\|clerk.*secret" artifacts/api-server/
+```
+
+If missing, it needs to be added to Railway environment variables (your Clerk secret key).
+
+---
+
+## Task 7: Commit & Push
+
+```bash
+git add artifacts/crm/src/pages/Settings.tsx artifacts/api-server/src/routes/users.ts
+
+git commit -m "feat: Complete account deletion including Clerk user removal
+
+UI Changes:
+- Settings page has 'CRITICAL DANGER ZONE' section
+- 'Delete My Entire Account' button with nuclear-level warning
+- Confirmation requires typing DELETE
+- Lists ALL consequences (Clerk account, all orgs, all data, all team memberships)
+
+API Endpoint:
+- DELETE /api/users/delete-account
+- Deletes from Clerk (login credentials gone)
+- Deletes all owned organizations
+- Deletes all org data (cascade)
+- Removes user from all team memberships
+- Deletes user from database
+- Email becomes available for new signup
+
+This is a COMPLETE account wipe:
+- No recovery possible
+- No user record left
+- Email can be reused
+- All data gone
+
+Use sparingly - this is a nuclear option."
+
+git push origin main
+```
+
+Railway will auto-deploy. 🚀
+
+---
+
+## Success Criteria
+
+✅ Settings page has "Delete My Entire Account" button  
+✅ Scary warning shows all consequences  
+✅ Must type "DELETE" to enable button  
+✅ Click delete → Account completely removed  
+✅ Clerk user deleted (login gone)  
+✅ All organizations deleted  
+✅ All team memberships removed  
+✅ User record deleted from database  
+✅ Email becomes available for new signup  
+✅ User logged out and redirected  
+
+**After this, users can completely erase themselves and start fresh!**
+
+---
+
+## Important Notes
+
+⚠️ **This is irreversible** - No backups, no recovery
+⚠️ **Affects all orgs** - All organizations owned by user are deleted
+⚠️ **Team members removed** - If user is a member of other orgs, they're removed
+⚠️ **Clerk integration required** - Must have proper Clerk API access
+⚠️ **Email reusable** - Email becomes free for new signup immediately
+
+This is the nuclear option for complete account erasure.

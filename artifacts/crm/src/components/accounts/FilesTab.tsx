@@ -111,7 +111,7 @@ export function FilesTab({ accountId, orgId }: { accountId: string, orgId: strin
                     </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity" asChild>
-                        <a href={`${basePath}/api/storage${file.objectPath}`} target="_blank" rel="noreferrer" download>
+                        <a href={`${basePath}/api/storage${file.objectPath}`} target="_blank" rel="noopener noreferrer" download>
                           <Download className="h-4 w-4" />
                         </a>
                       </Button>

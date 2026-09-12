@@ -46,6 +46,56 @@ paths:
                 $ref: "#/components/schemas/Me"
         "401":
           description: Not authenticated
+  /auth/window/login:
+    post:
+      operationId: createWindowSession
+      tags: [auth]
+      summary: Verify email/password and create a CRM session for this browser window
+      description: >
+        Does not use or create a Clerk browser session. Password verification,
+        email verification, account lock/ban state, and configured TOTP are
+        verified by Clerk. The returned opaque token must be retained only in
+        sessionStorage and sent in X-Aegis-Window-Session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WindowLoginRequest"
+      responses:
+        "201":
+          description: Window session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WindowLoginResponse"
+        "401":
+          description: Invalid credentials or required authentication factor
+        "429":
+          description: Too many attempts
+  /auth/window/logout:
+    post:
+      operationId: revokeWindowSession
+      tags: [auth]
+      summary: Revoke only the requesting CRM browser-window session
+      parameters:
+        - $ref: "#/components/parameters/WindowSessionHeader"
+      responses:
+        "204":
+          description: Window session revoked (or was already absent)
+  /auth/window/password-reset/revoke:
+    post:
+      operationId: revokePasswordResetWindowSessions
+      tags: [auth]
+      summary: Revoke app window sessions after a verified Clerk password reset
+      description: >
+        Accepts only the short-lived Clerk bearer created by the password reset
+        flow. It is not an authentication mechanism for CRM resources.
+      responses:
+        "204":
+          description: All app-owned sessions for the reset identity were revoked
+        "401":
+          description: Password-reset verification session is absent or invalid
   /users/delete-account:
     delete:
       operationId: deleteUserAccount
@@ -2052,6 +2102,12 @@ paths:
     post: { operationId: applyIndustryTemplate, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: templateKey, in: path, required: true, schema: { type: string, enum: [k12, construction, healthcare] } }], responses: { "200": { description: Idempotently applied template, content: { application/json: { schema: { $ref: "#/components/schemas/IndustryTemplateApplication" } } } } } }
 components:
   parameters:
+    WindowSessionHeader:
+      name: X-Aegis-Window-Session
+      in: header
+      required: true
+      schema:
+        type: string
     OrgId:
       name: orgId
       in: path
@@ -2113,6 +2169,32 @@ components:
       schema:
         type: string
   schemas:
+    WindowLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        totp:
+          type: string
+          description: Required when Clerk has MFA enabled for the account.
+    WindowLoginResponse:
+      type: object
+      required: [token, expiresAt, user]
+      properties:
+        token:
+          type: string
+          description: Opaque bearer capability; never place in a URL or persistent storage.
+        expiresAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/User"
     WorkflowInput:
       type: object
       required: [name, trigger, actions]

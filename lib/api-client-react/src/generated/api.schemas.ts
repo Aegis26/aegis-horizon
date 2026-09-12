@@ -5,6 +5,28 @@
  * Multi-tenant CRM SaaS API (Phase 1 foundation)
  * OpenAPI spec version: 0.1.0
  */
+export interface WindowLoginRequest {
+  email: string;
+  password: string;
+  /** Required when Clerk has MFA enabled for the account. */
+  totp?: string;
+}
+
+export interface User {
+  id: string;
+  clerkId?: string;
+  email: string;
+  /** @nullable */
+  fullName?: string | null;
+}
+
+export interface WindowLoginResponse {
+  /** Opaque bearer capability; never place in a URL or persistent storage. */
+  token: string;
+  expiresAt: string;
+  user: User;
+}
+
 export type WorkflowInputTriggerType = typeof WorkflowInputTriggerType[keyof typeof WorkflowInputTriggerType];
 
 
@@ -583,14 +605,6 @@ export interface CommandRequest {
 
 export interface HealthStatus {
   status: string;
-}
-
-export interface User {
-  id: string;
-  clerkId?: string;
-  email: string;
-  /** @nullable */
-  fullName?: string | null;
 }
 
 export type OrganizationPlan = typeof OrganizationPlan[keyof typeof OrganizationPlan];
@@ -2851,6 +2865,8 @@ export interface IndustryTemplateApplication {
   key: IndustryTemplateApplicationKey;
   applied: boolean;
 }
+
+export type WindowSessionHeaderParameter = string;
 
 export type ListAccountsParams = {
 /**

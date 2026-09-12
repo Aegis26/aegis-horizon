@@ -106,7 +106,7 @@ export function TimelineTab({ accountId, orgId }: { accountId: string, orgId: st
                     {activity.attachments && activity.attachments.length > 0 && (
                       <div className="mt-3 flex gap-2 flex-wrap">
                         {activity.attachments.map(att => (
-                          <a key={att.objectPath} href={`/api/storage${att.objectPath}`} target="_blank" rel="noreferrer" className="text-xs flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded hover:bg-primary/20 transition-colors">
+                          <a key={att.objectPath} href={`/api/storage${att.objectPath}`} target="_blank" rel="noopener noreferrer" className="text-xs flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded hover:bg-primary/20 transition-colors">
                             <FileText className="h-3 w-3" /> {att.name}
                           </a>
                         ))}

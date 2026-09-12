@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { BarChart3, Plus, Play, Download, Clock, Filter, LayoutGrid, Calendar, ChevronRight, FileSpreadsheet, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { openAuthenticatedDownload } from "@/lib/authenticated-download";
 
 export default function Reports() {
   const { selectedOrgId } = useOrgStore();
@@ -97,7 +98,11 @@ export default function Reports() {
     createExport.mutate({ orgId: selectedOrgId!, reportId, data: { format } }, {
       onSuccess: (data) => {
         toast({ title: "Export complete", description: `Your ${format.toUpperCase()} export is ready.` });
-        if (data.downloadUrl) { window.open(data.downloadUrl, "_blank"); }
+        if (data.downloadUrl) {
+          void openAuthenticatedDownload(data.downloadUrl).catch(() =>
+            toast({ title: "Download failed", description: "Your window session may have ended.", variant: "destructive" }),
+          );
+        }
         queryClient.invalidateQueries({ queryKey: getListCustomReportRunsQueryKey(selectedOrgId!, reportId) });
         setExportOpen(null);
       },

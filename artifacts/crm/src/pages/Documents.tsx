@@ -6,6 +6,7 @@ import {
   useRequestUploadUrl,
   useCreateDocumentVersion
 } from "@workspace/api-client-react";
+import { openAuthenticatedDownload } from "@/lib/authenticated-download";
 import type { DocumentUploadInputContentType } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -283,7 +284,7 @@ export default function Documents() {
                             <DropdownMenuItem className="cursor-pointer" onClick={() => setReqSigOpen(doc.id)}>
                               <FileSignature className="w-4 h-4 mr-2" /> Request Signature
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="cursor-pointer" onClick={() => window.open(getDownloadDocumentUrl(selectedOrgId!, doc.id), "_blank")}>
+                            <DropdownMenuItem className="cursor-pointer" onClick={() => void openAuthenticatedDownload(getDownloadDocumentUrl(selectedOrgId!, doc.id)).catch(() => toast({ title: "Download failed", variant: "destructive" }))}>
                               <Download className="w-4 h-4 mr-2" /> Download File
                             </DropdownMenuItem>
                             <DropdownMenuItem className="cursor-pointer" onClick={() => handleUploadVersion(doc.id)}>

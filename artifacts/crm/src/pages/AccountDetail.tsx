@@ -73,7 +73,7 @@ export default function AccountDetail() {
                 )}
               </div>
               <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                {account.website && <a href={account.website} target="_blank" rel="noreferrer" className="hover:text-primary transition-colors">{account.website}</a>}
+                {account.website && <a href={account.website} target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">{account.website}</a>}
                 {account.website && account.industry && <span>•</span>}
                 {account.industry && <span>{account.industry}</span>}
               </div>

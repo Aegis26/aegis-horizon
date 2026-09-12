@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { and, eq } from "drizzle-orm";
-import { clerkClient, getAuth } from "@clerk/express";
+import { clerkClient } from "@clerk/express";
 import {
   AcceptInvitationBody,
   AcceptInvitationResponse,
@@ -188,8 +188,8 @@ router.post(
     }
     if (!(await acquireOrganizationMutationLock(req, res, token.orgId))) return;
 
-    const authUserId = getAuth(req).userId;
     const localUser = req.currentUser;
+    const authUserId = localUser?.clerkId;
     if (!authUserId) {
       res.status(403).json({ error: "Invitation is not valid for this account" });
       return;

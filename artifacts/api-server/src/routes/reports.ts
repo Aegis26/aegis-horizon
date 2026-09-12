@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
 import PDFDocument from "pdfkit";
-import { getAuth } from "@clerk/express";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { accounts, activities, customReports, db, leads, opportunities, reportExports, reportRuns, reportSchedules, users } from "@workspace/db";
@@ -140,7 +140,7 @@ router.post("/orgs/:orgId/reports/:reportId/exports", ...gate, async (req, res):
   const [run] = await db.insert(reportRuns).values({ orgId: report.orgId, reportId: report.id, startedByUserId: req.currentUser!.id }).returning();
   try {
     const rows = await execute(report.orgId, report.entityType as keyof typeof entityFields, definition.parse(report.definition));
-    const saved = await saveExport(report.orgId, getAuth(req).userId!, rows, parsed.data.format);
+    const saved = await saveExport(report.orgId, req.currentUser!.clerkId, rows, parsed.data.format);
     const [exported] = await db.insert(reportExports).values({ orgId: report.orgId, reportId: report.id, format: parsed.data.format, status: "completed", ...saved, rowCount: rows.length, requestedByUserId: req.currentUser!.id, completedAt: new Date() }).returning();
     await db.update(reportRuns).set({ status: "completed", rowCount: rows.length, completedAt: new Date() }).where(eq(reportRuns.id, run.id));
     await appendAuditEvent({ orgId: report.orgId, action: "report.exported", entityType: "report_export", entityId: exported.id, ...auditContext(req), metadata: { format: parsed.data.format, rowCount: rows.length } });
@@ -150,8 +150,17 @@ router.post("/orgs/:orgId/reports/:reportId/exports", ...gate, async (req, res):
 router.get("/orgs/:orgId/reports/exports/:exportId/download", ...gate, async (req, res): Promise<void> => {
   const [item] = await db.select().from(reportExports).where(and(eq(reportExports.id, req.params.exportId as string), eq(reportExports.orgId, req.currentOrg!.id)));
   if (!item?.objectPath || item.status !== "completed") { res.status(404).json({ error: "Report export not found" }); return; }
-  // Redirect only to the authenticated storage handler. The object's org-member ACL is independently checked there.
-  res.redirect(302, `/api/storage${item.objectPath}`);
+  // A navigation redirect drops the per-window header. Stream after this
+  // already-authorized request instead, so exports never need a cookie or a
+  // capability in the URL.
+  const storage = new ObjectStorageService();
+  const object = await storage.getObjectEntityFile(item.objectPath);
+  const response = await storage.downloadObject(object);
+  res.status(response.status);
+  response.headers.forEach((value, key) => res.setHeader(key, value));
+  res.setHeader("Content-Disposition", `attachment; filename="${item.fileName ?? "report"}"`);
+  if (response.body) Readable.fromWeb(response.body as ReadableStream<Uint8Array>).pipe(res);
+  else res.end();
 });
 function nextRun(frequency: "daily" | "weekly" | "monthly", from = new Date()) {
   const next = new Date(from); next.setUTCSeconds(0, 0);

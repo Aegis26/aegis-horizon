@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
-import { getAuth, clerkClient } from "@clerk/express";
+import { clerkClient } from "@clerk/express";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   db,
@@ -31,6 +31,10 @@ import { isViewerMutation } from "../services/crmAccess";
 import {
   getOrganizationDeletionRecord,
 } from "../services/orgDeletionGuard";
+import {
+  authenticateWindowSession,
+  WINDOW_SESSION_HEADER,
+} from "../services/windowSessions";
 
 declare global {
   namespace Express {
@@ -122,23 +126,29 @@ export async function isAccountDeletionActive(userId: string): Promise<boolean> 
   return state?.status === "processing" || state?.status === "failed";
 }
 
-/** Requires a signed-in Clerk session; provisions the local user (and a
- *  default org on first sign-in) just-in-time. */
+/**
+ * Requires an app-owned, per-window opaque session. Clerk cookies are never a
+ * fallback here: possession of a Clerk session in another tab or window does
+ * not authenticate a CRM API request.
+ */
 export async function attachUser(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const auth = getAuth(req);
-  if (!auth.userId) {
+  const sessionUser = await authenticateWindowSession(
+    req.header(WINDOW_SESSION_HEADER) ?? undefined,
+  );
+  if (!sessionUser) {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
+  const clerkId = sessionUser.clerkId;
 
   // The deletion endpoint itself must acquire the exclusive lock, not first
   // queue behind its own shared lock. All other requests are admitted under a
   // shared lock before any local lookup or just-in-time provisioning.
-  if (!isAccountDeletionRequest(req) && !(await holdUserSharedLock(req, res, auth.userId))) {
+  if (!isAccountDeletionRequest(req) && !(await holdUserSharedLock(req, res, clerkId))) {
     return;
   }
 
@@ -148,7 +158,7 @@ export async function attachUser(
       phase: accountDeletionLedger.phase,
     })
     .from(accountDeletionLedger)
-    .where(eq(accountDeletionLedger.userOpaqueHash, userOpaqueHash(auth.userId)));
+    .where(eq(accountDeletionLedger.userOpaqueHash, userOpaqueHash(clerkId)));
   if (
     deletionState &&
     deletionState.status === "completed"
@@ -166,11 +176,11 @@ export async function attachUser(
     return;
   }
 
-  let [user] = await db.select().from(users).where(eq(users.clerkId, auth.userId));
+  let [user] = await db.select().from(users).where(eq(users.clerkId, clerkId));
   let createdThisRequest = false;
 
   if (!user) {
-    const clerkUser = await clerkClient.users.getUser(auth.userId);
+    const clerkUser = await clerkClient.users.getUser(clerkId);
     const verifiedEmails = verifiedClerkEmails(clerkUser);
     if (verifiedEmails.length === 0) {
       res.status(403).json({ error: "A verified email address is required" });
@@ -200,14 +210,14 @@ export async function attachUser(
 
     const candidate = existingByEmail[0];
     if (candidate) {
-      if (candidate.clerkId === auth.userId) {
+      if (candidate.clerkId === clerkId) {
         user = candidate;
       } else if (isPendingUserForVerifiedEmail(candidate, verifiedEmails)) {
         // The clerkId predicate makes this claim safe if two first sign-ins
         // race. A real Clerk identity can never be overwritten.
         [user] = await db
           .update(users)
-          .set({ clerkId: auth.userId, fullName: candidate.fullName ?? fullName })
+          .set({ clerkId, fullName: candidate.fullName ?? fullName })
           .where(
             and(
               eq(users.id, candidate.id),
@@ -220,7 +230,7 @@ export async function attachUser(
           [user] = await db
             .select()
             .from(users)
-            .where(eq(users.clerkId, auth.userId));
+            .where(eq(users.clerkId, clerkId));
         }
         if (!user) {
           res.status(409).json({ error: "Unable to claim invited account safely" });
@@ -234,7 +244,7 @@ export async function attachUser(
       try {
         [user] = await db
           .insert(users)
-          .values({ clerkId: auth.userId, email, fullName })
+        .values({ clerkId, email, fullName })
           .returning();
         createdThisRequest = Boolean(user);
       } catch {
@@ -242,7 +252,7 @@ export async function attachUser(
         [user] = await db
           .select()
           .from(users)
-          .where(eq(users.clerkId, auth.userId));
+          .where(eq(users.clerkId, clerkId));
         if (!user) {
           res.status(409).json({ error: "Unable to create account safely" });
           return;

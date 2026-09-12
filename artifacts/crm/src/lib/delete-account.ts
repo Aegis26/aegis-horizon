@@ -13,9 +13,8 @@ export function isDeleteAccountConfirmation(value: string): boolean {
 
 /**
  * Keep the account deletion request on the generated API client. Its shared
- * custom transport supplies the Clerk session bearer/cookie behavior used by
- * the rest of the application and gives callers the API's explicit error
- * response.
+ * transport supplies this browser window's app-owned session header and gives
+ * callers the API's explicit error response.
  */
 export function deleteAccount(): Promise<UserAccountDeletionResponse> {
   return deleteUserAccount(DELETE_ACCOUNT_CONFIRMATION);

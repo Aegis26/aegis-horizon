@@ -163,6 +163,8 @@ import type {
   WebhookPatch,
   WebhookTestResult,
   WeightedForecast,
+  WindowLoginRequest,
+  WindowLoginResponse,
   Workflow,
   WorkflowDryRun,
   WorkflowExecution,
@@ -349,6 +351,221 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Err
 
 
 
+
+export const getCreateWindowSessionUrl = () => {
+
+
+
+
+  return `/api/auth/window/login`
+}
+
+/**
+ * Does not use or create a Clerk browser session. Password verification, email verification, account lock/ban state, and configured TOTP are verified by Clerk. The returned opaque token must be retained only in sessionStorage and sent in X-Aegis-Window-Session.
+ * @summary Verify email/password and create a CRM session for this browser window
+ */
+export const createWindowSession = async (windowLoginRequest: WindowLoginRequest, options?: Parameters<typeof customFetch>[1]): Promise<WindowLoginResponse> => {
+
+  return customFetch<WindowLoginResponse>(getCreateWindowSessionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(windowLoginRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateWindowSessionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWindowSession>>, TError,{data: BodyType<WindowLoginRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWindowSession>>, TError,{data: BodyType<WindowLoginRequest>}, TContext> => {
+
+const mutationKey = ['createWindowSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWindowSession>>, {data: BodyType<WindowLoginRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createWindowSession(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWindowSessionMutationResult = NonNullable<Awaited<ReturnType<typeof createWindowSession>>>
+    export type CreateWindowSessionMutationBody = BodyType<WindowLoginRequest>
+    export type CreateWindowSessionMutationError = ErrorType<void>
+
+    /**
+ * @summary Verify email/password and create a CRM session for this browser window
+ */
+export const useCreateWindowSession = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWindowSession>>, TError,{data: BodyType<WindowLoginRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWindowSession>>,
+        TError,
+        {data: BodyType<WindowLoginRequest>},
+        TContext
+      > => {
+      return useMutation(getCreateWindowSessionMutationOptions(options));
+    }
+
+export const getRevokeWindowSessionUrl = () => {
+
+
+
+
+  return `/api/auth/window/logout`
+}
+
+/**
+ * @summary Revoke only the requesting CRM browser-window session
+ */
+export const revokeWindowSession = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getRevokeWindowSessionUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokeWindowSessionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeWindowSession>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeWindowSession>>, TError,void, TContext> => {
+
+const mutationKey = ['revokeWindowSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeWindowSession>>, void> = () => {
+
+
+          return  revokeWindowSession(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeWindowSessionMutationResult = NonNullable<Awaited<ReturnType<typeof revokeWindowSession>>>
+
+    export type RevokeWindowSessionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Revoke only the requesting CRM browser-window session
+ */
+export const useRevokeWindowSession = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeWindowSession>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeWindowSession>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRevokeWindowSessionMutationOptions(options));
+    }
+
+export const getRevokePasswordResetWindowSessionsUrl = () => {
+
+
+
+
+  return `/api/auth/window/password-reset/revoke`
+}
+
+/**
+ * Accepts only the short-lived Clerk bearer created by the password reset flow. It is not an authentication mechanism for CRM resources.
+ * @summary Revoke app window sessions after a verified Clerk password reset
+ */
+export const revokePasswordResetWindowSessions = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getRevokePasswordResetWindowSessionsUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokePasswordResetWindowSessionsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokePasswordResetWindowSessions>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokePasswordResetWindowSessions>>, TError,void, TContext> => {
+
+const mutationKey = ['revokePasswordResetWindowSessions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokePasswordResetWindowSessions>>, void> = () => {
+
+
+          return  revokePasswordResetWindowSessions(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokePasswordResetWindowSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof revokePasswordResetWindowSessions>>>
+
+    export type RevokePasswordResetWindowSessionsMutationError = ErrorType<void>
+
+    /**
+ * @summary Revoke app window sessions after a verified Clerk password reset
+ */
+export const useRevokePasswordResetWindowSessions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokePasswordResetWindowSessions>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokePasswordResetWindowSessions>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRevokePasswordResetWindowSessionsMutationOptions(options));
+    }
 
 export const getDeleteUserAccountUrl = () => {
 

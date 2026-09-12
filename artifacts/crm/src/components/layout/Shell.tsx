@@ -1,5 +1,4 @@
 import { ReactNode, useEffect, useState } from "react";
-import { useAuth, useClerk } from "@clerk/react";
 import { Link, useLocation } from "wouter";
 import { 
   Building2, 
@@ -34,6 +33,7 @@ import {
   belongsToAuthenticatedUser,
   hasAuthenticatedOrganizationMembership,
 } from "@/lib/auth-scope";
+import { useWindowAuth } from "@/components/auth/WindowAuthProvider";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -56,13 +56,13 @@ export function Shell({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const { signOut } = useClerk();
+  const { signOut, isLoaded: authLoaded, isSignedIn, user } = useWindowAuth();
   const { toast } = useToast();
   const handleSignOut = async () => {
     if (signingOut) return;
     setSigningOut(true);
     try {
-      await signOut({ redirectUrl: import.meta.env.BASE_URL });
+      await signOut();
     } catch {
       setSigningOut(false);
       toast({
@@ -73,10 +73,9 @@ export function Shell({ children }: { children: ReactNode }) {
     }
   };
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const { isLoaded: authLoaded, isSignedIn, userId } = useAuth();
   const { data: me } = useGetMe({
     query: {
-      enabled: authLoaded && isSignedIn === true && Boolean(userId),
+      enabled: authLoaded && isSignedIn && Boolean(user),
       queryKey: getGetMeQueryKey(),
     },
   });
@@ -93,11 +92,11 @@ export function Shell({ children }: { children: ReactNode }) {
   // The API response is the source of truth for membership. In particular,
   // never render a persisted org selection while it belongs to another
   // account or while the current account's memberships are still loading.
-  const meBelongsToSignedInUser = belongsToAuthenticatedUser(me?.user, userId);
+  const meBelongsToSignedInUser = belongsToAuthenticatedUser(me?.user, user?.clerkId);
   const membershipsReady =
     authLoaded &&
-    isSignedIn === true &&
-    Boolean(userId) &&
+    isSignedIn &&
+    Boolean(user) &&
     meBelongsToSignedInUser;
 
   // Set default org if none selected (in an effect — updating the store during

@@ -13,7 +13,7 @@ export interface QueuedLead {
   idempotencyKey: string;
   orgId: string;
   /**
-   * Offline mutations are authored by a Clerk account. Keep that scope with
+   * Offline mutations are authored by the authenticated CRM identity. Keep that scope with
    * the record so an account switch cannot display or sync another user's
    * unsynced lead.
    */
@@ -32,14 +32,16 @@ export interface LeadQueueChange {
 export interface LeadSyncAuth {
   /**
    * This callback is evaluated for every queued request. The caller supplies
-   * a token for the Clerk identity that owns the queue record.
+   * the app-owned window token for the identity that owns the queue record.
    */
   getToken: () => Promise<string | null>;
   /**
-   * Reads the live Clerk identity, rather than the identity captured when a
+   * Reads the live CRM identity, rather than the identity captured when a
    * sync job started.
    */
   getCurrentUserId: () => string | null;
+  /** Identifies the owner cached with the app-owned opaque token. */
+  getTokenOwnerId?: () => string | null;
 }
 
 export interface LeadQueueSyncDependencies {
@@ -261,29 +263,14 @@ export function createLeadRequestOptions(
   authToken: string,
 ): RequestInit {
   return {
-    // The explicit Clerk token is identity-bound. Omitting cookies prevents a
-    // newly signed-in account from taking precedence over the queue owner.
+    // The explicit per-window token is identity-bound. Omitting cookies prevents
+    // a Clerk session from taking precedence over the queue owner.
     credentials: "omit",
     headers: {
-      Authorization: `Bearer ${authToken}`,
+      "x-aegis-window-session": authToken,
       "Idempotency-Key": record.idempotencyKey,
     },
   };
-}
-
-function tokenSubject(authToken: string): string | null {
-  const payloadSegment = authToken.split(".")[1];
-  if (!payloadSegment) return null;
-  try {
-    const base64 = payloadSegment.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-    const payload = JSON.parse(new TextDecoder().decode(bytes)) as { sub?: unknown };
-    return typeof payload.sub === "string" ? payload.sub : null;
-  } catch {
-    return null;
-  }
 }
 
 const defaultSyncDependencies: LeadQueueSyncDependencies = {
@@ -301,8 +288,8 @@ const defaultSyncDependencies: LeadQueueSyncDependencies = {
 
 /**
  * Runs one identity-bound queue. It intentionally leaves records in
- * IndexedDB when the Clerk identity changes or a token cannot be obtained.
- * The request itself uses an explicit bearer token with cookies omitted, so a
+ * IndexedDB when the CRM identity changes or a token cannot be obtained.
+ * The request itself uses an explicit app session header with cookies omitted, so a
  * session switch cannot turn an A-owned mutation into a B-owned mutation.
  */
 export async function syncLeadQueueForUser(
@@ -325,13 +312,12 @@ export async function syncLeadQueueForUser(
       // Keep the record queued if Clerk is in the middle of a session change.
       break;
     }
-    // Clerk's getToken follows the live session. Check both the live hook
-    // identity and the token subject so a session update racing React's render
-    // cannot hand this A-owned queue a B token.
+    // Check the live identity immediately before dispatch so a session update
+    // racing React's render cannot hand this A-owned queue a B token.
     if (
       !authToken ||
       auth.getCurrentUserId() !== clerkUserId ||
-      tokenSubject(authToken) !== clerkUserId
+      (auth.getTokenOwnerId !== undefined && auth.getTokenOwnerId() !== clerkUserId)
     ) {
       break;
     }

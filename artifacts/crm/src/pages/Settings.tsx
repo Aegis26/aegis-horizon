@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useClerk } from "@clerk/react";
 import {
   useGetOrg, useUpdateOrg, getGetOrgQueryKey,
   useListMembers, useInviteMember, useResendMemberInvite, useUpdateMemberRole, useRemoveMember, getListMembersQueryKey,
@@ -30,6 +29,7 @@ import { ProviderSettings } from "@/components/settings/ProviderSettings";
 import { DeleteOrganizationDangerZone } from "@/components/settings/DeleteOrganizationDangerZone";
 import { DeleteAccountDangerZone } from "@/components/settings/DeleteAccountDangerZone";
 import { format, formatDistanceToNow } from "date-fns";
+import { useWindowAuth } from "@/components/auth/WindowAuthProvider";
 
 
 const templateMeta: Record<string, { name: string; description: string; category: string }> = {
@@ -39,7 +39,7 @@ const templateMeta: Record<string, { name: string; description: string; category
 };
 
 export default function Settings() {
-  const { signOut } = useClerk();
+  const { signOut } = useWindowAuth();
   const [signingOut, setSigningOut] = useState(false);
   const { selectedOrgId } = useOrgStore();
   const queryClient = useQueryClient();
@@ -50,7 +50,7 @@ export default function Settings() {
     if (signingOut) return;
     setSigningOut(true);
     try {
-      await signOut({ redirectUrl: import.meta.env.BASE_URL });
+      await signOut();
     } catch {
       setSigningOut(false);
       toast({

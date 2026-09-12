@@ -6,12 +6,14 @@ interface OrgStore {
 }
 
 export const useOrgStore = create<OrgStore>((set) => ({
-  selectedOrgId: localStorage.getItem('meridian_org_id'),
+  // Workspace selection is a per-window preference; localStorage would leak
+  // an organization choice into independently authenticated windows.
+  selectedOrgId: sessionStorage.getItem('meridian_org_id'),
   setSelectedOrgId: (id) => {
     if (id) {
-      localStorage.setItem('meridian_org_id', id);
+      sessionStorage.setItem('meridian_org_id', id);
     } else {
-      localStorage.removeItem('meridian_org_id');
+      sessionStorage.removeItem('meridian_org_id');
     }
     set({ selectedOrgId: id });
   },

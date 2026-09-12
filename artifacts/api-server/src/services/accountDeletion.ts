@@ -22,6 +22,7 @@ import {
   organizationObjectBindings,
   usageLogs,
   users,
+  windowSessions,
 } from "@workspace/db";
 import {
   acquireUserExclusiveLock,
@@ -133,6 +134,20 @@ async function claimAccountDeletion(userId: string): Promise<ClaimedAccountDelet
     ) {
       throw new AccountDeletionError("in_progress");
     }
+
+    // Fence every browser window at the durable deletion claim, before any
+    // remote or storage side effect can run. The user row is intentionally
+    // retained until relational cleanup, so recovery attempts preserve this
+    // revocation fence as well.
+    await tx
+      .update(windowSessions)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(windowSessions.userId, userId),
+          isNull(windowSessions.revokedAt),
+        ),
+      );
 
     const leaseToken = randomUUID();
     const [claimed] = await tx
@@ -490,8 +505,9 @@ export async function deleteAccount(
 
   let lock: UserLock | undefined;
   try {
-    // attachUser uses Clerk's session id for the shared lock; use the exact
-    // same key for the exclusive lock so they cannot pass one another.
+    // attachUser uses the Clerk identity associated with the app-owned window
+    // session for its shared lock; use the exact same key so they cannot pass
+    // one another.
     lock = await acquireUserExclusiveLock(user.clerkId);
   } catch {
     throw new AccountDeletionError("in_progress");

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAuth } from "@clerk/react";
 import type { LeadCreate } from "@workspace/api-client-react";
 import {
   enqueueLead,
@@ -10,19 +9,23 @@ import {
   type LeadSyncAuth,
   type QueuedLead,
 } from "@/lib/offline-leads";
+import { useWindowAuth } from "@/components/auth/WindowAuthProvider";
+import { getActiveWindowSessionToken, getActiveWindowSessionUserId } from "@/lib/window-auth";
 
 export function useOfflineLeads(orgId?: string) {
-  const { userId, getToken } = useAuth();
+  const { user } = useWindowAuth();
+  const userId = user?.id;
   const liveUserIdRef = useRef<string | null>(userId ?? null);
   // Keep this ref current during render so a pending sync observes a Clerk
   // switch before the next effect is scheduled.
   liveUserIdRef.current = userId ?? null;
   const syncAuth = useMemo<LeadSyncAuth>(
     () => ({
-      getToken: () => getToken(),
+      getToken: async () => getActiveWindowSessionToken(),
       getCurrentUserId: () => liveUserIdRef.current,
+      getTokenOwnerId: () => getActiveWindowSessionUserId(),
     }),
-    [getToken],
+    [],
   );
   const [pendingLeads, setPendingLeads] = useState<QueuedLead[]>([]);
   const [online, setOnline] = useState(navigator.onLine);

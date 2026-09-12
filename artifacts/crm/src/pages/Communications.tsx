@@ -200,7 +200,7 @@ export function Workspace({ accountId, orgId }: { accountId: string, orgId: stri
                       </div>
                       <div className="text-sm text-muted-foreground/80 line-clamp-2">{ev.description || "No description provided."}</div>
                       {ev.meetingUrl && (
-                        <a href={ev.meetingUrl} target="_blank" rel="noreferrer" className="inline-block mt-3 text-xs font-medium text-primary hover:underline bg-primary/10 px-2 py-1 rounded">
+                        <a href={ev.meetingUrl} target="_blank" rel="noopener noreferrer" className="inline-block mt-3 text-xs font-medium text-primary hover:underline bg-primary/10 px-2 py-1 rounded">
                           Join Meeting
                         </a>
                       )}

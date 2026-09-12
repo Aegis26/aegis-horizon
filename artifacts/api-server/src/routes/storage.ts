@@ -5,8 +5,6 @@ import {
 } from '@workspace/api-zod';
 import { Router, type IRouter, type Request, type Response } from 'express';
 
-import { getAuth } from '@clerk/express';
-
 import {
   ObjectNotFoundError,
   ObjectStorageService,
@@ -17,13 +15,13 @@ import {
   ObjectPermission,
 } from '../lib/objectAcl';
 import { authorizePrivateObjectBinding } from '../services/objectAccess';
+import { attachUser } from '../middlewares/auth';
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 
 function hasAuthenticatedSession(req: Request): boolean {
-  // Clerk-based auth: a signed-in user has a Clerk userId on the request.
-  return Boolean(getAuth(req).userId);
+  return Boolean(req.currentUser);
 }
 
 /**
@@ -36,6 +34,7 @@ function hasAuthenticatedSession(req: Request): boolean {
  */
 router.post(
   '/storage/uploads/request-url',
+  attachUser,
   async (req: Request, res: Response) => {
     if (!hasAuthenticatedSession(req)) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -116,13 +115,9 @@ router.get(
  * These are served from a separate path from /public-objects and can optionally
  * be protected with authentication or ACL checks based on the use case.
  */
-router.get('/storage/objects/*path', async (req: Request, res: Response) => {
+router.get('/storage/objects/*path', attachUser, async (req: Request, res: Response) => {
   try {
-    const { userId } = getAuth(req);
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
+    const userId = req.currentUser!.clerkId;
 
     const raw = req.params.path;
     const wildcardPath = Array.isArray(raw) ? raw.join('/') : raw;

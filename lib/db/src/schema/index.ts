@@ -8,3 +8,4 @@ export * from "./automation";
 export * from "./enterprise";
 export * from "./orgDeletion";
 export * from "./userDeletion";
+export * from "./windowSessions";

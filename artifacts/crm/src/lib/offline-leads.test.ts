@@ -28,11 +28,11 @@ const noOpUpdate = async (_record: QueuedLead) => undefined;
 const tokenFor = (clerkUserId: string) =>
   `header.${Buffer.from(JSON.stringify({ sub: clerkUserId })).toString("base64url")}.signature`;
 
-test("binds offline lead requests to bearer identity and omits cookies", () => {
+test("binds offline lead requests to this window session and omits cookies", () => {
   const options = createLeadRequestOptions(queuedLead("a-1", "clerk-a"), "token-a");
   const headers = new Headers(options.headers);
   assert.equal(options.credentials, "omit");
-  assert.equal(headers.get("Authorization"), "Bearer token-a");
+  assert.equal(headers.get("x-aegis-window-session"), "token-a");
   assert.equal(headers.get("Idempotency-Key"), "key-a-1");
 });
 
@@ -73,9 +73,11 @@ test("does not send a B token returned during an A sync", async () => {
   let createCalls = 0;
   const record = queuedLead("a-race", "clerk-a");
   const auth: LeadSyncAuth = {
-    // Simulate Clerk rotating getToken before the React identity render lands.
+    // Simulate a token from another window arriving before React's identity
+    // render lands.
     getToken: async () => tokenFor("clerk-b"),
     getCurrentUserId: () => "clerk-a",
+    getTokenOwnerId: () => "clerk-b",
   };
   const dependencies: LeadQueueSyncDependencies = {
     list: async () => [record],

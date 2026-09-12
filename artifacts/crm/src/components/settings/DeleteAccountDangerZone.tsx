@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useAuth, useClerk } from "@clerk/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,12 +22,13 @@ import {
   getDeleteAccountErrorMessage,
   isDeleteAccountConfirmation,
 } from "@/lib/delete-account";
+import { useWindowAuth } from "@/components/auth/WindowAuthProvider";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export function DeleteAccountDangerZone() {
-  const { userId } = useAuth();
-  const { signOut } = useClerk();
+  const { user, signOut } = useWindowAuth();
+  const userId = user?.id;
   const queryClient = useQueryClient();
   const setSelectedOrgId = useOrgStore((state) => state.setSelectedOrgId);
   const [open, setOpen] = useState(false);
@@ -54,6 +54,11 @@ export function DeleteAccountDangerZone() {
     if (userId) {
       try {
         await purgeQueuedLeadsForUser(userId);
+        // Queues created before the window-session migration were scoped to
+        // the Clerk id. Remove that legacy scope as well on permanent delete.
+        if (user?.clerkId && user.clerkId !== userId) {
+          await purgeQueuedLeadsForUser(user.clerkId);
+        }
       } catch (cleanupError) {
         // The server has already completed the destructive operation. Local
         // cleanup is best effort and must not cause another delete attempt.
@@ -91,13 +96,12 @@ export function DeleteAccountDangerZone() {
 
       await clearDeletedAccountState();
 
-      // Clerk may already have invalidated the session as part of the server
-      // operation. Sign-out is intentionally best effort: once the API has
-      // confirmed deletion, never report failure or repeat the destructive API.
+      // The server revoked every app window at the deletion claim. Local
+      // cleanup is still best effort and never repeats the destructive API.
       try {
         await signOut();
       } catch (signOutError) {
-        console.warn("Account deleted, but Clerk sign-out did not complete.", signOutError);
+        console.warn("Account deleted, but local session cleanup did not complete.", signOutError);
       }
 
       window.location.assign(`${basePath}/sign-up`);

@@ -390,6 +390,14 @@ before(async () => {
         `${recoveryUserId}@synthetic.invalid`,
       ],
     );
+    await query(
+      `INSERT INTO window_sessions (user_id, token_hash, expires_at)
+       VALUES ($1, $2, now() + interval '1 hour')`,
+      [
+        clerkFailureUserId,
+        createHash("sha256").update(`synthetic-window:${clerkFailureUserId}`).digest("hex"),
+      ],
+    );
 
     await query(
       `INSERT INTO org_users (org_id, user_id, role)
@@ -552,6 +560,17 @@ test(
         completed_at: null,
       },
     ]);
+    const revokedSessions = await query(
+      `SELECT count(*)::integer AS count
+         FROM window_sessions
+        WHERE user_id = $1 AND revoked_at IS NOT NULL`,
+      [clerkFailureUserId],
+    );
+    assert.equal(
+      revokedSessions.rows[0]?.count,
+      1,
+      "all app window sessions are revoked at the durable deletion claim",
+    );
 
     const successfulDeleteUser: ClerkDeleteUser = async (clerkId) => {
       clerkCalls.push(clerkId);

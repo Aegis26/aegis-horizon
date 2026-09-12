@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "@clerk/react";
 import {
   useListLeads, getListLeadsQueryKey,
   useUpdateLead, useDeleteLead, useQualifyLead, useRescoreLeads,
@@ -28,6 +27,7 @@ import { Plus, UserPlus, Sparkles, Trash2, Pencil, ArrowUpRight, RefreshCw, Clou
 import { formatDate, formatPredictionPercentage } from "@/lib/format";
 import { useOfflineLeads } from "@/hooks/use-offline-leads";
 import { subscribeToLeadQueue } from "@/lib/offline-leads";
+import { useWindowAuth } from "@/components/auth/WindowAuthProvider";
 
 const STATUS_COLORS: Record<string, string> = {
   new: "border-primary/40 text-primary",
@@ -44,7 +44,8 @@ const OPERATORS = ["equals", "not_equals", "contains", "gt", "gte", "lt", "lte",
 
 export default function Leads() {
   const { selectedOrgId } = useOrgStore();
-  const { userId } = useAuth();
+  const { user } = useWindowAuth();
+  const userId = user?.id;
   const orgId = selectedOrgId || "";
   const queryClient = useQueryClient();
   const { toast } = useToast();

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { ClerkProvider, SignIn, SignUp, Show, useAuth, useClerk } from '@clerk/react';
+import { useEffect, useState } from "react";
+import { ClerkProvider, SignUp, useAuth, useClerk } from '@clerk/react';
+import { useSignIn } from '@clerk/react/legacy';
 import { shadcn } from '@clerk/themes';
 import { Switch, Route, Redirect, useLocation, Router as WouterRouter } from 'wouter';
-import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { QueryClient } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -25,17 +26,18 @@ import Communications from "@/pages/Communications";
 import Reports from "@/pages/Reports";
 import Documents from "@/pages/Documents";
 import Signatures from "@/pages/Signatures";
-import InvitationSignup from "@/pages/InvitationSignup";
 import { Button } from "@/components/ui/button";
 import {
   getGetMeQueryKey,
-  getGetMeQueryOptions,
   useGetMe,
+  acceptInvitation,
+  resolveInvitation,
 } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { getSafeAuthRedirectUrl, isInvitationAuthRedirect } from "@/lib/auth-redirect";
 import { belongsToAuthenticatedUser } from "@/lib/auth-scope";
 import { DeleteAccountDangerZone } from "@/components/settings/DeleteAccountDangerZone";
+import { WindowAuthProvider, useWindowAuth } from "@/components/auth/WindowAuthProvider";
 
 const queryClient = new QueryClient();
 
@@ -104,23 +106,178 @@ const clerkAppearance = {
 };
 
 function SignInPage() {
-  const redirectUrl = getAuthRedirectUrl(`${basePath}/dashboard`);
-  const invitationRedirect = isInvitationAuthRedirect(redirectUrl, basePath);
+  const [, setLocation] = useLocation();
+  const { login } = useWindowAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [totp, setTotp] = useState("");
+  const [needsMfa, setNeedsMfa] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await login(email, password, needsMfa ? totp : undefined);
+      if (result.ok) {
+        setLocation(getAuthRedirectUrl(`${basePath}/dashboard`));
+        return;
+      }
+      setNeedsMfa(result.mfaRequired);
+      setError(result.error);
+    } catch {
+      setError("Unable to sign in right now. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
   return (
     <AuthLayout>
-      <SignIn
-        routing="path"
-        path={`${basePath}/sign-in`}
-        signUpUrl={`${basePath}/sign-up?redirect_url=${encodeURIComponent(redirectUrl)}`}
-        forceRedirectUrl={invitationRedirect ? redirectUrl : undefined}
-        fallbackRedirectUrl={redirectUrl}
-      />
+      <form onSubmit={(event) => void submit(event)} className="w-full space-y-5 rounded-2xl border border-primary/10 bg-card p-8 shadow-xl">
+        <div><h1 className="font-display text-2xl font-bold">Welcome back</h1><p className="mt-1 text-sm text-muted-foreground">Sign in to this window.</p></div>
+        <label className="block space-y-2 text-sm font-medium">Email<input className="w-full rounded-md border bg-background px-3 py-2" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+        <label className="block space-y-2 text-sm font-medium">Password<input className="w-full rounded-md border bg-background px-3 py-2" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+        {needsMfa && <label className="block space-y-2 text-sm font-medium">Authenticator code<input className="w-full rounded-md border bg-background px-3 py-2" inputMode="numeric" autoComplete="one-time-code" value={totp} onChange={(event) => setTotp(event.target.value)} required /></label>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" className="w-full" disabled={submitting}>{submitting ? "Signing in..." : "Sign in"}</Button>
+        <p className="text-center text-sm"><a className="text-primary hover:underline" href={`${basePath}/forgot-password`}>Forgot password?</a></p>
+        <p className="text-center text-sm text-muted-foreground">Need an account? <a className="text-primary hover:underline" href={`${basePath}/sign-up`}>Sign up</a></p>
+      </form>
     </AuthLayout>
   );
 }
 
+type PasswordResetPhase = "email" | "code" | "password" | "second-factor" | "complete";
+type PasswordResetSecondFactor = "totp" | "backup_code" | "email_code";
+
+function ForgotPasswordPage() {
+  const { isLoaded, signIn, setActive } = useSignIn();
+  const { getToken } = useAuth();
+  const { signOut: signOutClerk } = useClerk();
+  const [, setLocation] = useLocation();
+  const [phase, setPhase] = useState<PasswordResetPhase>("email");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [secondFactor, setSecondFactor] = useState<PasswordResetSecondFactor>("totp");
+  const [secondCode, setSecondCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const genericError = "We could not complete that password reset. Please try again.";
+
+  const requestCode = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!isLoaded || busy) return;
+    setBusy(true); setError(null);
+    try {
+      await signIn.create({ strategy: "reset_password_email_code", identifier: email.trim() });
+      setPhase("code");
+    } catch {
+      // Keep account existence private.
+      setError(genericError);
+    } finally { setBusy(false); }
+  };
+
+  const verifyCode = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!isLoaded || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const attempt = await signIn.attemptFirstFactor({
+        strategy: "reset_password_email_code",
+        code,
+      });
+      if (attempt.status !== "needs_new_password") throw new Error();
+      setPhase("password");
+    } catch {
+      setError(genericError);
+    } finally { setBusy(false); }
+  };
+
+  const finalizeReset = async (sessionId: string) => {
+    if (!setActive) throw new Error();
+    await setActive({ session: sessionId });
+    const token = await getToken();
+    const response = await fetch(`${basePath}/api/auth/window/password-reset/revoke`, {
+      method: "POST",
+      credentials: "omit",
+      headers: { authorization: `Bearer ${token ?? ""}` },
+    });
+    if (!response.ok) throw new Error();
+    // This is the temporary reset session only. Do not sign out all Clerk
+    // sessions; CRM browser windows have already been revoked server-side.
+    await signOutClerk({ sessionId });
+    setPhase("complete");
+  };
+
+  const savePassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!isLoaded || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const attempt = await signIn.resetPassword({ password, signOutOfOtherSessions: false });
+      if (attempt.status === "complete" && attempt.createdSessionId) {
+        await finalizeReset(attempt.createdSessionId);
+      } else if (attempt.status === "needs_second_factor") {
+        const factor = attempt.supportedSecondFactors?.find(
+          (item) => item.strategy === "totp" || item.strategy === "backup_code" || item.strategy === "email_code",
+        );
+        if (!factor) throw new Error();
+        if (factor.strategy === "email_code") {
+          await attempt.prepareSecondFactor({
+            strategy: "email_code",
+            emailAddressId: factor.emailAddressId,
+          });
+        }
+        setSecondFactor(factor.strategy);
+        setPhase("second-factor");
+      } else throw new Error();
+    } catch {
+      setError(genericError);
+    } finally { setBusy(false); }
+  };
+
+  const verifySecondFactor = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!isLoaded || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const attempt = await signIn.attemptSecondFactor({ strategy: secondFactor, code: secondCode });
+      if (attempt.status !== "complete" || !attempt.createdSessionId) throw new Error();
+      await finalizeReset(attempt.createdSessionId);
+    } catch {
+      setError(genericError);
+    } finally { setBusy(false); }
+  };
+
+  if (phase === "complete") {
+    return <AuthLayout><div className="w-full space-y-5 rounded-2xl border border-primary/10 bg-card p-8 text-center shadow-xl"><h1 className="font-display text-2xl font-bold">Password updated</h1><p className="text-sm text-muted-foreground">For your security, sign in again to this window.</p><Button className="w-full" onClick={() => window.location.assign(`${basePath}/sign-in`)}>Continue to sign in</Button></div></AuthLayout>;
+  }
+  const onSubmit = phase === "email" ? requestCode : phase === "code" ? verifyCode : phase === "password" ? savePassword : verifySecondFactor;
+  return <AuthLayout><form onSubmit={(event) => void onSubmit(event)} className="w-full space-y-5 rounded-2xl border border-primary/10 bg-card p-8 shadow-xl">
+    <div><h1 className="font-display text-2xl font-bold">Reset your password</h1><p className="mt-1 text-sm text-muted-foreground">We will verify your email before changing your password.</p></div>
+    {phase === "email" && <label className="block space-y-2 text-sm font-medium">Email<input className="w-full rounded-md border bg-background px-3 py-2" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>}
+    {phase === "code" && <label className="block space-y-2 text-sm font-medium">Email code<input className="w-full rounded-md border bg-background px-3 py-2" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} required /></label>}
+    {phase === "password" && <label className="block space-y-2 text-sm font-medium">New password<input className="w-full rounded-md border bg-background px-3 py-2" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>}
+    {phase === "second-factor" && <><p className="text-sm text-muted-foreground">{secondFactor === "totp" ? "Enter a code from your authenticator app." : secondFactor === "backup_code" ? "Enter one of your recovery codes." : "Enter the verification code sent to your email."}</p><label className="block space-y-2 text-sm font-medium">Verification code<input className="w-full rounded-md border bg-background px-3 py-2" autoComplete="one-time-code" value={secondCode} onChange={(event) => setSecondCode(event.target.value)} required /></label></>}
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    <Button type="submit" className="w-full" disabled={!isLoaded || busy}>{busy ? "Please wait..." : phase === "email" ? "Email reset code" : phase === "code" ? "Verify code" : phase === "password" ? "Update password" : "Verify recovery"}</Button>
+    <p className="text-center text-sm"><a className="text-primary hover:underline" href={`${basePath}/sign-in`}>Back to sign in</a></p>
+  </form></AuthLayout>;
+}
+
 function SignUpPage() {
-  const redirectUrl = getAuthRedirectUrl(`${basePath}/dashboard`);
+  let invitationPending = false;
+  try {
+    invitationPending = Boolean(sessionStorage.getItem(INVITATION_TOKEN_STORAGE_KEY));
+  } catch {
+    // Clerk's normal signup remains available when session storage is blocked.
+  }
+  const redirectUrl = getAuthRedirectUrl(
+    invitationPending ? `${basePath}/invite` : `${basePath}/dashboard`,
+  );
   const invitationRedirect = isInvitationAuthRedirect(redirectUrl, basePath);
   return (
     <AuthLayout>
@@ -189,6 +346,17 @@ function readInvitationToken(): InvitationTokenState {
 function InvitationPage() {
   const [{ token, error: tokenError }] = useState(readInvitationToken);
   const [, setLocation] = useLocation();
+  const { isLoaded, isSignedIn } = useWindowAuth();
+  const setSelectedOrgId = useOrgStore((state) => state.setSelectedOrgId);
+  const [message, setMessage] = useState<string | null>(null);
+  const [accepting, setAccepting] = useState(false);
+
+  useEffect(() => {
+    if (!token || tokenError) return;
+    void resolveInvitation({ token })
+      .then((invitation) => setMessage(`You have been invited to join ${invitation.org.name}.`))
+      .catch(() => setMessage("This invitation is invalid or has expired."));
+  }, [token, tokenError]);
 
   if (tokenError || !token) {
     return (
@@ -207,36 +375,50 @@ function InvitationPage() {
     );
   }
 
-  return <InvitationSignup token={token} />;
-}
+  if (!isLoaded) return <HomeStatus message="Loading your session..." />;
+  if (!isSignedIn) {
+    const redirect = `${basePath}/invite`;
+    return (
+      <AuthLayout>
+        <div className="w-full space-y-5 rounded-2xl border border-primary/10 bg-card p-8 text-center shadow-xl">
+          <h1 className="font-display text-2xl font-bold">Join your team</h1>
+          <p className="text-sm text-muted-foreground">{message ?? "Checking invitation..."}</p>
+          <Button className="w-full" onClick={() => setLocation(`/sign-in?redirect_url=${encodeURIComponent(redirect)}`)}>Sign in to accept</Button>
+          <a className="block text-sm text-primary hover:underline" href={`${basePath}/sign-up`}>Create an account first</a>
+        </div>
+      </AuthLayout>
+    );
+  }
 
-function ClerkQueryClientCacheInvalidator() {
-  const { isLoaded, userId } = useAuth();
-  const queryClient = useQueryClient();
-  const setSelectedOrgId = useOrgStore((state) => state.setSelectedOrgId);
-  const prevUserIdRef = useRef<string | null | undefined>(undefined);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    const nextUserId = userId ?? null;
-    if (prevUserIdRef.current !== undefined && prevUserIdRef.current !== nextUserId) {
-      // Query keys are shared by the generated client. Clear them before the
-      // next identity can render, and never carry an org selection across
-      // accounts.
-      queryClient.clear();
-      setSelectedOrgId(null);
+  const accept = async () => {
+    if (accepting) return;
+    setAccepting(true);
+    try {
+      const result = await acceptInvitation({ token });
+      setSelectedOrgId(result.org.id);
+      sessionStorage.removeItem(INVITATION_TOKEN_STORAGE_KEY);
+      setLocation("/dashboard", { replace: true });
+    } catch {
+      setMessage("We could not accept this invitation. Confirm that you signed in with the invited, verified email.");
+      setAccepting(false);
     }
-    prevUserIdRef.current = nextUserId;
-  }, [isLoaded, queryClient, setSelectedOrgId, userId]);
-
-  return null;
+  };
+  return (
+    <AuthLayout>
+      <div className="w-full space-y-5 rounded-2xl border border-primary/10 bg-card p-8 text-center shadow-xl">
+        <h1 className="font-display text-2xl font-bold">Join your team</h1>
+        <p className="text-sm text-muted-foreground">{message ?? "Checking invitation..."}</p>
+        <Button className="w-full" disabled={accepting || message?.includes("invalid")} onClick={() => void accept()}>{accepting ? "Joining..." : "Accept invitation"}</Button>
+      </div>
+    </AuthLayout>
+  );
 }
 
 function HomeRedirect() {
-  const { isLoaded, isSignedIn, userId } = useAuth();
+  const { isLoaded, isSignedIn, user } = useWindowAuth();
   const { data: me, isLoading, isError, refetch } = useGetMe({
     query: {
-      enabled: isLoaded && isSignedIn === true && Boolean(userId),
+      enabled: isLoaded && isSignedIn,
       queryKey: getGetMeQueryKey(),
     },
   });
@@ -259,7 +441,7 @@ function HomeRedirect() {
   if (isLoading || !me) {
     return <HomeStatus message="Loading your workspace..." />;
   }
-  if (!belongsToAuthenticatedUser(me.user, userId)) {
+  if (!belongsToAuthenticatedUser(me.user, user?.clerkId)) {
     return <HomeStatus message="Loading your account..." />;
   }
   if (me.orgs.length === 0) {
@@ -298,8 +480,22 @@ function HomeStatus({
 }
 
 function NoOrganizationHome() {
-  const { signOut } = useClerk();
+  const { signOut } = useWindowAuth();
   const [showLanding, setShowLanding] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    setSignOutError(null);
+    try {
+      await signOut();
+    } catch {
+      setSigningOut(false);
+      setSignOutError("Your session could not be revoked. Please try again.");
+    }
+  };
 
   if (showLanding) {
     return <Landing />;
@@ -323,11 +519,13 @@ function NoOrganizationHome() {
           <Button onClick={() => setShowLanding(true)}>Continue to landing page</Button>
           <Button
             variant="outline"
-            onClick={() => void signOut({ redirectUrl: import.meta.env.BASE_URL })}
+            disabled={signingOut}
+            onClick={() => void handleSignOut()}
           >
-            Sign out
+            {signingOut ? "Signing out..." : "Sign out"}
           </Button>
         </div>
+        {signOutError ? <p className="text-sm text-destructive">{signOutError}</p> : null}
         <DeleteAccountDangerZone />
       </div>
     </div>
@@ -335,18 +533,9 @@ function NoOrganizationHome() {
 }
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  return (
-    <>
-      <Show when="signed-in">
-        <Shell>
-          <Component />
-        </Shell>
-      </Show>
-      <Show when="signed-out">
-        <Redirect to="/" />
-      </Show>
-    </>
-  );
+  const { isLoaded, isSignedIn } = useWindowAuth();
+  if (!isLoaded) return <HomeStatus message="Loading your session..." />;
+  return isSignedIn ? <Shell><Component /></Shell> : <Redirect to="/sign-in" />;
 }
 
 function ClerkProviderWithRoutes() {
@@ -377,10 +566,11 @@ function ClerkProviderWithRoutes() {
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
     >
       <QueryClientProvider client={queryClient}>
-        <ClerkQueryClientCacheInvalidator />
+        <WindowAuthProvider>
         <Switch>
           <Route path="/" component={HomeRedirect} />
           <Route path="/sign-in/*?" component={SignInPage} />
+          <Route path="/forgot-password" component={ForgotPasswordPage} />
           <Route path="/sign-up/*?" component={SignUpPage} />
           <Route path="/invite" component={InvitationPage} />
           
@@ -412,6 +602,7 @@ function ClerkProviderWithRoutes() {
           </Route>
         </Switch>
         <Toaster />
+        </WindowAuthProvider>
       </QueryClientProvider>
     </ClerkProvider>
   );

@@ -43,6 +43,45 @@ export const GetMeResponse = zod.object({
 
 
 /**
+ * Does not use or create a Clerk browser session. Password verification, email verification, account lock/ban state, and configured TOTP are verified by Clerk. The returned opaque token must be retained only in sessionStorage and sent in X-Aegis-Window-Session.
+ * @summary Verify email/password and create a CRM session for this browser window
+ */
+export const CreateWindowSessionBody = zod.object({
+  "email": zod.string().email(),
+  "password": zod.string(),
+  "totp": zod.string().optional().describe('Required when Clerk has MFA enabled for the account.')
+})
+
+export const CreateWindowSessionResponse = zod.object({
+  "token": zod.string().describe('Opaque bearer capability; never place in a URL or persistent storage.'),
+  "expiresAt": zod.coerce.date(),
+  "user": zod.object({
+  "id": zod.string(),
+  "clerkId": zod.string().optional(),
+  "email": zod.string(),
+  "fullName": zod.string().nullish()
+})
+})
+
+
+/**
+ * @summary Revoke only the requesting CRM browser-window session
+ */
+export const RevokeWindowSessionHeader = zod.object({
+  "X-Aegis-Window-Session": zod.string()
+})
+
+export const RevokeWindowSessionResponse = zod.void()
+
+
+/**
+ * Accepts only the short-lived Clerk bearer created by the password reset flow. It is not an authentication mechanism for CRM resources.
+ * @summary Revoke app window sessions after a verified Clerk password reset
+ */
+export const RevokePasswordResetWindowSessionsResponse = zod.void()
+
+
+/**
  * Requires the authenticated user to type DELETE. The external Clerk user, every organization where they currently hold an owner role, all memberships, and their local identity are permanently removed. Records in organizations they do not own remain and user references are detached.
  * @summary Permanently delete the authenticated user's account
  */

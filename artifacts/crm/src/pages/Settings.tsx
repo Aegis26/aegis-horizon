@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useClerk } from "@clerk/react";
 import {
   useGetOrg, useUpdateOrg, getGetOrgQueryKey,
   useListMembers, useInviteMember, useResendMemberInvite, useUpdateMemberRole, useRemoveMember, getListMembersQueryKey,
@@ -23,7 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials, formatDate } from "@/lib/format";
-import { Building2, Users, Save, Trash2, Mail, ShieldCheck, Key, Webhook, ActivitySquare, LayoutTemplate, Plus, Copy, CheckCircle2, Settings as SettingsIcon } from "lucide-react";
+import { Building2, Users, Save, Trash2, Mail, ShieldCheck, Key, Webhook, ActivitySquare, LayoutTemplate, Plus, Copy, CheckCircle2, LogOut, Settings as SettingsIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { ProviderSettings } from "@/components/settings/ProviderSettings";
 import { format, formatDistanceToNow } from "date-fns";
@@ -36,9 +37,26 @@ const templateMeta: Record<string, { name: string; description: string; category
 };
 
 export default function Settings() {
+  const { signOut } = useClerk();
+  const [signingOut, setSigningOut] = useState(false);
   const { selectedOrgId } = useOrgStore();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOut({ redirectUrl: import.meta.env.BASE_URL });
+    } catch {
+      setSigningOut(false);
+      toast({
+        title: "Unable to sign out",
+        description: "Your session may still be active. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const { data: org, isLoading: orgLoading } = useGetOrg(selectedOrgId || "", {
     query: { enabled: !!selectedOrgId, queryKey: getGetOrgQueryKey(selectedOrgId || "") }
@@ -664,6 +682,21 @@ export default function Settings() {
 
           </div>
         </Tabs>
+        <section aria-labelledby="session-heading" className="max-w-5xl mx-auto mt-12 pt-8 border-t border-border">
+          <h2 id="session-heading" className="text-lg font-bold font-display mb-2">Session</h2>
+          <p className="text-sm text-muted-foreground mb-4">End your session and sign out.</p>
+          <Button
+            variant="outline"
+            className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={handleSignOut}
+            disabled={signingOut}
+            aria-busy={signingOut}
+            data-testid="button-sign-out"
+          >
+            <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
+            {signingOut ? "Signing out..." : "Sign Out"}
+          </Button>
+        </section>
       </div>
     </div>
   );

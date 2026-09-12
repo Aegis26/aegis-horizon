@@ -1,0 +1,489 @@
+# Add Workspace Deletion - Cancel Organization
+
+**Goal:** Allow organization owner to delete their entire workspace (org) with all data.
+
+**Current Problem:**
+- No way to cancel/delete your workspace
+- Users stuck with organizations they don't need
+
+**Expected Behavior:**
+- Settings page has "Delete Organization" option
+- Shows scary warning (data will be permanently deleted)
+- Requires confirmation (type "DELETE" to confirm)
+- Deletes org and ALL related data:
+  - All accounts, opportunities, contacts, leads
+  - All documents, quotes, automations
+  - All team members removed
+  - Redirects to home/login after deletion
+- Only organization owner can delete
+
+---
+
+## Task 1: Find Settings Page and Add Delete Section
+
+Find the Settings page:
+```bash
+find artifacts/crm/src -name "*Settings*" -type f
+grep -r "export default.*Settings\|function Settings" artifacts/crm/src --include="*.tsx"
+```
+
+Add a new "Danger Zone" section at the bottom for organization deletion.
+
+---
+
+## Task 2: Check User Role First
+
+**CRITICAL:** Only show delete button if user is the OWNER.
+
+First, get the current user's role in the org:
+
+```bash
+grep -r "getCurrentUserRole\|getUserRole\|membership.*role" artifacts/crm/src --include="*.tsx"
+```
+
+Look for a hook or function that gets the current user's membership and role.
+
+If it doesn't exist, you'll need to fetch it:
+
+```typescript
+const fetchUserRole = async () => {
+  const response = await fetch(`/api/organizations/${orgId}/membership`)
+  const data = await response.json()
+  return data.role // 'owner', 'admin', 'manager', 'user', 'viewer'
+}
+```
+
+---
+
+## Task 3: Create Delete Organization UI Component
+
+Add this to the Settings page:
+
+```typescript
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
+
+export default function Settings() {
+  const router = useRouter()
+  const { orgId } = router.query
+  const [userRole, setUserRole] = useState(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
+  // ✅ FETCH USER'S ROLE IN ORG
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch(`/api/organizations/${orgId}/membership`)
+        const data = await response.json()
+        setUserRole(data.role)
+      } catch (error) {
+        console.error('Failed to fetch user role:', error)
+      }
+    }
+
+    if (orgId) {
+      fetchUserRole()
+    }
+  }, [orgId])
+
+  const handleDeleteOrganization = async () => {
+    if (deleteConfirmText.toUpperCase() !== 'DELETE') {
+      setDeleteError('Please type DELETE to confirm')
+      return
+    }
+
+    setIsDeleting(true)
+    setDeleteError('')
+
+    try {
+      const response = await fetch(`/api/organizations/${orgId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        setDeleteError(data.error || 'Failed to delete organization')
+        setIsDeleting(false)
+        return
+      }
+
+      // Organization deleted successfully
+      // Redirect to home
+      router.push('/')
+    } catch (error) {
+      console.error('Delete error:', error)
+      setDeleteError('An error occurred. Please try again.')
+      setIsDeleting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* ... existing settings sections ... */}
+
+      {/* ✅ ADD THIS: DANGER ZONE - Delete Organization (OWNER ONLY) */}
+      {userRole === 'owner' && (
+        <section className="mt-16 pt-8 border-t-2 border-red-900">
+          <div className="bg-red-500/5 border border-red-500/50 rounded-lg p-6">
+            <h2 className="text-xl font-bold text-red-400 mb-2">⚠ Danger Zone</h2>
+            <p className="text-gray-400 mb-6">
+              Permanently delete your organization and all associated data. This action cannot be undone.
+            </p>
+
+            {!showDeleteConfirm ? (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium transition"
+              >
+                Delete Organization
+              </button>
+            ) : (
+            <div className="space-y-4 bg-red-500/10 border border-red-500 rounded-lg p-4">
+              <div>
+                <h3 className="font-bold text-red-400 mb-2">Confirm Deletion</h3>
+                <p className="text-gray-400 text-sm mb-4">
+                  This will permanently delete:
+                </p>
+                <ul className="text-gray-400 text-sm space-y-1 ml-4 mb-4">
+                  <li>• Your organization and all accounts</li>
+                  <li>• All opportunities, contacts, and leads</li>
+                  <li>• All documents, quotes, and automations</li>
+                  <li>• All team members will be removed</li>
+                  <li>• All data will be permanently erased</li>
+                </ul>
+                <p className="text-red-400 font-bold mb-4">
+                  This action CANNOT be undone.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">
+                  Type "<span className="font-bold">DELETE</span>" to confirm:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => {
+                    setDeleteConfirmText(e.target.value)
+                    setDeleteError('')
+                  }}
+                  placeholder="Type DELETE here"
+                  className="w-full px-4 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-red-500 focus:outline-none"
+                  disabled={isDeleting}
+                />
+              </div>
+
+              {deleteError && (
+                <div className="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">
+                  {deleteError}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDeleteOrganization}
+                  disabled={isDeleting || deleteConfirmText.toUpperCase() !== 'DELETE'}
+                  className="flex-1 px-6 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-500/50 text-white rounded font-medium transition"
+                >
+                  {isDeleting ? 'Deleting...' : 'Permanently Delete Organization'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false)
+                    setDeleteConfirmText('')
+                    setDeleteError('')
+                  }}
+                  disabled={isDeleting}
+                  className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded font-medium transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Show message to non-owners */}
+      {userRole && userRole !== 'owner' && (
+        <section className="mt-16 pt-8 border-t-2 border-slate-700">
+          <p className="text-gray-400 text-sm">
+            Only the organization owner can delete the workspace.
+          </p>
+        </section>
+      )}
+    </div>
+  )
+}
+```
+
+---
+
+## Task 3: Create Membership Endpoint (if needed)
+
+If the endpoint `/api/organizations/:orgId/membership` doesn't exist, create it:
+
+```typescript
+app.get('/api/organizations/:orgId/membership', async (req, res) => {
+  const { orgId } = req.params
+  const userId = req.user.id
+
+  try {
+    const membership = await db.query.orgUsers.findFirst({
+      where: and(
+        eq(orgUsers.org_id, orgId),
+        eq(orgUsers.user_id, userId),
+        eq(orgUsers.status, 'active')
+      ),
+    })
+
+    if (!membership) {
+      return res.status(404).json({ error: 'Not a member of this organization' })
+    }
+
+    res.json({
+      role: membership.role, // 'owner', 'admin', 'manager', 'user', 'viewer'
+      userId: membership.user_id,
+      orgId: membership.org_id,
+    })
+  } catch (error) {
+    console.error('Error fetching membership:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+```
+
+---
+
+## Task 4: Create Backend DELETE Endpoint
+
+Create the endpoint that handles organization deletion.
+
+**File:** `artifacts/api-server/src/routes/organizations.ts` (or add to existing)
+
+```typescript
+app.delete('/api/organizations/:orgId', async (req, res) => {
+  const { orgId } = req.params
+  const userId = req.user.id
+
+  try {
+    // Verify user is the owner of this organization
+    const org = await db.query.organizations.findFirst({
+      where: eq(organizations.id, orgId),
+    })
+
+    if (!org) {
+      return res.status(404).json({ error: 'Organization not found' })
+    }
+
+    // Check if user is the founder (owner)
+    const membership = await db.query.orgUsers.findFirst({
+      where: and(
+        eq(orgUsers.org_id, orgId),
+        eq(orgUsers.user_id, userId),
+        eq(orgUsers.role, 'owner')
+      ),
+    })
+
+    if (!membership) {
+      return res.status(403).json({ error: 'Only organization owner can delete' })
+    }
+
+    // Log the deletion before deleting
+    await AuditService.log(
+      orgId,
+      userId,
+      'delete_organization',
+      'organization',
+      orgId,
+      { orgName: org.name }
+    )
+
+    // Delete all related data (in order of foreign key dependencies)
+    // Note: If using CASCADE deletes in DB, some may be automatic
+
+    // 1. Delete all activities
+    await db.delete(activities)
+      .where(eq(activities.org_id, orgId))
+
+    // 2. Delete all documents
+    await db.delete(documents)
+      .where(eq(documents.org_id, orgId))
+
+    // 3. Delete all automations
+    await db.delete(automations)
+      .where(eq(automations.org_id, orgId))
+
+    // 4. Delete all quotes
+    await db.delete(quotes)
+      .where(eq(quotes.org_id, orgId))
+
+    // 5. Delete all tasks
+    await db.delete(tasks)
+      .where(eq(tasks.org_id, orgId))
+
+    // 6. Delete all internal notes
+    await db.delete(internalNotes)
+      .where(eq(internalNotes.org_id, orgId))
+
+    // 7. Delete all email threads
+    await db.delete(emailThreads)
+      .where(eq(emailThreads.org_id, orgId))
+
+    // 8. Delete all call recordings
+    await db.delete(callRecordings)
+      .where(eq(callRecordings.org_id, orgId))
+
+    // 9. Delete all contacts
+    await db.delete(contacts)
+      .where(eq(contacts.org_id, orgId))
+
+    // 10. Delete all leads
+    await db.delete(leads)
+      .where(eq(leads.org_id, orgId))
+
+    // 11. Delete all opportunities
+    await db.delete(opportunities)
+      .where(eq(opportunities.org_id, orgId))
+
+    // 12. Delete all accounts
+    await db.delete(accounts)
+      .where(eq(accounts.org_id, orgId))
+
+    // 13. Delete all team members
+    await db.delete(orgUsers)
+      .where(eq(orgUsers.org_id, orgId))
+
+    // 14. Delete the organization itself
+    await db.delete(organizations)
+      .where(eq(organizations.id, orgId))
+
+    // Return success
+    res.json({
+      success: true,
+      message: 'Organization deleted permanently',
+    })
+  } catch (error) {
+    console.error('Organization deletion error:', error)
+    res.status(500).json({ error: 'Failed to delete organization' })
+  }
+})
+```
+
+---
+
+## Task 5: Verify Delete Order
+
+Check the database schema to ensure delete order respects foreign keys.
+
+The order should be:
+1. Dependent records (activities, documents, etc.)
+2. Core data (contacts, leads, opportunities, accounts)
+3. Team members (org_users)
+4. Organization itself
+
+If the database uses CASCADE deletes, the backend can just delete the org and cascade does the rest (cleaner).
+
+Ask Agent: "Are there CASCADE delete constraints in the schema?" If yes:
+
+```typescript
+// Simpler version with CASCADE
+await db.delete(organizations)
+  .where(eq(organizations.id, orgId))
+// This cascades to all related tables
+```
+
+---
+
+## Task 6: Add Confirmation Check
+
+Before deleting, verify:
+- [ ] User is authenticated (req.user exists)
+- [ ] User is organization owner (role === 'owner')
+- [ ] Organization exists
+- [ ] Proper audit log entry is created
+
+---
+
+## Task 7: Test Deletion Flow
+
+After deployment:
+
+1. **As Organization Owner:**
+   - Go to Settings
+   - Scroll to "Danger Zone"
+   - Click "Delete Organization"
+   - See confirmation dialog
+   - Type "DELETE"
+   - Click "Permanently Delete Organization"
+   - Should be redirected to home ✅
+
+2. **Verify deletion:**
+   - Try to access `/dashboard?orgId=<deleted-org>`
+   - Should show error (org not found) ✅
+   - Try to login
+   - Should work (user still exists, just no org) ✅
+
+3. **As Non-Owner (Employee):**
+   - Try calling DELETE endpoint directly
+   - Should get 403 "Only owner can delete" ✅
+
+---
+
+## Task 8: Commit & Push
+
+```bash
+git add artifacts/crm/src/pages/Settings.tsx artifacts/api-server/src/routes/organizations.ts
+
+git commit -m "feat: Add workspace deletion - allow owner to cancel organization
+
+UI Changes:
+- Settings page has 'Danger Zone' section at bottom
+- 'Delete Organization' button with scary warning
+- Confirmation dialog requires typing DELETE to confirm
+- Lists all data that will be deleted
+- Only organization owner can delete
+
+API Endpoint:
+- DELETE /api/organizations/:orgId
+- Verifies user is organization owner
+- Deletes all related data (accounts, opportunities, contacts, leads, documents, automations, etc.)
+- Deletes team members
+- Deletes organization itself
+- Creates audit log entry
+- Returns success or error
+
+Safeguards:
+- Only owner can delete
+- Requires explicit confirmation (type DELETE)
+- Clear warning about permanent deletion
+- Cascading deletion of all org data
+
+Users can now cancel their workspace if needed."
+
+git push origin main
+```
+
+Railway will auto-deploy. 🚀
+
+---
+
+## Success Criteria
+
+✅ **Delete button ONLY appears for organization owner**  
+✅ Non-owners see message: "Only the organization owner can delete the workspace"  
+✅ Owner clicks button → Shows scary confirmation dialog  
+✅ Must type "DELETE" to enable delete button  
+✅ Click delete → Organization deleted  
+✅ All org data removed (accounts, opportunities, contacts, etc.)  
+✅ All team members removed  
+✅ User redirected to home  
+✅ Admin/Manager/User/Viewer can't delete org (no button shown, API returns 403)  
+✅ Audit log records deletion  
+
+**After this, only organization owners can cancel their workspace!**

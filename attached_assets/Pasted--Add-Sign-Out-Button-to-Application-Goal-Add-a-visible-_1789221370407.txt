@@ -1,0 +1,221 @@
+# Add Sign Out Button to Application
+
+**Goal:** Add a visible Sign Out button so users can logout from the app.
+
+**Current Problem:**
+- Users can't sign out
+- No logout button anywhere in the UI
+- Users are stuck logged in
+
+**Expected Behavior:**
+- Sign Out button visible in Settings page (or user menu)
+- Click Sign Out → Logs out from Clerk
+- Redirects to login/home page
+- Clears session
+
+---
+
+## Task 1: Find the Best Location for Sign Out Button
+
+The Sign Out button should go in one of these locations (pick the best):
+
+**Option A: Settings Page (RECOMMENDED)**
+- File: `artifacts/crm/src/pages/Settings.tsx` or similar
+- Location: Bottom of sidebar or Settings page header
+- Makes sense: Users go to Settings to manage things like logout
+
+**Option B: User Menu/Dropdown**
+- File: Look for user profile/avatar component at top-right
+- Usually in a header or navigation bar
+- Shows "Sign Out" when user clicks avatar
+
+**Option C: Both**
+- Add to Settings AND in a user dropdown menu
+- Maximum discoverability
+
+**Find the Settings page:**
+```bash
+find artifacts/crm/src -name "*Settings*" -o -name "*settings*" -type f
+grep -r "Settings\|SETTINGS" artifacts/crm/src/pages/ --include="*.tsx"
+```
+
+**Report back:**
+- Where is the Settings page?
+- Where would Sign Out fit best?
+
+---
+
+## Task 2: Import Clerk's useClerk Hook
+
+The Sign Out functionality comes from Clerk:
+
+```bash
+grep -r "useClerk\|useAuth\|useSignUp" artifacts/crm/src --include="*.tsx" | head -5
+```
+
+This shows how Clerk is already being used in the app.
+
+You'll need to import:
+```typescript
+import { useClerk } from '@clerk/nextjs'
+```
+
+---
+
+## Task 3: Add Sign Out Button
+
+Add a button that calls `signOut()` from Clerk.
+
+**Template:**
+
+```typescript
+// In the Settings page or user menu component
+import { useClerk } from '@clerk/nextjs'
+import { useRouter } from 'next/router'
+
+export default function SettingsPage() {
+  const { signOut } = useClerk()
+  const router = useRouter()
+
+  const handleSignOut = async () => {
+    // Sign out from Clerk
+    await signOut()
+    
+    // Redirect to home/login
+    router.push('/')
+  }
+
+  return (
+    <div>
+      {/* ... existing settings content ... */}
+
+      {/* Sign Out Button - add at bottom of settings */}
+      <div className="mt-8 pt-8 border-t border-slate-700">
+        <button
+          onClick={handleSignOut}
+          className="px-6 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500 rounded transition"
+        >
+          Sign Out
+        </button>
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+## Task 4: Where to Add It in Settings
+
+If using Settings page, add at the bottom:
+
+```typescript
+export default function Settings() {
+  const { signOut } = useClerk()
+  const router = useRouter()
+
+  const handleSignOut = async () => {
+    await signOut()
+    router.push('/')
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* General settings */}
+      <section>
+        {/* General tab content */}
+      </section>
+
+      {/* Team Members settings */}
+      <section>
+        {/* Team members tab content */}
+      </section>
+
+      {/* ✅ ADD THIS AT THE BOTTOM */}
+      <section className="mt-12 pt-8 border-t border-slate-700">
+        <h2 className="text-lg font-bold text-white mb-4">Session</h2>
+        <p className="text-gray-400 mb-4">End your session and sign out.</p>
+        <button
+          onClick={handleSignOut}
+          className="px-6 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500 rounded transition"
+        >
+          Sign Out
+        </button>
+      </section>
+    </div>
+  )
+}
+```
+
+---
+
+## Task 5: Alternative - User Avatar/Menu
+
+If there's a user avatar at the top-right, add Sign Out to a dropdown:
+
+```bash
+grep -r "avatar\|user.*menu\|profile.*menu" artifacts/crm/src --include="*.tsx" | grep -i component
+find artifacts/crm/src -name "*Avatar*" -o -name "*Header*" -o -name "*Nav*" -type f
+```
+
+Once found, add to the dropdown:
+
+```typescript
+<div className="dropdown-menu">
+  <button>Profile</button>
+  <button>Settings</button>
+  <hr />
+  <button onClick={handleSignOut} className="text-red-500">
+    Sign Out
+  </button>
+</div>
+```
+
+---
+
+## Task 6: Test the Sign Out
+
+After deployment:
+
+1. Log in as owner or employee
+2. Go to Settings page
+3. Click "Sign Out" button
+4. Should be logged out and redirected to login/home ✅
+5. Try accessing dashboard → Should redirect to login (session gone) ✅
+
+---
+
+## Task 7: Commit & Push
+
+```bash
+git add artifacts/crm/src/pages/Settings.tsx artifacts/crm/src/components/
+
+git commit -m "feat: Add Sign Out button to Settings page
+
+- Added Sign Out button at bottom of Settings page
+- Uses Clerk's useClerk hook to logout user
+- Clears user session and redirects to home/login
+- Works for all user roles (Owner, Admin, User, Viewer)
+- Users can now logout from the application
+
+Users can now:
+1. Click Settings in sidebar
+2. Scroll to bottom (Session section)
+3. Click 'Sign Out' to logout"
+
+git push origin main
+```
+
+Railway will auto-deploy. 🚀
+
+---
+
+## Success Criteria
+
+✅ Settings page has a "Sign Out" button  
+✅ Click Sign Out → User is logged out  
+✅ Redirects to login/home page  
+✅ Session is cleared  
+✅ Can't access protected pages without logging back in  
+
+**After this, users can logout!**

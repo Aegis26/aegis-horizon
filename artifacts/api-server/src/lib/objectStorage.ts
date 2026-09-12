@@ -366,6 +366,37 @@ export class ObjectStorageService {
     });
   }
 
+  /**
+   * Preserve objects belonging to organizations the user did not own while
+   * removing the deleted Clerk id from the object ACL. Organization member
+   * rules are retained; only the opaque owner field is replaced.
+   */
+  async anonymizeObjectOwners(clerkUserId: string): Promise<void> {
+    const bindings = await db
+      .select({ objectPath: organizationObjectBindings.objectPath })
+      .from(organizationObjectBindings)
+      .where(eq(organizationObjectBindings.ownerUserId, clerkUserId));
+
+    for (const binding of bindings) {
+      let objectFile: File;
+      try {
+        objectFile = await this.getObjectEntityFile(binding.objectPath);
+      } catch (error) {
+        if (error instanceof ObjectNotFoundError) continue;
+        throw error;
+      }
+      const aclPolicy = await getObjectAclPolicy(objectFile);
+      if (!aclPolicy) {
+        throw new Error("Object ACL is unavailable for owner anonymization");
+      }
+      if (aclPolicy.owner !== clerkUserId) continue;
+      await setObjectAclPolicy(objectFile, {
+        ...aclPolicy,
+        owner: "[deleted-user]",
+      });
+    }
+  }
+
   async canAccessObjectEntity({
     userId,
     objectFile,

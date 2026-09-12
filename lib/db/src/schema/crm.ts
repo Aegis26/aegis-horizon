@@ -133,7 +133,9 @@ export const providerSyncStates = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
-    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    // Sync state belongs to the organization, not to the deleted login. Keep
+    // the connector state when a member removes their account.
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
     provider: text("provider").notNull(),
     providerAccountId: text("provider_account_id").notNull(),
     providerEmail: text("provider_email"),
@@ -160,7 +162,9 @@ export const providerBindings = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
     provider: text("provider").notNull(),
-    boundByUserId: uuid("bound_by_user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+    // A provider binding is deployment/org state. Deleting the person who
+    // claimed it must not destroy the surviving organization's connection.
+    boundByUserId: uuid("bound_by_user_id").references(() => users.id, { onDelete: "set null" }),
     providerAccountId: text("provider_account_id").notNull(),
     providerAccountEmail: text("provider_account_email").notNull(),
     verifiedAt: timestamp("verified_at", { withTimezone: true }).defaultNow().notNull(),
@@ -290,7 +294,8 @@ export const internalNotes = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
     accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
-    authorUserId: uuid("author_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    // Notes are business records and survive deletion of their author.
+    authorUserId: uuid("author_user_id").references(() => users.id, { onDelete: "set null" }),
     body: text("body").notNull(),
     isPrivate: boolean("is_private").default(false).notNull(),
     mentionedUserIds: uuid("mentioned_user_ids").array().default([]).notNull(),

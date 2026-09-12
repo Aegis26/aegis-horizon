@@ -43,6 +43,19 @@ export const GetMeResponse = zod.object({
 
 
 /**
+ * Requires the authenticated user to type DELETE. The external Clerk user, every organization where they currently hold an owner role, all memberships, and their local identity are permanently removed. Records in organizations they do not own remain and user references are detached.
+ * @summary Permanently delete the authenticated user's account
+ */
+export const DeleteUserAccountBody = zod.object({
+  "confirmation": zod.enum(['DELETE'])
+})
+
+export const DeleteUserAccountResponse = zod.object({
+  "success": zod.literal(true)
+})
+
+
+/**
  * @summary Confirm a signed invitation for the authenticated recipient
  */
 export const acceptInvitationBodyTokenMax = 4096;

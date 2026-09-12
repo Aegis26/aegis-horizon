@@ -9,11 +9,13 @@ export type ActiveOrganizationDeletionStatus =
 export async function getOrganizationDeletionRecord(orgId: string): Promise<{
   status: string;
   requestedByUserId: string | null;
+  requestedByUserHash: string | null;
 } | null> {
   const [row] = await db
     .select({
       status: organizationDeletionLedger.status,
       requestedByUserId: organizationDeletionLedger.requestedByUserId,
+      requestedByUserHash: organizationDeletionLedger.requestedByUserHash,
     })
     .from(organizationDeletionLedger)
     .where(eq(organizationDeletionLedger.organizationId, orgId));

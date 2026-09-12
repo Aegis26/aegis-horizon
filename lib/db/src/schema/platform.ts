@@ -26,7 +26,9 @@ export const usageLogs = pgTable("usage_logs", {
   orgId: uuid("org_id")
     .notNull()
     .references(() => organizations.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  // Usage is organization telemetry; retain it while detaching the deleted
+  // actor rather than cascading a surviving organization's history.
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
   featureKey: text("feature_key").notNull(),
   action: text("action").notNull(),
   metadata: jsonb("metadata").default({}),

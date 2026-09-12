@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { and, eq } from "drizzle-orm";
 import {
   db,
+  accountDeletionLedger,
   featureEntitlements,
   organizations,
   orgUsers,
@@ -26,6 +27,7 @@ import {
 import {
   attachUser,
   attachOrg,
+  isAccountDeletionActive,
   requireRole,
 } from "../middlewares/auth";
 import { serializeOrg } from "./auth";
@@ -258,6 +260,10 @@ router.post(
         })
         .returning();
     }
+    if (await isAccountDeletionActive(user.id)) {
+      res.status(409).json({ error: "This account is being deleted" });
+      return;
+    }
 
     const [existing] = await db
       .select()
@@ -349,42 +355,68 @@ router.patch(
       ? req.params.memberId[0]
       : req.params.memberId;
 
-    const [membership] = await db
-      .select()
-      .from(orgUsers)
-      .where(
-        and(eq(orgUsers.id, memberId), eq(orgUsers.orgId, req.currentOrg!.id)),
-      );
-    if (!membership) {
-      res.status(404).json({ error: "Member not found" });
-      return;
-    }
-    if (membership.role === "owner" && parsed.data.role !== "owner") {
-      const owners = await db
+    const result = await db.transaction(async (tx) => {
+      // Lock the target user before checking its deletion ledger and writing
+      // membership state. Account deletion takes this same user-row lock
+      // before its final ownership recheck, preventing a grant from slipping
+      // between that check and local purge.
+      const [membership] = await tx
         .select()
         .from(orgUsers)
         .where(
-          and(
-            eq(orgUsers.orgId, req.currentOrg!.id),
-            eq(orgUsers.role, "owner"),
-          ),
-        );
-      if (owners.length <= 1) {
-        res.status(400).json({ error: "Cannot demote the last owner" });
-        return;
+          and(eq(orgUsers.id, memberId), eq(orgUsers.orgId, req.currentOrg!.id)),
+        )
+        .for("update");
+      if (!membership) return { kind: "missing" as const };
+
+      const [targetUser] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.id, membership.userId))
+        .for("update");
+      if (!targetUser) return { kind: "missing" as const };
+
+      const [deletion] = await tx
+        .select({ status: accountDeletionLedger.status })
+        .from(accountDeletionLedger)
+        .where(eq(accountDeletionLedger.userId, targetUser.id));
+      if (deletion?.status === "processing" || deletion?.status === "failed") {
+        return { kind: "deleting" as const };
       }
+
+      if (membership.role === "owner" && parsed.data.role !== "owner") {
+        const owners = await tx
+          .select()
+          .from(orgUsers)
+          .where(
+            and(
+              eq(orgUsers.orgId, req.currentOrg!.id),
+              eq(orgUsers.role, "owner"),
+            ),
+          );
+        if (owners.length <= 1) return { kind: "last_owner" as const };
+      }
+
+      const [updated] = await tx
+        .update(orgUsers)
+        .set({ role: parsed.data.role })
+        .where(eq(orgUsers.id, membership.id))
+        .returning();
+      return { kind: "updated" as const, updated, user: targetUser };
+    });
+    if (result.kind === "missing") {
+      res.status(404).json({ error: "Member not found" });
+      return;
     }
-
-    const [updated] = await db
-      .update(orgUsers)
-      .set({ role: parsed.data.role })
-      .where(eq(orgUsers.id, membership.id))
-      .returning();
-
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, updated.userId));
+    if (result.kind === "deleting") {
+      res.status(409).json({ error: "This account is being deleted" });
+      return;
+    }
+    if (result.kind === "last_owner") {
+      res.status(400).json({ error: "Cannot demote the last owner" });
+      return;
+    }
+    const { updated, user } = result;
 
     res.json(
       UpdateMemberRoleResponse.parse({

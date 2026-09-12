@@ -35,6 +35,7 @@ import {
 import { useOrgStore } from "@/store/org-store";
 import { getSafeAuthRedirectUrl, isInvitationAuthRedirect } from "@/lib/auth-redirect";
 import { belongsToAuthenticatedUser } from "@/lib/auth-scope";
+import { DeleteAccountDangerZone } from "@/components/settings/DeleteAccountDangerZone";
 
 const queryClient = new QueryClient();
 
@@ -327,6 +328,7 @@ function NoOrganizationHome() {
             Sign out
           </Button>
         </div>
+        <DeleteAccountDangerZone />
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   and,
   eq,
@@ -41,6 +41,10 @@ import {
 } from "./orgDeletionStages";
 
 const DELETION_LEASE_MS = 10 * 60 * 1000;
+
+function localUserOpaqueHash(userId: string): string {
+  return createHash("sha256").update(userId).digest("hex");
+}
 
 export class OrganizationDeletionError extends Error {
   constructor(
@@ -107,6 +111,7 @@ async function claimDeletion(
           id: randomUUID(),
           organizationId: orgId,
           requestedByUserId: userId,
+          requestedByUserHash: localUserOpaqueHash(userId),
           status: "pending",
           phase: "stripe",
         })
@@ -128,6 +133,7 @@ async function claimDeletion(
       .update(organizationDeletionLedger)
       .set({
         leaseOwnerUserId: userId,
+        requestedByUserHash: localUserOpaqueHash(userId),
         status: "processing",
         attempts: sql`${organizationDeletionLedger.attempts} + 1`,
         leaseToken,
@@ -345,6 +351,7 @@ async function purgeRelationalData(
       .update(organizationDeletionLedger)
       .set({
         status: "completed",
+        requestedByUserId: null,
         leaseOwnerUserId: null,
         leaseToken: null,
         leaseUntil: null,

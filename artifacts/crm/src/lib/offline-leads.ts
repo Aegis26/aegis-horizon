@@ -6,6 +6,7 @@ const DATABASE_VERSION = 1;
 const STORE_NAME = "lead-mutations";
 const CHANGE_EVENT = "aegis:lead-queue-change";
 const purgedOrganizationIds = new Set<string>();
+const purgedClerkUserIds = new Set<string>();
 
 export interface QueuedLead {
   id: string;
@@ -134,7 +135,10 @@ export async function enqueueLead(
 }
 
 async function updateQueuedLead(record: QueuedLead): Promise<void> {
-  if (shouldDiscardQueuedLeadUpdate(record)) {
+  if (
+    shouldDiscardQueuedLeadUpdate(record) ||
+    (record.clerkUserId !== undefined && purgedClerkUserIds.has(record.clerkUserId))
+  ) {
     await deleteQueuedLead(record.id);
     return;
   }
@@ -206,6 +210,52 @@ export async function purgeQueuedLeadsForOrganization(orgId: string): Promise<vo
   notify({ orgId });
 }
 
+/**
+ * Remove every unsynced lead authored by an account that has completed
+ * permanent deletion. The user scope matters because drafts from other
+ * signed-in accounts can share this browser's IndexedDB database.
+ *
+ * Mark the identity before opening the transaction so an in-flight sync cannot
+ * write a deleted account's draft back after this cleanup completes.
+ */
+export async function purgeQueuedLeadsForUser(clerkUserId: string): Promise<void> {
+  purgedClerkUserIds.add(clerkUserId);
+  const database = await openDatabase();
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, "readwrite");
+    const request = transaction.objectStore(STORE_NAME).openCursor();
+
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+
+      const record = cursor.value as QueuedLead;
+      if (record.clerkUserId === clerkUserId) {
+        cursor.delete();
+      }
+      cursor.continue();
+    };
+    request.onerror = () => {
+      reject(request.error ?? new Error("Could not purge deleted account drafts."));
+    };
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Could not purge deleted account drafts."));
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Could not purge deleted account drafts."));
+    };
+  });
+
+  notify({ clerkUserId });
+}
+
 export function createLeadRequestOptions(
   record: QueuedLead,
   authToken: string,
@@ -261,7 +311,10 @@ export async function syncLeadQueueForUser(
   dependencies: LeadQueueSyncDependencies = defaultSyncDependencies,
 ): Promise<void> {
   dependencies.notify?.({ clerkUserId });
-  while (auth.getCurrentUserId() === clerkUserId) {
+  while (
+    auth.getCurrentUserId() === clerkUserId &&
+    !purgedClerkUserIds.has(clerkUserId)
+  ) {
     const [record] = await dependencies.list(clerkUserId);
     if (!record || record.clerkUserId !== clerkUserId) break;
 

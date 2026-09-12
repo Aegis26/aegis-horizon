@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { getAuth, clerkClient } from "@clerk/express";
 import { and, eq, inArray } from "drizzle-orm";
@@ -9,6 +10,7 @@ import {
   featureEntitlements,
   orgSecurityPolicies,
   usageLogs,
+  accountDeletionLedger,
   type Organization,
   type OrgUser,
   type User,
@@ -17,7 +19,9 @@ import { featuresForPlan } from "../lib/catalog";
 import { getClientIp, isIpAllowed } from "../lib/clientIp";
 import {
   acquireOrganizationSharedLock,
+  acquireUserSharedLock,
   type OrganizationLock,
+  type UserLock,
 } from "../lib/orgWriteLock";
 import {
   isPendingUserForVerifiedEmail,
@@ -36,6 +40,7 @@ declare global {
       currentMembership?: OrgUser;
       organizationDeletionCompleted?: boolean;
       organizationWriteLock?: OrganizationLock;
+      userReadLock?: UserLock;
     }
   }
 }
@@ -57,6 +62,66 @@ function slugify(input: string): string {
   return `${base || "org"}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function isAccountDeletionRequest(req: Request): boolean {
+  const path = req.originalUrl.split("?")[0];
+  return (
+    req.method.toUpperCase() === "DELETE" &&
+    (path === "/api/users/delete-account" || path === "/users/delete-account")
+  );
+}
+
+function userOpaqueHash(clerkId: string): string {
+  return createHash("sha256").update(clerkId).digest("hex");
+}
+
+function localUserOpaqueHash(userId: string): string {
+  return createHash("sha256").update(userId).digest("hex");
+}
+
+/**
+ * Account deletion claims the exclusive user lock before entering its durable
+ * orchestration. Every other authenticated request holds a shared lock from
+ * identity lookup through its response, so already-admitted writers drain
+ * before the claim.
+ */
+async function holdUserSharedLock(
+  req: Request,
+  res: Response,
+  clerkId: string,
+): Promise<boolean> {
+  if (req.userReadLock) return true;
+  try {
+    req.userReadLock = await acquireUserSharedLock(clerkId);
+  } catch (error) {
+    req.log?.warn?.({ err: error }, "User lock unavailable");
+    res.status(503).json({ error: "Account is busy; retry the request" });
+    return false;
+  }
+  const release = () => {
+    void releaseUserSharedLock(req).catch((error) => {
+      req.log?.warn?.({ err: error }, "User lock release failed");
+    });
+  };
+  res.once("finish", release);
+  res.once("close", release);
+  return true;
+}
+
+export async function releaseUserSharedLock(req: Request): Promise<void> {
+  const lock = req.userReadLock;
+  if (!lock) return;
+  req.userReadLock = undefined;
+  await lock.release();
+}
+
+export async function isAccountDeletionActive(userId: string): Promise<boolean> {
+  const [state] = await db
+    .select({ status: accountDeletionLedger.status })
+    .from(accountDeletionLedger)
+    .where(eq(accountDeletionLedger.userId, userId));
+  return state?.status === "processing" || state?.status === "failed";
+}
+
 /** Requires a signed-in Clerk session; provisions the local user (and a
  *  default org on first sign-in) just-in-time. */
 export async function attachUser(
@@ -67,6 +132,37 @@ export async function attachUser(
   const auth = getAuth(req);
   if (!auth.userId) {
     res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  // The deletion endpoint itself must acquire the exclusive lock, not first
+  // queue behind its own shared lock. All other requests are admitted under a
+  // shared lock before any local lookup or just-in-time provisioning.
+  if (!isAccountDeletionRequest(req) && !(await holdUserSharedLock(req, res, auth.userId))) {
+    return;
+  }
+
+  const [deletionState] = await db
+    .select({
+      status: accountDeletionLedger.status,
+      phase: accountDeletionLedger.phase,
+    })
+    .from(accountDeletionLedger)
+    .where(eq(accountDeletionLedger.userOpaqueHash, userOpaqueHash(auth.userId)));
+  if (
+    deletionState &&
+    deletionState.status === "completed"
+  ) {
+    res.status(410).json({ error: "This account has been deleted" });
+    return;
+  }
+  if (
+    deletionState &&
+    !isAccountDeletionRequest(req) &&
+    (deletionState.status === "processing" ||
+      deletionState.status === "failed")
+  ) {
+    res.status(409).json({ error: "Account deletion is in progress" });
     return;
   }
 
@@ -311,7 +407,7 @@ export async function attachOrg(
   const deletionRecord = await getOrganizationDeletionRecord(orgId);
   if (
     deletionRecord?.status === "completed" &&
-    deletionRecord.requestedByUserId === user.id &&
+    deletionRecord.requestedByUserHash === localUserOpaqueHash(user.id) &&
     req.method.toUpperCase() === "DELETE" &&
     isOrganizationDeletionEndpoint(req, orgId)
   ) {

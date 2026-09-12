@@ -46,6 +46,42 @@ paths:
                 $ref: "#/components/schemas/Me"
         "401":
           description: Not authenticated
+  /users/delete-account:
+    delete:
+      operationId: deleteUserAccount
+      tags: [auth]
+      summary: Permanently delete the authenticated user's account
+      description: >
+        Requires the authenticated user to type DELETE. The external Clerk
+        user, every organization where they currently hold an owner role, all
+        memberships, and their local identity are permanently removed. Records
+        in organizations they do not own remain and user references are
+        detached.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserAccountDeletionConfirmation"
+      responses:
+        "200":
+          description: Account deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccountDeletionResponse"
+        "400":
+          description: Confirmation must be exactly DELETE
+        "401":
+          description: Not authenticated
+        "404":
+          description: User not found
+        "409":
+          description: Account deletion is already in progress
+        "502":
+          description: Clerk deletion failed; retry is safe
+        "500":
+          description: The relational purge failed and was rolled back; retry is safe
   /invitations/accept:
     post:
       operationId: acceptInvitation
@@ -2467,6 +2503,18 @@ components:
       properties:
         confirmation: { type: string, enum: [DELETE] }
     OrganizationDeletionResponse:
+      type: object
+      additionalProperties: false
+      required: [success]
+      properties:
+        success: { type: boolean, enum: [true] }
+    UserAccountDeletionConfirmation:
+      type: object
+      additionalProperties: false
+      required: [confirmation]
+      properties:
+        confirmation: { type: string, enum: [DELETE] }
+    UserAccountDeletionResponse:
       type: object
       additionalProperties: false
       required: [success]

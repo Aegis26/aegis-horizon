@@ -4,6 +4,8 @@ import { startWorkflowScheduler } from "./services/workflow";
 import { startReportScheduler } from "./services/reportScheduler";
 import { startWebhookScheduler } from "./services/webhooks";
 import { ensureOrganizationDeletionLedgerSchema } from "./lib/organizationDeletionSchema";
+import { ensureAccountDeletionSchema } from "./lib/accountDeletionSchema";
+import { startAccountDeletionRecovery } from "./services/accountDeletion";
 
 const rawPort = process.env["PORT"];
 
@@ -20,6 +22,7 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 await ensureOrganizationDeletionLedgerSchema();
+await ensureAccountDeletionSchema();
 
 startWorkflowScheduler();
 startReportScheduler();
@@ -32,4 +35,5 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  startAccountDeletionRecovery();
 });

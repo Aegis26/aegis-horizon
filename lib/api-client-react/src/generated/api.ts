@@ -154,6 +154,8 @@ import type {
   UploadUrlRequest,
   UploadUrlResponse,
   UsageLog,
+  UserAccountDeletionConfirmation,
+  UserAccountDeletionResponse,
   Webhook,
   WebhookCreated,
   WebhookDelivery,
@@ -347,6 +349,78 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Err
 
 
 
+
+export const getDeleteUserAccountUrl = () => {
+
+
+
+
+  return `/api/users/delete-account`
+}
+
+/**
+ * Requires the authenticated user to type DELETE. The external Clerk user, every organization where they currently hold an owner role, all memberships, and their local identity are permanently removed. Records in organizations they do not own remain and user references are detached.
+ * @summary Permanently delete the authenticated user's account
+ */
+export const deleteUserAccount = async (userAccountDeletionConfirmation: UserAccountDeletionConfirmation, options?: Parameters<typeof customFetch>[1]): Promise<UserAccountDeletionResponse> => {
+
+  return customFetch<UserAccountDeletionResponse>(getDeleteUserAccountUrl(),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(userAccountDeletionConfirmation)
+  }
+);}
+
+
+
+
+
+export const getDeleteUserAccountMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUserAccount>>, TError,{data: BodyType<UserAccountDeletionConfirmation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteUserAccount>>, TError,{data: BodyType<UserAccountDeletionConfirmation>}, TContext> => {
+
+const mutationKey = ['deleteUserAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteUserAccount>>, {data: BodyType<UserAccountDeletionConfirmation>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  deleteUserAccount(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteUserAccountMutationResult = NonNullable<Awaited<ReturnType<typeof deleteUserAccount>>>
+    export type DeleteUserAccountMutationBody = BodyType<UserAccountDeletionConfirmation>
+    export type DeleteUserAccountMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete the authenticated user's account
+ */
+export const useDeleteUserAccount = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUserAccount>>, TError,{data: BodyType<UserAccountDeletionConfirmation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteUserAccount>>,
+        TError,
+        {data: BodyType<UserAccountDeletionConfirmation>},
+        TContext
+      > => {
+      return useMutation(getDeleteUserAccountMutationOptions(options));
+    }
 
 export const getAcceptInvitationUrl = () => {
 

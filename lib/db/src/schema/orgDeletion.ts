@@ -20,6 +20,7 @@ export const organizationDeletionLedger = pgTable(
     id: uuid("id").primaryKey(),
     organizationId: uuid("organization_id").notNull(),
     requestedByUserId: uuid("requested_by_user_id"),
+    requestedByUserHash: text("requested_by_user_hash"),
     leaseOwnerUserId: uuid("lease_owner_user_id"),
     status: text("status").notNull().default("pending"),
     phase: text("phase").notNull().default("stripe"),

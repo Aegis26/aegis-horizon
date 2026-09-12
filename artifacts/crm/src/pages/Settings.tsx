@@ -28,6 +28,7 @@ import { Building2, Users, Save, Trash2, Mail, ShieldCheck, Key, Webhook, Activi
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { ProviderSettings } from "@/components/settings/ProviderSettings";
 import { DeleteOrganizationDangerZone } from "@/components/settings/DeleteOrganizationDangerZone";
+import { DeleteAccountDangerZone } from "@/components/settings/DeleteAccountDangerZone";
 import { format, formatDistanceToNow } from "date-fns";
 
 
@@ -693,6 +694,9 @@ export default function Settings() {
             />
           </div>
         )}
+        <div className="max-w-5xl mx-auto mt-12">
+          <DeleteAccountDangerZone />
+        </div>
         <section aria-labelledby="session-heading" className="max-w-5xl mx-auto mt-12 pt-8 border-t border-border">
           <h2 id="session-heading" className="text-lg font-bold font-display mb-2">Session</h2>
           <p className="text-sm text-muted-foreground mb-4">End your session and sign out.</p>

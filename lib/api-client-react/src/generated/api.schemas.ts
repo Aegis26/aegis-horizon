@@ -669,6 +669,21 @@ export interface OrganizationDeletionResponse {
   success: true;
 }
 
+export type UserAccountDeletionConfirmationConfirmation = typeof UserAccountDeletionConfirmationConfirmation[keyof typeof UserAccountDeletionConfirmationConfirmation];
+
+
+export const UserAccountDeletionConfirmationConfirmation = {
+  DELETE: 'DELETE',
+} as const;
+
+export interface UserAccountDeletionConfirmation {
+  confirmation: UserAccountDeletionConfirmationConfirmation;
+}
+
+export interface UserAccountDeletionResponse {
+  success: true;
+}
+
 export type MemberRole = typeof MemberRole[keyof typeof MemberRole];
 
 

@@ -11,6 +11,7 @@ import { db, organizations, orgUsers, users } from "@workspace/db";
 import {
   attachUser,
   acquireOrganizationMutationLock,
+  isAccountDeletionActive,
 } from "../middlewares/auth";
 import {
   invitationAcceptanceDecision,
@@ -209,6 +210,10 @@ router.post(
       .where(eq(users.id, token.userId));
     if (!targetUser) {
       res.status(410).json({ error: "Invitation is no longer available" });
+      return;
+    }
+    if (await isAccountDeletionActive(targetUser.id)) {
+      res.status(409).json({ error: "This account is being deleted" });
       return;
     }
 

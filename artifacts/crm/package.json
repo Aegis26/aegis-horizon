@@ -7,7 +7,7 @@
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
-    "test": "sh -c 'rm -rf .test-dist; mkdir -p .test-dist; pnpm --filter @workspace/api-server exec esbuild \"$PWD/src/lib/auth-redirect.test.ts\" \"$PWD/src/lib/auth-scope.test.ts\" \"$PWD/src/lib/offline-leads.test.ts\" \"$PWD/src/lib/invitation-signup.test.ts\" \"$PWD/src/lib/delete-organization.test.ts\" --bundle --platform=node --format=cjs --outdir=\"$PWD/.test-dist\" --out-extension:.js=.cjs && node --test .test-dist/auth-redirect.test.cjs .test-dist/auth-scope.test.cjs .test-dist/offline-leads.test.cjs .test-dist/invitation-signup.test.cjs .test-dist/delete-organization.test.cjs; status=$?; rm -rf .test-dist; exit $status'",
+    "test": "sh -c 'rm -rf .test-dist; mkdir -p .test-dist; pnpm --filter @workspace/api-server exec esbuild \"$PWD/src/lib/auth-redirect.test.ts\" \"$PWD/src/lib/auth-scope.test.ts\" \"$PWD/src/lib/offline-leads.test.ts\" \"$PWD/src/lib/invitation-signup.test.ts\" \"$PWD/src/lib/delete-organization.test.ts\" \"$PWD/src/lib/delete-account.test.ts\" --bundle --platform=node --format=cjs --outdir=\"$PWD/.test-dist\" --out-extension:.js=.cjs && node --test .test-dist/auth-redirect.test.cjs .test-dist/auth-scope.test.cjs .test-dist/offline-leads.test.cjs .test-dist/invitation-signup.test.cjs .test-dist/delete-organization.test.cjs .test-dist/delete-account.test.cjs; status=$?; rm -rf .test-dist; exit $status'",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

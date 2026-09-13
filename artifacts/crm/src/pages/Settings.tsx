@@ -30,6 +30,7 @@ import { DeleteOrganizationDangerZone } from "@/components/settings/DeleteOrgani
 import { DeleteAccountDangerZone } from "@/components/settings/DeleteAccountDangerZone";
 import { format, formatDistanceToNow } from "date-fns";
 import { useWindowAuth } from "@/components/auth/WindowAuthProvider";
+import { belongsToAuthenticatedUser } from "@/lib/auth-scope";
 
 
 const templateMeta: Record<string, { name: string; description: string; category: string }> = {
@@ -39,12 +40,32 @@ const templateMeta: Record<string, { name: string; description: string; category
 };
 
 export default function Settings() {
-  const { signOut } = useWindowAuth();
+  const {
+    signOut,
+    user: sessionUser,
+    isLoaded: authLoaded,
+    isSignedIn,
+  } = useWindowAuth();
   const [signingOut, setSigningOut] = useState(false);
   const { selectedOrgId } = useOrgStore();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { data: me } = useGetMe({ query: { queryKey: getGetMeQueryKey() } });
+  const { data: me } = useGetMe({
+    query: {
+      enabled: authLoaded && isSignedIn,
+      queryKey: getGetMeQueryKey(),
+    },
+  });
+  // Workspace settings are controlled solely by the current selected-org
+  // membership. A missing, stale, or failed membership lookup is non-owner.
+  const isOwner = Boolean(
+    selectedOrgId &&
+      belongsToAuthenticatedUser(me?.user, sessionUser?.clerkId) &&
+      me?.orgs.some(
+        (membership) =>
+          membership.org.id === selectedOrgId && membership.role === "owner",
+      ),
+  );
 
   const handleSignOut = async () => {
     if (signingOut) return;
@@ -62,31 +83,31 @@ export default function Settings() {
   };
 
   const { data: org, isLoading: orgLoading } = useGetOrg(selectedOrgId || "", {
-    query: { enabled: !!selectedOrgId, queryKey: getGetOrgQueryKey(selectedOrgId || "") }
+    query: { enabled: isOwner, queryKey: getGetOrgQueryKey(selectedOrgId || "") }
   });
 
   const { data: members, isLoading: membersLoading } = useListMembers(selectedOrgId || "", {
-    query: { enabled: !!selectedOrgId, queryKey: getListMembersQueryKey(selectedOrgId || "") }
+    query: { enabled: isOwner, queryKey: getListMembersQueryKey(selectedOrgId || "") }
   });
 
   const { data: tokens } = useListApiTokens(selectedOrgId || "", {
-    query: { enabled: !!selectedOrgId, queryKey: getListApiTokensQueryKey(selectedOrgId || "") }
+    query: { enabled: isOwner, queryKey: getListApiTokensQueryKey(selectedOrgId || "") }
   });
 
   const { data: security } = useGetOrgSecurityPolicy(selectedOrgId || "", {
-    query: { enabled: !!selectedOrgId, queryKey: getGetOrgSecurityPolicyQueryKey(selectedOrgId || "") }
+    query: { enabled: isOwner, queryKey: getGetOrgSecurityPolicyQueryKey(selectedOrgId || "") }
   });
 
   const { data: webhooks } = useListWebhooks(selectedOrgId || "", {
-    query: { enabled: !!selectedOrgId, queryKey: getListWebhooksQueryKey(selectedOrgId || "") }
+    query: { enabled: isOwner, queryKey: getListWebhooksQueryKey(selectedOrgId || "") }
   });
 
   const { data: auditEvents } = useListAuditEvents(selectedOrgId || "", {
-    query: { enabled: !!selectedOrgId, queryKey: getListAuditEventsQueryKey(selectedOrgId || "") }
+    query: { enabled: isOwner, queryKey: getListAuditEventsQueryKey(selectedOrgId || "") }
   });
 
   const { data: templates } = useListIndustryTemplates(selectedOrgId || "", {
-    query: { enabled: !!selectedOrgId, queryKey: getListIndustryTemplatesQueryKey(selectedOrgId || "") }
+    query: { enabled: isOwner, queryKey: getListIndustryTemplatesQueryKey(selectedOrgId || "") }
   });
 
   const updateOrg = useUpdateOrg();
@@ -255,7 +276,7 @@ export default function Settings() {
     });
   };
 
-  if (orgLoading || membersLoading) {
+  if (isOwner && (orgLoading || membersLoading)) {
     return <div className="p-8"><div className="skeleton h-96 rounded-xl"></div></div>;
   }
 
@@ -268,11 +289,16 @@ export default function Settings() {
           <h1 className="text-3xl font-bold tracking-tight font-display mb-1 flex items-center gap-3">
             <SettingsIcon className="h-8 w-8 text-primary" /> Settings
           </h1>
-          <p className="text-sm text-muted-foreground">Manage your workspace, security, and integrations.</p>
+          <p className="text-sm text-muted-foreground">
+            {isOwner
+              ? "Manage your workspace, security, and integrations."
+              : "Manage your account and session."}
+          </p>
         </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-8">
+        {isOwner && (
         <Tabs defaultValue="general" className="max-w-5xl mx-auto flex flex-col md:flex-row gap-8">
           <TabsList className="flex md:flex-col h-auto bg-transparent items-start justify-start w-full md:w-56 gap-2 border-b md:border-b-0 border-border/50 pb-4 md:pb-0 overflow-x-auto">
             <TabsTrigger value="general" className="w-full justify-start text-left data-[state=active]:bg-card data-[state=active]:border-primary/50 border border-transparent shadow-none"><Building2 className="w-4 h-4 mr-2"/> General</TabsTrigger>
@@ -437,9 +463,9 @@ export default function Settings() {
                   <div className="flex items-center justify-between border border-border/50 p-4 rounded-lg bg-card/50">
                     <div className="space-y-0.5">
                       <Label className="text-base">Require Multi-Factor Authentication</Label>
-                      <p className="text-sm text-muted-foreground">All members must configure MFA via Clerk to access this workspace.</p>
+                      <p className="text-sm text-muted-foreground">All members must configure MFA to access this workspace.</p>
                       <Badge variant="outline" className="mt-2 font-mono text-[10px] uppercase">
-                        Clerk status: {security?.clerkMfaStatus ?? "loading"}
+                        MFA status: {security?.clerkMfaStatus ?? "loading"}
                       </Badge>
                     </div>
                     <Switch checked={security?.mfaRequired ?? false} onCheckedChange={(v) => handleSecurityToggle('mfaRequired', v)} />
@@ -450,7 +476,7 @@ export default function Settings() {
                       <Label className="text-base">Enterprise SSO Only</Label>
                       <p className="text-sm text-muted-foreground">Disable email/password login and enforce SAML/OIDC connections.</p>
                       <Badge variant="outline" className="mt-2 font-mono text-[10px] uppercase">
-                        Clerk status: {security?.clerkSsoStatus ?? "loading"}
+                        SSO status: {security?.clerkSsoStatus ?? "loading"}
                       </Badge>
                     </div>
                     <Switch checked={security?.ssoRequired ?? false} onCheckedChange={(v) => handleSecurityToggle('ssoRequired', v)} />
@@ -680,12 +706,13 @@ export default function Settings() {
 
             {/* Providers Tab */}
             <TabsContent value="providers" className="space-y-8 m-0 mt-0">
-              <ProviderSettings />
+              <ProviderSettings isOwner={isOwner} />
             </TabsContent>
 
           </div>
         </Tabs>
-        {selectedOrgId && org && (
+        )}
+        {isOwner && selectedOrgId && org && (
           <div className="max-w-5xl mx-auto mt-12">
             <DeleteOrganizationDangerZone
               orgId={selectedOrgId}

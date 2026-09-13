@@ -173,7 +173,7 @@ router.delete(
 
 router.patch(
   "/orgs/:orgId",
-  requireRole("admin"),
+  requireRole("owner"),
   async (req, res): Promise<void> => {
     const parsed = UpdateOrgBody.safeParse(req.body);
     if (!parsed.success) {
@@ -234,7 +234,7 @@ router.get("/orgs/:orgId/members", async (req, res): Promise<void> => {
 
 router.post(
   "/orgs/:orgId/members",
-  requireRole("admin"),
+  requireRole("owner"),
   async (req, res): Promise<void> => {
     const parsed = InviteMemberBody.safeParse(req.body);
     if (!parsed.success) {
@@ -297,7 +297,7 @@ router.post(
 
 router.post(
   "/orgs/:orgId/members/:memberId/resend-invite",
-  requireRole("admin"),
+  requireRole("owner"),
   async (req, res): Promise<void> => {
     const memberId = Array.isArray(req.params.memberId)
       ? req.params.memberId[0]
@@ -344,7 +344,7 @@ router.post(
 
 router.patch(
   "/orgs/:orgId/members/:memberId",
-  requireRole("admin"),
+  requireRole("owner"),
   async (req, res): Promise<void> => {
     const parsed = UpdateMemberRoleBody.safeParse(req.body);
     if (!parsed.success) {
@@ -436,7 +436,7 @@ router.patch(
 
 router.delete(
   "/orgs/:orgId/members/:memberId",
-  requireRole("admin"),
+  requireRole("owner"),
   async (req, res): Promise<void> => {
     const memberId = Array.isArray(req.params.memberId)
       ? req.params.memberId[0]
@@ -476,7 +476,7 @@ router.get("/orgs/:orgId/features", async (req, res): Promise<void> => {
 
 router.put(
   "/orgs/:orgId/features",
-  requireRole("admin"),
+  requireRole("owner"),
   async (req, res): Promise<void> => {
     const parsed = UpdateFeaturesBody.safeParse(req.body);
     if (!parsed.success) {

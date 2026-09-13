@@ -32,6 +32,10 @@ import {
   getOrganizationDeletionRecord,
 } from "../services/orgDeletionGuard";
 import {
+  hasRequiredOrganizationRole,
+  type OrganizationRole,
+} from "./organizationAuthorization";
+import {
   authenticateWindowSession,
   WINDOW_SESSION_HEADER,
 } from "../services/windowSessions";
@@ -48,14 +52,6 @@ declare global {
     }
   }
 }
-
-const ROLE_RANK: Record<string, number> = {
-  viewer: 0,
-  user: 1,
-  manager: 2,
-  admin: 3,
-  owner: 4,
-};
 
 function slugify(input: string): string {
   const base = input
@@ -541,14 +537,14 @@ export async function attachOrg(
 }
 
 /** Role gate: requires attachOrg first. */
-export function requireRole(minRole: keyof typeof ROLE_RANK) {
+export function requireRole(minRole: OrganizationRole) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (req.organizationDeletionCompleted && minRole === "owner") {
       next();
       return;
     }
     const membership = req.currentMembership;
-    if (!membership || ROLE_RANK[membership.role] < ROLE_RANK[minRole]) {
+    if (!hasRequiredOrganizationRole(membership?.role, minRole)) {
       res.status(403).json({ error: "Insufficient role" });
       return;
     }

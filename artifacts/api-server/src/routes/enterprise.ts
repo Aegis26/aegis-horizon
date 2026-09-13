@@ -11,7 +11,7 @@ import { sha256 } from "../middlewares/apiToken";
 import { appendAuditEvent, auditContext } from "../services/audit";
 
 const router: IRouter = Router();
-const gate = [attachUser, attachOrg, requireRole("admin")] as const;
+const gate = [attachUser, attachOrg, requireRole("owner")] as const;
 const cidr = z.string().regex(/^[0-9a-fA-F:.]+(?:\/(?:[0-9]|[12][0-9]|3[0-2]|1[01][0-9]|12[0-8]))?$/, "Invalid CIDR");
 
 router.get("/orgs/:orgId/api-tokens", ...gate, async (req, res) => {

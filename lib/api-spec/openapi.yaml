@@ -886,7 +886,7 @@ paths:
     post:
       operationId: bindCommunicationProvider
       tags: [communications]
-      summary: Owner/admin claims this deployment-global connector for the organization
+      summary: Owner-only claim of this deployment-global connector for the organization
       parameters:
         - $ref: "#/components/parameters/OrgId"
         - name: provider
@@ -929,7 +929,7 @@ paths:
     put:
       operationId: updateCommunicationSettings
       tags: [communications]
-      summary: Owner/admin updates explicit AI analysis consent
+      summary: Owner-only update of explicit AI analysis consent
       parameters:
         - $ref: "#/components/parameters/OrgId"
       requestBody:

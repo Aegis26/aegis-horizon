@@ -30,6 +30,12 @@ import { canAccessCrmRecord, hasCrmManagementAccess, withCrmVisibility } from ".
 
 const router: IRouter = Router();
 const gate = [attachUser, attachOrg, requireFeature("crm")] as const;
+const ownerProviderSettingsGate = [
+  attachUser,
+  attachOrg,
+  requireFeature("crm"),
+  requireRole("owner"),
+] as const;
 const providers = ["gmail", "outlook", "google_calendar", "slack"] as const;
 type Provider = (typeof providers)[number];
 const providerParam = z.enum(providers);
@@ -305,7 +311,7 @@ async function syncCalendar(orgId: string, provider: Provider) {
   return synced;
 }
 
-router.get("/orgs/:orgId/providers", ...gate, async (req, res): Promise<void> => {
+router.get("/orgs/:orgId/providers", ...ownerProviderSettingsGate, async (req, res): Promise<void> => {
   const states = await db.select().from(providerSyncStates).where(eq(providerSyncStates.orgId, req.currentOrg!.id));
   const bindings = await db.select().from(providerBindings);
   const aiAnalysisEnabled = await aiEnabled(req.currentOrg!.id);
@@ -321,7 +327,7 @@ router.get("/orgs/:orgId/providers", ...gate, async (req, res): Promise<void> =>
   })), aiAnalysisEnabled });
 });
 
-router.post("/orgs/:orgId/providers/:provider/bind", attachUser, attachOrg, requireFeature("crm"), requireRole("admin"), async (req, res): Promise<void> => {
+router.post("/orgs/:orgId/providers/:provider/bind", ...ownerProviderSettingsGate, async (req, res): Promise<void> => {
   const parsed = providerParam.safeParse(req.params.provider);
   if (!parsed.success) { res.status(400).json({ error: "Unsupported provider" }); return; }
   const provider = parsed.data;
@@ -356,16 +362,16 @@ router.post("/orgs/:orgId/providers/:provider/bind", attachUser, attachOrg, requ
     res.status(502).json({ error: "Provider binding could not be created" });
   }
 });
-router.delete("/orgs/:orgId/providers/:provider/bind", attachUser, attachOrg, requireFeature("crm"), requireRole("owner"), async (req, res): Promise<void> => {
+router.delete("/orgs/:orgId/providers/:provider/bind", ...ownerProviderSettingsGate, async (req, res): Promise<void> => {
   const parsed = providerParam.safeParse(req.params.provider);
   if (!parsed.success) { res.status(400).json({ error: "Unsupported provider" }); return; }
   await db.delete(providerBindings).where(and(eq(providerBindings.orgId, req.currentOrg!.id), eq(providerBindings.provider, parsed.data)));
   res.status(204).end();
 });
-router.get("/orgs/:orgId/communication-settings", ...gate, async (req, res): Promise<void> => {
+router.get("/orgs/:orgId/communication-settings", ...ownerProviderSettingsGate, async (req, res): Promise<void> => {
   res.json({ aiAnalysisEnabled: await aiEnabled(req.currentOrg!.id) });
 });
-router.put("/orgs/:orgId/communication-settings", attachUser, attachOrg, requireFeature("crm"), requireRole("admin"), async (req, res): Promise<void> => {
+router.put("/orgs/:orgId/communication-settings", ...ownerProviderSettingsGate, async (req, res): Promise<void> => {
   const parsed = z.object({ aiAnalysisEnabled: z.boolean() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "aiAnalysisEnabled must be boolean" }); return; }
   const [settings] = await db.insert(communicationSettings).values({
@@ -377,7 +383,7 @@ router.put("/orgs/:orgId/communication-settings", attachUser, attachOrg, require
   res.json({ aiAnalysisEnabled: settings.aiAnalysisEnabled, updatedAt: settings.updatedAt.toISOString() });
 });
 
-router.post("/orgs/:orgId/providers/:provider/sync", attachUser, attachOrg, requireFeature("crm"), requireRole("admin"), async (req, res): Promise<void> => {
+router.post("/orgs/:orgId/providers/:provider/sync", ...ownerProviderSettingsGate, async (req, res): Promise<void> => {
   const parsed = providerParam.safeParse(req.params.provider);
   if (!parsed.success) { res.status(400).json({ error: "Unsupported provider" }); return; }
   const provider = parsed.data;

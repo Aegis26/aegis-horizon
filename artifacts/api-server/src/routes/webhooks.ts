@@ -7,7 +7,7 @@ import { attachOrg, attachUser, requireRole } from "../middlewares/auth";
 import { appendAuditEvent, auditContext } from "../services/audit";
 import { encryptWebhookSecret, testWebhook, validateWebhookUrl } from "../services/webhooks";
 
-const router: IRouter = Router(); const gate = [attachUser, attachOrg, requireRole("manager")] as const;
+const router: IRouter = Router(); const gate = [attachUser, attachOrg, requireRole("owner")] as const;
 const input = z.object({ name: z.string().min(1).max(100), url: z.string().url().max(2048), events: z.array(z.enum(["lead.created", "lead.updated", "opportunity.created", "opportunity.updated"])).min(1).max(4), enabled: z.boolean().optional() }).strict();
 const safe = ({ secretCiphertext: _a, secretIv: _b, secretTag: _c, ...hook }: typeof webhooks.$inferSelect) => hook;
 router.get("/orgs/:orgId/webhooks", ...gate, async (req, res) => res.json((await db.select().from(webhooks).where(eq(webhooks.orgId, req.currentOrg!.id))).map(safe)));

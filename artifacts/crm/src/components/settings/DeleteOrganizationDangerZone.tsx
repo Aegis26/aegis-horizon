@@ -122,20 +122,7 @@ export function DeleteOrganizationDangerZone({
   }
 
   if (role !== "owner") {
-    return (
-      <section
-        aria-labelledby="danger-zone-heading"
-        className="border-t border-border pt-8"
-        data-testid="delete-organization-danger-zone"
-      >
-        <h2 id="danger-zone-heading" className="font-display text-lg font-bold">
-          Danger Zone
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Only the organization owner can delete the workspace
-        </p>
-      </section>
-    );
+    return null;
   }
 
   return (

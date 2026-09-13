@@ -16,17 +16,17 @@ import { formatDate } from "@/lib/format";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-export function ProviderSettings() {
+export function ProviderSettings({ isOwner }: { isOwner: boolean }) {
   const { selectedOrgId } = useOrgStore();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const { data, isLoading, error } = useListCommunicationProviders(selectedOrgId || "", {
-    query: { enabled: !!selectedOrgId, queryKey: getListCommunicationProvidersQueryKey(selectedOrgId || "") }
+    query: { enabled: isOwner && !!selectedOrgId, queryKey: getListCommunicationProvidersQueryKey(selectedOrgId || "") }
   });
 
   const { data: commSettings, isLoading: settingsLoading } = useGetCommunicationSettings(selectedOrgId || "", {
-    query: { enabled: !!selectedOrgId, queryKey: getGetCommunicationSettingsQueryKey(selectedOrgId || "") }
+    query: { enabled: isOwner && !!selectedOrgId, queryKey: getGetCommunicationSettingsQueryKey(selectedOrgId || "") }
   });
 
   const syncProvider = useForceProviderSync();
@@ -101,6 +101,10 @@ export function ProviderSettings() {
       }
     });
   };
+
+  if (!isOwner) {
+    return null;
+  }
 
   if (isLoading || settingsLoading) {
     return <Card><CardContent className="p-6"><div className="spinner mx-auto"/></CardContent></Card>;

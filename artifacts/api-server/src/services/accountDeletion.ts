@@ -13,7 +13,9 @@ import { clerkClient } from "@clerk/express";
 import {
   accountDeletionLedger,
   commandHistory,
+  commissions,
   db,
+  employeeCommissions,
   internalNotes,
   organizations,
   orgUsers,
@@ -362,6 +364,17 @@ async function purgeUserRelationalData(
       );
 
     await scrubJsonbUserReferences(tx, userId);
+
+    // Commission settings and earned rows are user-scoped even when their
+    // organization survives. Remove both under the same user deletion fence;
+    // the ledger intentionally has no user FK because it normally preserves
+    // snapshots after member removal.
+    await tx
+      .delete(employeeCommissions)
+      .where(eq(employeeCommissions.userId, userId));
+    await tx
+      .delete(commissions)
+      .where(eq(commissions.userId, userId));
 
     const [deleted] = await tx
       .delete(users)

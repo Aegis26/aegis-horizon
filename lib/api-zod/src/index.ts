@@ -13,6 +13,9 @@ export {
   ListQuotesParams,
   GetForecastParams,
   GetWeightedRevenueForecastParams,
+  GetCommissionSettingsParams,
+  UpdateCommissionSettingsParams,
+  GetEarnedCommissionsParams,
 } from "./generated/api";
 export type {
   AcceptInvitationBody as AcceptInvitationBodyType,
@@ -25,4 +28,5 @@ export type {
   ListQuotesParams as ListQuotesParamsType,
   GetForecastParams as GetForecastParamsType,
   GetWeightedRevenueForecastParams as GetWeightedRevenueForecastParamsType,
+  GetEarnedCommissionsParams as GetEarnedCommissionsParamsType,
 } from "./generated/types";

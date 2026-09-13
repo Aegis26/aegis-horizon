@@ -942,6 +942,55 @@ export interface Opportunity {
   createdAt?: string | null;
 }
 
+export interface CommissionSetting {
+  userId: string;
+  /**
+     * Percentage from 0 to 100 with at most two decimals.
+     * @pattern ^(?:\d{1,3})(?:\.\d{1,2})?$
+     */
+  commissionPercentage: string;
+  isActive: boolean;
+}
+
+export interface CommissionSettingsResponse {
+  settings: CommissionSetting[];
+}
+
+export interface CommissionSettingsUpdate {
+  /** @maxItems 10000 */
+  settings: CommissionSetting[];
+}
+
+export interface EarnedCommissionRecord {
+  id: string;
+  userId: string;
+  employeeName: string;
+  opportunityId: string;
+  opportunityName: string;
+  opportunityValue: string;
+  commissionPercentage: string;
+  commissionAmount: string;
+  earnedDate: string;
+}
+
+export type EarnedCommissionsResponsePeriod = typeof EarnedCommissionsResponsePeriod[keyof typeof EarnedCommissionsResponsePeriod];
+
+
+export const EarnedCommissionsResponsePeriod = {
+  today: 'today',
+  '7days': '7days',
+  month: 'month',
+  year: 'year',
+} as const;
+
+export interface EarnedCommissionsResponse {
+  period: EarnedCommissionsResponsePeriod;
+  totalCommission: string;
+  dealCount: number;
+  averageCommission: string;
+  records: EarnedCommissionRecord[];
+}
+
 export interface FeatureGateError {
   error: string;
   featureKey: string;
@@ -2889,6 +2938,20 @@ export type ListOpportunitiesParams = {
 pipelineId?: string;
 stage?: string;
 };
+
+export type GetEarnedCommissionsParams = {
+period?: GetEarnedCommissionsPeriod;
+};
+
+export type GetEarnedCommissionsPeriod = typeof GetEarnedCommissionsPeriod[keyof typeof GetEarnedCommissionsPeriod];
+
+
+export const GetEarnedCommissionsPeriod = {
+  today: 'today',
+  '7days': '7days',
+  month: 'month',
+  year: 'year',
+} as const;
 
 export type ListLeadsParams = {
 status?: string;

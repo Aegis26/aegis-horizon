@@ -78,6 +78,7 @@ import {
   crmRecordCondition,
   withCrmVisibility,
 } from "../services/crmAccess";
+import { recordCommissionForClosedWon } from "../services/commissions";
 
 const router: IRouter = Router();
 const gate = [attachUser, attachOrg, requireFeature("sales")] as const;
@@ -441,12 +442,13 @@ router.post("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<voi
       createdByUserId: req.currentUser!.id,
     }).returning();
     await tx.insert(opportunityStageHistory).values({
-    orgId,
-    opportunityId: created.id,
-    fromStage: null,
-    toStage: stageKey,
-    changedByUserId: req.currentUser!.id,
-  });
+      orgId,
+      opportunityId: created.id,
+      fromStage: null,
+      toStage: stageKey,
+      changedByUserId: req.currentUser!.id,
+    });
+      await recordCommissionForClosedWon(tx, null, created);
     return created;
   });
   if (!row) { res.status(404).json({ error: "Account not found" }); return; }
@@ -541,38 +543,61 @@ router.patch(
       updates.ownerUserId = assignment.value;
     }
 
-    const [row] = await db
-      .update(opportunities)
-      .set(updates)
-      .where(and(eq(opportunities.id, opp.id), eq(opportunities.orgId, orgId),
-        ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId)))
-      .returning();
-    if (!row) { res.status(404).json({ error: "Opportunity not found" }); return; }
+    const result = await db.transaction(async (tx) => {
+      // Serialize closes on the opportunity row and commit the ledger entry
+      // with the opportunity update.
+      const [locked] = await tx
+        .select()
+        .from(opportunities)
+        .where(and(
+          eq(opportunities.id, opp.id),
+          eq(opportunities.orgId, orgId),
+          ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+        ))
+        .for("update");
+      if (!locked) return undefined;
+      const [row] = await tx
+        .update(opportunities)
+        .set(updates)
+        .where(and(
+          eq(opportunities.id, locked.id),
+          eq(opportunities.orgId, orgId),
+          ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+        ))
+        .returning();
+      if (!row) return undefined;
+      await recordCommissionForClosedWon(tx, locked, row);
+      if (data.stage !== undefined && data.stage !== locked.stage) {
+        await tx.insert(opportunityStageHistory).values({
+          orgId,
+          opportunityId: locked.id,
+          fromStage: locked.stage,
+          toStage: data.stage,
+          changedByUserId: req.currentUser!.id,
+        });
+      }
+      return { before: locked, row };
+    });
+    if (!result) { res.status(404).json({ error: "Opportunity not found" }); return; }
+    const { before: lockedOpp, row } = result;
     await appendAuditEvent({
       orgId,
       action: "opportunity.updated",
       entityType: "opportunity",
       entityId: row.id,
       ...auditContext(req),
-      metadata: { before: opportunityAudit(opp), after: opportunityAudit(row) },
+      metadata: { before: opportunityAudit(lockedOpp), after: opportunityAudit(row) },
     });
     void publishWebhookEvent(orgId, "opportunity.updated", row.id, { id: row.id, name: row.name, stage: row.stage });
 
-    if (stageChanged) {
-      await db.insert(opportunityStageHistory).values({
-        orgId,
-        opportunityId: opp.id,
-        fromStage: opp.stage,
-        toStage: data.stage!,
-        changedByUserId: req.currentUser!.id,
-      });
+    if (data.stage !== undefined && data.stage !== lockedOpp.stage) {
       await publishAutomationEvent({
         orgId,
-        eventKey: `opportunity-stage:${opp.id}:${row.stage}:${row.updatedAt.toISOString()}`,
+        eventKey: `opportunity-stage:${lockedOpp.id}:${row.stage}:${row.updatedAt.toISOString()}`,
         eventType: "field_change",
         entityType: "opportunity",
-        entityId: opp.id,
-        payload: { field: "stage", oldValue: opp.stage, newValue: row.stage },
+        entityId: lockedOpp.id,
+        payload: { field: "stage", oldValue: lockedOpp.stage, newValue: row.stage },
         actorUserId: req.currentUser!.id,
       });
     }
@@ -623,18 +648,46 @@ router.post(
         probability: 100,
       };
     const today = new Date().toISOString().slice(0, 10);
-    const [row] = await db
-      .update(opportunities)
-      .set({
-        stage: wonStage.key,
-        probability: 100,
-        forecastCategory: "closed_won",
-        actualCloseDate: today,
-      })
-      .where(and(eq(opportunities.id, opp.id), eq(opportunities.orgId, orgId),
-        ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId)))
-      .returning();
-    if (!row) { res.status(404).json({ error: "Opportunity not found" }); return; }
+    const result = await db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select()
+        .from(opportunities)
+        .where(and(
+          eq(opportunities.id, opp.id),
+          eq(opportunities.orgId, orgId),
+          ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+        ))
+        .for("update");
+      if (!locked) return undefined;
+      const [row] = await tx
+        .update(opportunities)
+        .set({
+          stage: wonStage.key,
+          probability: 100,
+          forecastCategory: "closed_won",
+          actualCloseDate: today,
+        })
+        .where(and(
+          eq(opportunities.id, locked.id),
+          eq(opportunities.orgId, orgId),
+          ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+        ))
+        .returning();
+      if (!row) return undefined;
+      await recordCommissionForClosedWon(tx, locked, row);
+      if (locked.stage !== wonStage.key) {
+        await tx.insert(opportunityStageHistory).values({
+          orgId,
+          opportunityId: locked.id,
+          fromStage: locked.stage,
+          toStage: wonStage.key,
+          changedByUserId: req.currentUser!.id,
+        });
+      }
+      return { before: locked, row };
+    });
+    if (!result) { res.status(404).json({ error: "Opportunity not found" }); return; }
+    const { before: lockedOpp, row } = result;
     await appendAuditEvent({
       orgId,
       action: "opportunity.updated",
@@ -643,19 +696,10 @@ router.post(
       ...auditContext(req),
       metadata: {
         operation: "convert_to_customer",
-        before: opportunityAudit(opp),
+        before: opportunityAudit(lockedOpp),
         after: opportunityAudit(row),
       },
     });
-    if (opp.stage !== wonStage.key) {
-      await db.insert(opportunityStageHistory).values({
-        orgId,
-        opportunityId: opp.id,
-        fromStage: opp.stage,
-        toStage: wonStage.key,
-        changedByUserId: req.currentUser!.id,
-      });
-    }
     // Flag the account as a customer.
     const [account] = await db
       .select()
@@ -1005,6 +1049,7 @@ router.post(
         orgId, opportunityId: opp.id, fromStage: null, toStage: opp.stage,
         changedByUserId: req.currentUser!.id,
       });
+      await recordCommissionForClosedWon(tx, null, opp);
       const [updatedLead] = await tx.update(leads)
         .set({ status: "qualified", convertedOpportunityId: opp.id })
         .where(and(eq(leads.id, lockedLead.id), eq(leads.orgId, orgId),

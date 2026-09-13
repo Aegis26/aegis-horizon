@@ -23,7 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials, formatDate } from "@/lib/format";
-import { Building2, Users, Save, Trash2, Mail, ShieldCheck, Key, Webhook, ActivitySquare, LayoutTemplate, Plus, Copy, CheckCircle2, LogOut, Settings as SettingsIcon } from "lucide-react";
+import { Building2, Users, Save, Trash2, Mail, ShieldCheck, Key, Webhook, ActivitySquare, LayoutTemplate, Plus, Copy, CheckCircle2, LogOut, Settings as SettingsIcon, Percent } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { ProviderSettings } from "@/components/settings/ProviderSettings";
 import { DeleteOrganizationDangerZone } from "@/components/settings/DeleteOrganizationDangerZone";
@@ -31,6 +31,7 @@ import { DeleteAccountDangerZone } from "@/components/settings/DeleteAccountDang
 import { format, formatDistanceToNow } from "date-fns";
 import { useWindowAuth } from "@/components/auth/WindowAuthProvider";
 import { belongsToAuthenticatedUser } from "@/lib/auth-scope";
+import CommissionSettingsSection from "@/components/commission/CommissionSettingsSection";
 
 
 const templateMeta: Record<string, { name: string; description: string; category: string }> = {
@@ -303,6 +304,7 @@ export default function Settings() {
           <TabsList className="flex md:flex-col h-auto bg-transparent items-start justify-start w-full md:w-56 gap-2 border-b md:border-b-0 border-border/50 pb-4 md:pb-0 overflow-x-auto">
             <TabsTrigger value="general" className="w-full justify-start text-left data-[state=active]:bg-card data-[state=active]:border-primary/50 border border-transparent shadow-none"><Building2 className="w-4 h-4 mr-2"/> General</TabsTrigger>
             <TabsTrigger value="team" className="w-full justify-start text-left data-[state=active]:bg-card data-[state=active]:border-primary/50 border border-transparent shadow-none"><Users className="w-4 h-4 mr-2"/> Team Members</TabsTrigger>
+            <TabsTrigger value="commissions" className="w-full justify-start text-left data-[state=active]:bg-card data-[state=active]:border-primary/50 border border-transparent shadow-none"><Percent className="w-4 h-4 mr-2"/> Commissions</TabsTrigger>
             <TabsTrigger value="security" className="w-full justify-start text-left data-[state=active]:bg-card data-[state=active]:border-primary/50 border border-transparent shadow-none"><ShieldCheck className="w-4 h-4 mr-2"/> Security & SSO</TabsTrigger>
             <TabsTrigger value="api" className="w-full justify-start text-left data-[state=active]:bg-card data-[state=active]:border-primary/50 border border-transparent shadow-none"><Webhook className="w-4 h-4 mr-2"/> API & Webhooks</TabsTrigger>
             <TabsTrigger value="audit" className="w-full justify-start text-left data-[state=active]:bg-card data-[state=active]:border-primary/50 border border-transparent shadow-none"><ActivitySquare className="w-4 h-4 mr-2"/> Audit Logs</TabsTrigger>
@@ -450,6 +452,16 @@ export default function Settings() {
                   </Table>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* Commission Tab */}
+            <TabsContent value="commissions" className="space-y-8 m-0 mt-0">
+              {selectedOrgId ? (
+                <CommissionSettingsSection
+                  orgId={selectedOrgId}
+                  members={members ?? []}
+                />
+              ) : null}
             </TabsContent>
 
             {/* Security & SSO Tab */}

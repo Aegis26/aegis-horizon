@@ -42,6 +42,7 @@ import {
   deleteOrganization,
   OrganizationDeletionError,
 } from "../services/orgDeletion";
+import { removeEmployeeCommissionForMembership } from "../services/commissions";
 
 const router: IRouter = Router();
 
@@ -441,21 +442,35 @@ router.delete(
     const memberId = Array.isArray(req.params.memberId)
       ? req.params.memberId[0]
       : req.params.memberId;
-    const [membership] = await db
-      .select()
-      .from(orgUsers)
-      .where(
-        and(eq(orgUsers.id, memberId), eq(orgUsers.orgId, req.currentOrg!.id)),
+    const result = await db.transaction(async (tx) => {
+      const [membership] = await tx
+        .select()
+        .from(orgUsers)
+        .where(
+          and(eq(orgUsers.id, memberId), eq(orgUsers.orgId, req.currentOrg!.id)),
+        )
+        .for("update");
+      if (!membership) return { kind: "missing" as const };
+      if (membership.role === "owner") return { kind: "owner" as const };
+
+      // A removed member must not regain a stale rate if they are invited
+      // back later. Historical commissions deliberately remain untouched.
+      await removeEmployeeCommissionForMembership(
+        tx,
+        req.currentOrg!.id,
+        membership.userId,
       );
-    if (!membership) {
+      await tx.delete(orgUsers).where(eq(orgUsers.id, membership.id));
+      return { kind: "removed" as const };
+    });
+    if (result.kind === "missing") {
       res.status(404).json({ error: "Member not found" });
       return;
     }
-    if (membership.role === "owner") {
+    if (result.kind === "owner") {
       res.status(400).json({ error: "Cannot remove an owner" });
       return;
     }
-    await db.delete(orgUsers).where(eq(orgUsers.id, membership.id));
     res.sendStatus(204);
   },
 );

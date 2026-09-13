@@ -1277,6 +1277,76 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OpportunityDetail"
+  /orgs/{orgId}/commissions/settings:
+    get:
+      operationId: getCommissionSettings
+      tags: [sales]
+      summary: Get organization commission settings (owner only)
+      description: >
+        Returns all configured member commission rates. This endpoint is
+        available only to the organization owner.
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: Commission settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommissionSettingsResponse"
+        "403":
+          description: The requester is not the organization owner
+    put:
+      operationId: updateCommissionSettings
+      tags: [sales]
+      summary: Replace commission settings (owner only)
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommissionSettingsUpdate"
+      responses:
+        "200":
+          description: Updated commission settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommissionSettingsResponse"
+        "400":
+          description: Invalid rate or non-member user
+        "403":
+          description: Only the organization owner may update rates
+  /orgs/{orgId}/commissions/earned:
+    get:
+      operationId: getEarnedCommissions
+      tags: [sales]
+      summary: Get earned commissions for a UTC date period
+      description: >
+        Periods use UTC calendar boundaries and a half-open interval
+        [start,end): today is the current UTC day, 7days is the current UTC day
+        plus the six preceding days, month is the current UTC calendar month,
+        and year is the current UTC calendar year.
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [today, 7days, month, year]
+            default: month
+      responses:
+        "200":
+          description: Earned commissions and aggregate metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EarnedCommissionsResponse"
+        "400":
+          description: Invalid period
   /orgs/{orgId}/pipelines:
     get:
       operationId: listPipelines
@@ -2798,6 +2868,74 @@ components:
         ownerUserId: { type: ["string", "null"], format: uuid }
         createdByUserId: { type: ["string", "null"], format: uuid }
         createdAt: { type: ["string", "null"] }
+    CommissionSetting:
+      type: object
+      required: [userId, commissionPercentage, isActive]
+      properties:
+        userId: { type: string, format: uuid }
+        commissionPercentage:
+          type: string
+          pattern: '^(?:\d{1,3})(?:\.\d{1,2})?$'
+          description: Percentage from 0 to 100 with at most two decimals.
+        isActive: { type: boolean }
+    CommissionSettingsResponse:
+      type: object
+      required: [settings]
+      properties:
+        settings:
+          type: array
+          items:
+            $ref: "#/components/schemas/CommissionSetting"
+    CommissionSettingsUpdate:
+      type: object
+      required: [settings]
+      properties:
+        settings:
+          type: array
+          maxItems: 10000
+          items:
+            $ref: "#/components/schemas/CommissionSetting"
+    EarnedCommissionRecord:
+      type: object
+      required:
+        - id
+        - userId
+        - employeeName
+        - opportunityId
+        - opportunityName
+        - opportunityValue
+        - commissionPercentage
+        - commissionAmount
+        - earnedDate
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        employeeName: { type: string }
+        opportunityId: { type: string, format: uuid }
+        opportunityName: { type: string }
+        opportunityValue: { type: string }
+        commissionPercentage: { type: string }
+        commissionAmount: { type: string }
+        earnedDate: { type: string, format: date-time }
+    EarnedCommissionsResponse:
+      type: object
+      required:
+        - period
+        - totalCommission
+        - dealCount
+        - averageCommission
+        - records
+      properties:
+        period:
+          type: string
+          enum: [today, 7days, month, year]
+        totalCommission: { type: string }
+        dealCount: { type: integer }
+        averageCommission: { type: string }
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/EarnedCommissionRecord"
     FeatureGateError:
       type: object
       required: [error, featureKey]

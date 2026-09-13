@@ -52,6 +52,8 @@ import type {
   CommandPendingResponse,
   CommandRequest,
   CommandResultResponse,
+  CommissionSettingsResponse,
+  CommissionSettingsUpdate,
   CommunicationSettings,
   CommunicationSettingsInput,
   Contact,
@@ -70,6 +72,7 @@ import type {
   DocumentUploadInput,
   DocumentVersion,
   DraftCopilotEmail200,
+  EarnedCommissionsResponse,
   EmailDraftRequest,
   EmailThread,
   EntityRunRequest,
@@ -78,6 +81,7 @@ import type {
   FeatureGateError,
   FeatureSelection,
   Forecast,
+  GetEarnedCommissionsParams,
   GetEmailThread200,
   GetForecastParams,
   GetWeightedRevenueForecastParams,
@@ -3575,7 +3579,7 @@ export const getBindCommunicationProviderUrl = (orgId: string,
 }
 
 /**
- * @summary Owner/admin claims this deployment-global connector for the organization
+ * @summary Owner-only claim of this deployment-global connector for the organization
  */
 export const bindCommunicationProvider = async (orgId: string,
     provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack', options?: Parameters<typeof customFetch>[1]): Promise<ProviderBindingResult> => {
@@ -3625,7 +3629,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type BindCommunicationProviderMutationError = ErrorType<void>
 
     /**
- * @summary Owner/admin claims this deployment-global connector for the organization
+ * @summary Owner-only claim of this deployment-global connector for the organization
  */
 export const useBindCommunicationProvider = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bindCommunicationProvider>>, TError,{orgId: string;provider: 'gmail' | 'outlook' | 'google_calendar' | 'slack'}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -3791,7 +3795,7 @@ export const getUpdateCommunicationSettingsUrl = (orgId: string,) => {
 }
 
 /**
- * @summary Owner/admin updates explicit AI analysis consent
+ * @summary Owner-only update of explicit AI analysis consent
  */
 export const updateCommunicationSettings = async (orgId: string,
     communicationSettingsInput: CommunicationSettingsInput, options?: Parameters<typeof customFetch>[1]): Promise<CommunicationSettings> => {
@@ -3841,7 +3845,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UpdateCommunicationSettingsMutationError = ErrorType<unknown>
 
     /**
- * @summary Owner/admin updates explicit AI analysis consent
+ * @summary Owner-only update of explicit AI analysis consent
  */
 export const useUpdateCommunicationSettings = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCommunicationSettings>>, TError,{orgId: string;data: BodyType<CommunicationSettingsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -5118,6 +5122,246 @@ export const useConvertOpportunityToCustomer = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getConvertOpportunityToCustomerMutationOptions(options));
     }
+
+export const getGetCommissionSettingsUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/commissions/settings`
+}
+
+/**
+ * Returns all configured member commission rates. This endpoint is available only to the organization owner.
+ * @summary Get organization commission settings (owner only)
+ */
+export const getCommissionSettings = async (orgId: string, options?: Parameters<typeof customFetch>[1]): Promise<CommissionSettingsResponse> => {
+
+  return customFetch<CommissionSettingsResponse>(getGetCommissionSettingsUrl(orgId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCommissionSettingsQueryKey = (orgId: string,) => {
+    return [
+    `/api/orgs/${orgId}/commissions/settings`
+    ] as const;
+    }
+
+
+export const getGetCommissionSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getCommissionSettings>>, TError = ErrorType<void>>(orgId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommissionSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCommissionSettingsQueryKey(orgId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommissionSettings>>> = ({ signal }) => getCommissionSettings(orgId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCommissionSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCommissionSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getCommissionSettings>>>
+export type GetCommissionSettingsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get organization commission settings (owner only)
+ */
+
+export function useGetCommissionSettings<TData = Awaited<ReturnType<typeof getCommissionSettings>>, TError = ErrorType<void>>(
+ orgId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommissionSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCommissionSettingsQueryOptions(orgId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateCommissionSettingsUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/commissions/settings`
+}
+
+/**
+ * @summary Replace commission settings (owner only)
+ */
+export const updateCommissionSettings = async (orgId: string,
+    commissionSettingsUpdate: CommissionSettingsUpdate, options?: Parameters<typeof customFetch>[1]): Promise<CommissionSettingsResponse> => {
+
+  return customFetch<CommissionSettingsResponse>(getUpdateCommissionSettingsUrl(orgId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(commissionSettingsUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateCommissionSettingsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCommissionSettings>>, TError,{orgId: string;data: BodyType<CommissionSettingsUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCommissionSettings>>, TError,{orgId: string;data: BodyType<CommissionSettingsUpdate>}, TContext> => {
+
+const mutationKey = ['updateCommissionSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCommissionSettings>>, {orgId: string;data: BodyType<CommissionSettingsUpdate>}> = (props) => {
+          const {orgId,data} = props ?? {};
+
+          return  updateCommissionSettings(orgId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCommissionSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateCommissionSettings>>>
+    export type UpdateCommissionSettingsMutationBody = BodyType<CommissionSettingsUpdate>
+    export type UpdateCommissionSettingsMutationError = ErrorType<void>
+
+    /**
+ * @summary Replace commission settings (owner only)
+ */
+export const useUpdateCommissionSettings = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCommissionSettings>>, TError,{orgId: string;data: BodyType<CommissionSettingsUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCommissionSettings>>,
+        TError,
+        {orgId: string;data: BodyType<CommissionSettingsUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateCommissionSettingsMutationOptions(options));
+    }
+
+export const getGetEarnedCommissionsUrl = (orgId: string,
+    params?: GetEarnedCommissionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/orgs/${orgId}/commissions/earned?${stringifiedParams}` : `/api/orgs/${orgId}/commissions/earned`
+}
+
+/**
+ * Periods use UTC calendar boundaries and a half-open interval [start,end): today is the current UTC day, 7days is the current UTC day plus the six preceding days, month is the current UTC calendar month, and year is the current UTC calendar year.
+ * @summary Get earned commissions for a UTC date period
+ */
+export const getEarnedCommissions = async (orgId: string,
+    params?: GetEarnedCommissionsParams, options?: Parameters<typeof customFetch>[1]): Promise<EarnedCommissionsResponse> => {
+
+  return customFetch<EarnedCommissionsResponse>(getGetEarnedCommissionsUrl(orgId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEarnedCommissionsQueryKey = (orgId: string,
+    params?: GetEarnedCommissionsParams,) => {
+    return [
+    `/api/orgs/${orgId}/commissions/earned`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetEarnedCommissionsQueryOptions = <TData = Awaited<ReturnType<typeof getEarnedCommissions>>, TError = ErrorType<void>>(orgId: string,
+    params?: GetEarnedCommissionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEarnedCommissions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEarnedCommissionsQueryKey(orgId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEarnedCommissions>>> = ({ signal }) => getEarnedCommissions(orgId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEarnedCommissions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEarnedCommissionsQueryResult = NonNullable<Awaited<ReturnType<typeof getEarnedCommissions>>>
+export type GetEarnedCommissionsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get earned commissions for a UTC date period
+ */
+
+export function useGetEarnedCommissions<TData = Awaited<ReturnType<typeof getEarnedCommissions>>, TError = ErrorType<void>>(
+ orgId: string,
+    params?: GetEarnedCommissionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEarnedCommissions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEarnedCommissionsQueryOptions(orgId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListPipelinesUrl = (orgId: string,) => {
 

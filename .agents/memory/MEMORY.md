@@ -11,3 +11,4 @@
 - [Invitation compatibility](invitation-semantics.md) — email delivery preserves pre-provisioned membership; acceptance-gated access needs an explicit migration.
 - [Workspace deletion safety](workspace-deletion-safety.md) — drain admitted writers before external cleanup; separate advisory-lock pools and preserve only minimal deletion audit.
 - [Independent CRM window sessions](window-session-auth.md) — opaque per-window app auth, safe startup migration, hashed browser lock names, and deletion fencing.
+- [Commission policy](commission-policy.md) — Owner-only configuration/team visibility; snapshots are not retroactively recalculated or duplicated on reclose.

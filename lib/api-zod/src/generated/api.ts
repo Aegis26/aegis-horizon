@@ -1223,7 +1223,7 @@ export const ForceProviderSyncResponse = zod.object({
 
 
 /**
- * @summary Owner/admin claims this deployment-global connector for the organization
+ * @summary Owner-only claim of this deployment-global connector for the organization
  */
 export const BindCommunicationProviderParams = zod.object({
   "orgId": zod.coerce.string(),
@@ -1259,7 +1259,7 @@ export const GetCommunicationSettingsResponse = zod.object({
 
 
 /**
- * @summary Owner/admin updates explicit AI analysis consent
+ * @summary Owner-only update of explicit AI analysis consent
  */
 export const UpdateCommunicationSettingsParams = zod.object({
   "orgId": zod.coerce.string()
@@ -1748,6 +1748,91 @@ export const ConvertOpportunityToCustomerResponse = zod.object({
 })),
   "createdAt": zod.string().nullish(),
   "updatedAt": zod.string().nullish()
+})
+
+
+/**
+ * Returns all configured member commission rates. This endpoint is available only to the organization owner.
+ * @summary Get organization commission settings (owner only)
+ */
+export const GetCommissionSettingsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const getCommissionSettingsResponseSettingsItemCommissionPercentageRegExp = new RegExp('^(?:\\d{1,3})(?:\\.\\d{1,2})?$');
+
+
+export const GetCommissionSettingsResponse = zod.object({
+  "settings": zod.array(zod.object({
+  "userId": zod.string().uuid(),
+  "commissionPercentage": zod.string().regex(getCommissionSettingsResponseSettingsItemCommissionPercentageRegExp).describe('Percentage from 0 to 100 with at most two decimals.'),
+  "isActive": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Replace commission settings (owner only)
+ */
+export const UpdateCommissionSettingsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const updateCommissionSettingsBodySettingsItemCommissionPercentageRegExp = new RegExp('^(?:\\d{1,3})(?:\\.\\d{1,2})?$');
+export const updateCommissionSettingsBodySettingsMax = 10000;
+
+
+
+export const UpdateCommissionSettingsBody = zod.object({
+  "settings": zod.array(zod.object({
+  "userId": zod.string().uuid(),
+  "commissionPercentage": zod.string().regex(updateCommissionSettingsBodySettingsItemCommissionPercentageRegExp).describe('Percentage from 0 to 100 with at most two decimals.'),
+  "isActive": zod.boolean()
+})).max(updateCommissionSettingsBodySettingsMax)
+})
+
+export const updateCommissionSettingsResponseSettingsItemCommissionPercentageRegExp = new RegExp('^(?:\\d{1,3})(?:\\.\\d{1,2})?$');
+
+
+export const UpdateCommissionSettingsResponse = zod.object({
+  "settings": zod.array(zod.object({
+  "userId": zod.string().uuid(),
+  "commissionPercentage": zod.string().regex(updateCommissionSettingsResponseSettingsItemCommissionPercentageRegExp).describe('Percentage from 0 to 100 with at most two decimals.'),
+  "isActive": zod.boolean()
+}))
+})
+
+
+/**
+ * Periods use UTC calendar boundaries and a half-open interval [start,end): today is the current UTC day, 7days is the current UTC day plus the six preceding days, month is the current UTC calendar month, and year is the current UTC calendar year.
+ * @summary Get earned commissions for a UTC date period
+ */
+export const GetEarnedCommissionsParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const getEarnedCommissionsQueryPeriodDefault = `month`;
+
+export const GetEarnedCommissionsQueryParams = zod.object({
+  "period": zod.enum(['today', '7days', 'month', 'year']).default(getEarnedCommissionsQueryPeriodDefault)
+})
+
+export const GetEarnedCommissionsResponse = zod.object({
+  "period": zod.enum(['today', '7days', 'month', 'year']),
+  "totalCommission": zod.string(),
+  "dealCount": zod.number().int(),
+  "averageCommission": zod.string(),
+  "records": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "userId": zod.string().uuid(),
+  "employeeName": zod.string(),
+  "opportunityId": zod.string().uuid(),
+  "opportunityName": zod.string(),
+  "opportunityValue": zod.string(),
+  "commissionPercentage": zod.string(),
+  "commissionAmount": zod.string(),
+  "earnedDate": zod.coerce.date()
+}))
 })
 
 

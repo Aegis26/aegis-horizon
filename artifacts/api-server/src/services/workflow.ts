@@ -18,6 +18,7 @@ import { logger } from "../lib/logger";
 import { withOrganizationSharedLock } from "../lib/orgWriteLock";
 import { appendAuditEvent } from "./audit";
 import { isOrganizationDeletionActive } from "./orgDeletionGuard";
+import { recordCommissionForClosedWon } from "./commissions";
 
 export type WorkflowTrigger = {
   type: "record_created" | "field_change" | "time_based";
@@ -160,21 +161,25 @@ async function executeAction(
       await appendAuditEvent({ orgId: workflow.orgId, action: "account.created", entityType: "account", entityId: account.id, actorUserId: ownerUserId ?? null, metadata: { source: "workflow", workflowId: workflow.id } });
       accountId = account.id;
     }
-    const [opportunity] = await db.insert(opportunities).values({
-      orgId: workflow.orgId,
-      accountId,
-      name: String(config.name ?? `${entity.company ?? "Lead"} - New Business`),
-      stage: "prospecting",
-      probability: 10,
-      ownerUserId,
-      createdByUserId: ownerUserId,
-      value: config.value == null ? undefined : String(config.value),
-    }).returning();
-    await appendAuditEvent({ orgId: workflow.orgId, action: "opportunity.created", entityType: "opportunity", entityId: opportunity.id, actorUserId: ownerUserId ?? null, metadata: { source: "workflow", workflowId: workflow.id } });
-    await db.insert(opportunityStageHistory).values({
-      orgId: workflow.orgId, opportunityId: opportunity.id, fromStage: null,
-      toStage: opportunity.stage, changedByUserId: actorUserId,
+    const opportunity = await db.transaction(async (tx) => {
+      const [created] = await tx.insert(opportunities).values({
+        orgId: workflow.orgId,
+        accountId,
+        name: String(config.name ?? `${entity.company ?? "Lead"} - New Business`),
+        stage: "prospecting",
+        probability: 10,
+        ownerUserId,
+        createdByUserId: ownerUserId,
+        value: config.value == null ? undefined : String(config.value),
+      }).returning();
+      await tx.insert(opportunityStageHistory).values({
+        orgId: workflow.orgId, opportunityId: created.id, fromStage: null,
+        toStage: created.stage, changedByUserId: actorUserId,
+      });
+      await recordCommissionForClosedWon(tx, null, created);
+      return created;
     });
+    await appendAuditEvent({ orgId: workflow.orgId, action: "opportunity.created", entityType: "opportunity", entityId: opportunity.id, actorUserId: ownerUserId ?? null, metadata: { source: "workflow", workflowId: workflow.id } });
     return { opportunityId: opportunity.id };
   }
   if (action.type === "update_field") {

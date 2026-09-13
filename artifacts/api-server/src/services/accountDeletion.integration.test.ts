@@ -502,6 +502,28 @@ before(async () => {
       [survivorCommandId, survivorOrganizationId, targetUserId],
     );
 
+    await query(
+      `INSERT INTO employee_commissions
+         (org_id, user_id, commission_percentage, is_active)
+       VALUES ($1, $2, 12.50, true)`,
+      [survivorOrganizationId, targetUserId],
+    );
+
+    await query(
+      `INSERT INTO commissions
+         (org_id, user_id, employee_name, opportunity_id, opportunity_name,
+          opportunity_value, commission_percentage, commission_amount,
+          earned_date)
+       VALUES ($1, $2, $3, $4, 'Synthetic surviving opportunity',
+               1000.00, 12.50, 125.00, now())`,
+      [
+        survivorOrganizationId,
+        targetUserId,
+        `${targetUserId}@synthetic.invalid`,
+        randomUUID(),
+      ],
+    );
+
     await query("COMMIT");
   } catch (error) {
     await query("ROLLBACK");
@@ -726,6 +748,27 @@ test(
       await countRows("command_history", "user_id", targetUserId),
       0,
       "private command history is deleted",
+    );
+    assert.equal(
+      await countRows("employee_commissions", "user_id", targetUserId),
+      0,
+      "commission settings are deleted across surviving organizations",
+    );
+    const survivingCommissionRows = await query(
+      `SELECT user_id, employee_name
+         FROM commissions
+        WHERE org_id = $1
+          AND (user_id = $2 OR employee_name = $3)`,
+      [
+        survivorOrganizationId,
+        targetUserId,
+        `${targetUserId}@synthetic.invalid`,
+      ],
+    );
+    assert.deepEqual(
+      survivingCommissionRows.rows,
+      [],
+      "surviving organizations retain no deleted user's commission snapshot",
     );
 
     const ledger = await query(

@@ -127,6 +127,79 @@ export const opportunities = pgTable("opportunities", {
     .$onUpdate(() => new Date()),
 });
 
+/**
+ * Current commission configuration for a local (users.id) organization
+ * member.  Clerk identifiers are never stored in commission rows.
+ */
+export const employeeCommissions = pgTable(
+  "employee_commissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    commissionPercentage: numeric("commission_percentage", {
+      precision: 5,
+      scale: 2,
+    }).notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("employee_commissions_org_user_uq").on(t.orgId, t.userId),
+  ],
+);
+
+/**
+ * Immutable earned commission ledger.  User and opportunity references are
+ * snapshots rather than foreign keys so records survive deletion of the
+ * employee or deal.  Organization deletion still cascades through orgId.
+ */
+export const commissions = pgTable(
+  "commissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull(),
+    employeeName: text("employee_name").notNull(),
+    opportunityId: uuid("opportunity_id").notNull(),
+    opportunityName: text("opportunity_name").notNull(),
+    opportunityValue: numeric("opportunity_value", {
+      precision: 20,
+      scale: 2,
+    }).notNull(),
+    commissionPercentage: numeric("commission_percentage", {
+      precision: 5,
+      scale: 2,
+    }).notNull(),
+    commissionAmount: numeric("commission_amount", {
+      precision: 20,
+      scale: 2,
+    }).notNull(),
+    earnedDate: timestamp("earned_date", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("commissions_org_opportunity_uq").on(
+      t.orgId,
+      t.opportunityId,
+    ),
+  ],
+);
+
 /** Connector-owned credentials are deliberately never persisted here. */
 export const providerSyncStates = pgTable(
   "provider_sync_states",
@@ -546,6 +619,8 @@ export type Segment = typeof segments.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Opportunity = typeof opportunities.$inferSelect;
+export type EmployeeCommission = typeof employeeCommissions.$inferSelect;
+export type Commission = typeof commissions.$inferSelect;
 export type Activity = typeof activities.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type ProviderSyncState = typeof providerSyncStates.$inferSelect;

@@ -13,6 +13,7 @@ import {
   pipelines,
   tasks,
 } from "@workspace/db";
+import { recordCommissionForClosedWon } from "./commissions";
 import { AiConsentError, callClaude, getAiBudgetStatus, parseClaudeJson } from "./claude";
 import { appendAuditEvent } from "./audit";
 
@@ -133,17 +134,21 @@ async function runLeadQualifier(agent: typeof aiAgents.$inferSelect, executionId
     }
     const [pipeline] = await db.select().from(pipelines).where(eq(pipelines.orgId, agent.orgId));
     const firstStage = ((pipeline?.stages ?? []) as { key: string; probability: number; forecastCategory: string }[])[0];
-    const [opportunity] = await db.insert(opportunities).values({
-      orgId: agent.orgId, accountId: account.id, name: `${companyName} - New Business`,
-      pipelineId: pipeline?.id, stage: firstStage?.key ?? "prospecting", probability: firstStage?.probability ?? 10,
-      forecastCategory: firstStage?.forecastCategory ?? "pipeline", ownerUserId: effectiveOwnerUserId,
-      createdByUserId: effectiveOwnerUserId,
-    }).returning();
-    await appendAuditEvent({ orgId: agent.orgId, action: "opportunity.created", entityType: "opportunity", entityId: opportunity.id, actorUserId: effectiveOwnerUserId, metadata: { source: "agent", agentId: agent.id, createdAccount } });
-    await db.insert(opportunityStageHistory).values({
-      orgId: agent.orgId, opportunityId: opportunity.id, fromStage: null,
-      toStage: opportunity.stage, changedByUserId: actorUserId,
+    const opportunity = await db.transaction(async (tx) => {
+      const [created] = await tx.insert(opportunities).values({
+        orgId: agent.orgId, accountId: account.id, name: `${companyName} - New Business`,
+        pipelineId: pipeline?.id, stage: firstStage?.key ?? "prospecting", probability: firstStage?.probability ?? 10,
+        forecastCategory: firstStage?.forecastCategory ?? "pipeline", ownerUserId: effectiveOwnerUserId,
+        createdByUserId: effectiveOwnerUserId,
+      }).returning();
+      await tx.insert(opportunityStageHistory).values({
+        orgId: agent.orgId, opportunityId: created.id, fromStage: null,
+        toStage: created.stage, changedByUserId: actorUserId,
+      });
+      await recordCommissionForClosedWon(tx, null, created);
+      return created;
     });
+    await appendAuditEvent({ orgId: agent.orgId, action: "opportunity.created", entityType: "opportunity", entityId: opportunity.id, actorUserId: effectiveOwnerUserId, metadata: { source: "agent", agentId: agent.id, createdAccount } });
     const [convertedLead] = await db.update(leads).set({ convertedOpportunityId: opportunity.id })
       .where(and(eq(leads.id, lead.id), eq(leads.orgId, agent.orgId))).returning({ id: leads.id });
     if (!convertedLead) throw new Error("Lead no longer exists");

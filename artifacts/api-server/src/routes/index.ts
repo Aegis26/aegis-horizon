@@ -16,6 +16,7 @@ import documentsRouter from "./documents";
 import webhooksRouter from "./webhooks";
 import invitationsRouter from "./invitations";
 import usersRouter from "./users";
+import commissionsRouter from "./commissions";
 
 const router: IRouter = Router();
 
@@ -23,6 +24,7 @@ router.use(healthRouter);
 router.use(authRouter);
 router.use(usersRouter);
 router.use(invitationsRouter);
+router.use(commissionsRouter);
 // Specific org sub-resources must be mounted before the generic orgs router
 // so their middleware chains (feature gates, role gates) apply.
 router.use(billingRouter);

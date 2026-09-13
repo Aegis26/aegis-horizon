@@ -1,15 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useListOpportunities, getListOpportunitiesQueryKey,
   useListPipelines, getListPipelinesQueryKey,
   useListAccounts, getListAccountsQueryKey,
+  useGetMe, getGetMeQueryKey,
+  useListMembers, getListMembersQueryKey,
   useCreateOpportunity, useUpdateOpportunity, useConvertOpportunityToCustomer,
   useGetOpportunity, getGetOpportunityQueryKey,
   useCreateQuote, getListQuotesQueryKey,
   useGetClosePrediction, getGetClosePredictionQueryKey,
   useRecomputeClosePrediction,
 } from "@workspace/api-client-react";
-import type { Opportunity, ClosePrediction } from "@workspace/api-client-react";
+import type { Member, Opportunity, ClosePrediction } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOrgStore } from "@/store/org-store";
 import { Link, useLocation } from "wouter";
@@ -24,6 +26,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Lock, Plus, Target, LayoutGrid, List, FileText, Trophy, History, Sparkles, RefreshCw } from "lucide-react";
 import { formatDollars, formatDate, formatPredictionPercentage } from "@/lib/format";
+import { earnedCommissionsQueryRoot } from "@/lib/commissions";
+
+const UNASSIGNED_OWNER = "__unassigned__";
+const MANAGEMENT_ROLES = new Set(["owner", "admin", "manager"]);
 
 function LockedState() {
   return (
@@ -66,6 +72,20 @@ export default function Opportunities() {
   const { data: accounts } = useListAccounts(orgId, undefined, {
     query: { ...enabled.query, queryKey: getListAccountsQueryKey(orgId) },
   });
+  const { data: me } = useGetMe({
+    query: { enabled: !!orgId, queryKey: getGetMeQueryKey() },
+  });
+  const membership = me?.orgs.find((item) => item.org.id === orgId);
+  const canAssignOpportunityOwner = Boolean(
+    membership && MANAGEMENT_ROLES.has(membership.role),
+  );
+  const { data: members, isLoading: membersLoading } = useListMembers(orgId, {
+    query: {
+      enabled: !!orgId && canAssignOpportunityOwner,
+      retry: false,
+      queryKey: getListMembersQueryKey(orgId),
+    },
+  });
 
   const updateOpp = useUpdateOpportunity();
   const createOpp = useCreateOpportunity();
@@ -81,6 +101,7 @@ export default function Opportunities() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getListOpportunitiesQueryKey(orgId) });
     if (detailId) queryClient.invalidateQueries({ queryKey: getGetOpportunityQueryKey(orgId, detailId) });
+    queryClient.invalidateQueries({ queryKey: earnedCommissionsQueryRoot(orgId) });
   };
 
   if (error && (error as { status?: number }).status === 403) return <LockedState />;
@@ -248,11 +269,21 @@ export default function Opportunities() {
         orgId={orgId}
         accounts={accounts ?? []}
         stages={stages}
+        canAssign={canAssignOpportunityOwner}
+        members={members ?? []}
+        membersLoading={membersLoading}
+        currentUserId={me?.user.id}
         onCreate={(data) =>
           createOpp.mutate(
             { orgId, data },
             {
-              onSuccess: () => {
+              onSuccess: (created) => {
+                // Keep the active board populated immediately while the
+                // invalidated list query refetches.
+                queryClient.setQueryData<Opportunity[]>(
+                  getListOpportunitiesQueryKey(orgId),
+                  (current) => [created, ...(current ?? [])],
+                );
                 setCreateOpen(false);
                 invalidate();
                 toast({ title: "Opportunity created" });
@@ -269,6 +300,9 @@ export default function Opportunities() {
           orgId={orgId}
           opportunityId={detailId}
           stages={stages}
+          canAssign={canAssignOpportunityOwner}
+          members={members ?? []}
+          membersLoading={membersLoading}
           onClose={() => setDetailId(null)}
           onInvalidate={invalidate}
           onGoToQuotes={() => navigate("/quotes")}
@@ -279,14 +313,26 @@ export default function Opportunities() {
 }
 
 function CreateOpportunityDialog({
-  open, onOpenChange, orgId, accounts, stages, onCreate, pending,
+  open, onOpenChange, orgId, accounts, stages, canAssign, members,
+  membersLoading, currentUserId, onCreate, pending,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   orgId: string;
   accounts: { id: string; name: string }[];
   stages: { key: string; name: string }[];
-  onCreate: (data: { accountId: string; name: string; stage?: string; value?: string | null; expectedCloseDate?: string | null }) => void;
+  canAssign: boolean;
+  members: Member[];
+  membersLoading: boolean;
+  currentUserId?: string;
+  onCreate: (data: {
+    accountId: string;
+    name: string;
+    stage?: string;
+    value?: string | null;
+    expectedCloseDate?: string | null;
+    ownerUserId?: string | null;
+  }) => void;
   pending: boolean;
 }) {
   const [name, setName] = useState("");
@@ -294,6 +340,17 @@ function CreateOpportunityDialog({
   const [stage, setStage] = useState("");
   const [value, setValue] = useState("");
   const [closeDate, setCloseDate] = useState("");
+  const [ownerUserId, setOwnerUserId] = useState(UNASSIGNED_OWNER);
+
+  useEffect(() => {
+    if (!open) return;
+    setName("");
+    setAccountId("");
+    setStage("");
+    setValue("");
+    setCloseDate("");
+    setOwnerUserId(currentUserId ?? UNASSIGNED_OWNER);
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -332,6 +389,31 @@ function CreateOpportunityDialog({
             <Label>Expected close date</Label>
             <Input type="date" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} className="font-mono" />
           </div>
+          {canAssign && (
+            <div className="space-y-2">
+              <Label>Owner</Label>
+              <Select
+                value={ownerUserId}
+                onValueChange={setOwnerUserId}
+                disabled={membersLoading}
+              >
+                <SelectTrigger data-testid="select-create-opportunity-owner">
+                  <SelectValue placeholder={membersLoading ? "Loading members..." : "Select owner"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNASSIGNED_OWNER}>Unassigned</SelectItem>
+                  {members.map((member) => (
+                    <SelectItem key={member.user.id} value={member.user.id}>
+                      {member.user.fullName || member.user.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Assign the deal to any member or leave it unassigned.
+              </p>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -344,6 +426,12 @@ function CreateOpportunityDialog({
                 stage: stage || undefined,
                 value: value ? value : null,
                 expectedCloseDate: closeDate || null,
+                ...(canAssign
+                  ? {
+                      ownerUserId:
+                        ownerUserId === UNASSIGNED_OWNER ? null : ownerUserId,
+                    }
+                  : {}),
               })
             }
           >
@@ -356,11 +444,15 @@ function CreateOpportunityDialog({
 }
 
 function OpportunityDetailDialog({
-  orgId, opportunityId, stages, onClose, onInvalidate, onGoToQuotes,
+  orgId, opportunityId, stages, canAssign, members, membersLoading,
+  onClose, onInvalidate, onGoToQuotes,
 }: {
   orgId: string;
   opportunityId: string;
   stages: { key: string; name: string }[];
+  canAssign: boolean;
+  members: Member[];
+  membersLoading: boolean;
   onClose: () => void;
   onInvalidate: () => void;
   onGoToQuotes: () => void;
@@ -373,9 +465,16 @@ function OpportunityDetailDialog({
   const updateOpp = useUpdateOpportunity();
   const convert = useConvertOpportunityToCustomer();
   const createQuote = useCreateQuote();
+  const [ownerUserId, setOwnerUserId] = useState(UNASSIGNED_OWNER);
+
+  useEffect(() => {
+    if (opp) setOwnerUserId(opp.ownerUserId ?? UNASSIGNED_OWNER);
+  }, [opp?.id, opp?.ownerUserId]);
 
   if (!opp) return null;
   const isClosed = opp.forecastCategory === "closed_won" || opp.forecastCategory === "closed_lost";
+  const savedOwnerUserId = opp.ownerUserId ?? UNASSIGNED_OWNER;
+  const ownerDirty = ownerUserId !== savedOwnerUserId;
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -413,6 +512,77 @@ function OpportunityDetailDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {canAssign && (
+            <div className="space-y-2 border-t border-primary/10 pt-4">
+              <Label>Owner</Label>
+              <Select
+                value={ownerUserId}
+                onValueChange={setOwnerUserId}
+                disabled={updateOpp.isPending || membersLoading}
+              >
+                <SelectTrigger data-testid="select-edit-opportunity-owner">
+                  <SelectValue placeholder={membersLoading ? "Loading members..." : "Select owner"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNASSIGNED_OWNER}>Unassigned</SelectItem>
+                  {members.map((member) => (
+                    <SelectItem key={member.user.id} value={member.user.id}>
+                      {member.user.fullName || member.user.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {ownerDirty && (
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setOwnerUserId(savedOwnerUserId)}
+                    disabled={updateOpp.isPending}
+                    data-testid="button-cancel-opportunity-owner"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() =>
+                      updateOpp.mutate(
+                        {
+                          orgId,
+                          opportunityId,
+                          data: {
+                            ownerUserId:
+                              ownerUserId === UNASSIGNED_OWNER
+                                ? null
+                                : ownerUserId,
+                          },
+                        },
+                        {
+                          onSuccess: () => {
+                            onInvalidate();
+                            toast({ title: "Opportunity owner updated" });
+                          },
+                          onError: (e) =>
+                            toast({
+                              title: "Could not update owner",
+                              description: (e as Error).message,
+                              variant: "destructive",
+                            }),
+                        },
+                      )
+                    }
+                    disabled={updateOpp.isPending}
+                    data-testid="button-save-opportunity-owner"
+                  >
+                    {updateOpp.isPending ? "Saving..." : "Save owner"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           {opp.stageHistory.length > 0 && (
             <div>

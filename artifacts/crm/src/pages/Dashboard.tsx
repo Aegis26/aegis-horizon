@@ -4,6 +4,7 @@ import { useOrgStore } from "@/store/org-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Users, Target, Activity } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import CommissionDashboardWidget from "@/components/commission/CommissionDashboardWidget";
 
 const DashboardInsights = lazy(() => import("@/components/dashboard/DashboardInsights"));
 
@@ -91,6 +92,8 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        <CommissionDashboardWidget orgId={selectedOrgId!} />
 
         <Suspense fallback={<div className="h-[460px] skeleton rounded-xl" />}>
           <DashboardInsights orgId={selectedOrgId!} />

@@ -1,0 +1,696 @@
+# Add Commission Tracking System - Dashboard & Calculations
+
+**Goal:** Track employee commissions based on closed deals, with admin-configurable rates and dashboard metrics.
+
+**Features:**
+- ✅ Admin sets commission % per employee
+- ✅ Commission calculated when opportunity moves to "Closed Won"
+- ✅ Dashboard widget shows commissions with time filters
+- ✅ Owner sees all employees' commissions
+- ✅ Employees see only their own commissions
+- ✅ Commission history/records tracked
+
+---
+
+## Task 1: Create Commission Schema
+
+Add to `artifacts/api-server/src/db/schema.ts`:
+
+```typescript
+import { pgTable, text, numeric, timestamp, uuid, boolean } from 'drizzle-orm/pg-core'
+import { relations } from 'drizzle-orm'
+
+// Commission configuration per employee
+export const employeeCommissions = pgTable('employee_commissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  org_id: uuid('org_id').notNull(),
+  user_id: text('user_id').notNull(), // Clerk user ID
+  commission_percentage: numeric('commission_percentage', { precision: 5, scale: 2 }).notNull(), // e.g., 10.5 for 10.5%
+  is_active: boolean('is_active').notNull().default(true),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  
+  // Foreign keys
+  foreignKey: {
+    org_id: organizations.id,
+    user_id: users.id,
+  }
+})
+
+// Commission records (earned commissions)
+export const commissions = pgTable('commissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  org_id: uuid('org_id').notNull(),
+  user_id: text('user_id').notNull(), // Employee who earned it
+  opportunity_id: uuid('opportunity_id').notNull(), // The deal
+  opportunity_value: numeric('opportunity_value', { precision: 12, scale: 2 }).notNull(), // Deal amount
+  commission_percentage: numeric('commission_percentage', { precision: 5, scale: 2 }).notNull(), // % at time of close
+  commission_amount: numeric('commission_amount', { precision: 12, scale: 2 }).notNull(), // Calculated amount
+  earned_date: timestamp('earned_date', { withTimezone: true }).notNull(), // When moved to Closed Won
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  
+  // Foreign keys
+  foreignKey: {
+    org_id: organizations.id,
+    user_id: users.id,
+    opportunity_id: opportunities.id,
+  }
+})
+
+// Relations
+export const employeeCommissionsRelations = relations(employeeCommissions, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [employeeCommissions.org_id],
+    references: [organizations.id],
+  }),
+  commissionRecords: many(commissions),
+}))
+
+export const commissionsRelations = relations(commissions, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [commissions.org_id],
+    references: [organizations.id],
+  }),
+  opportunity: one(opportunities, {
+    fields: [commissions.opportunity_id],
+    references: [opportunities.id],
+  }),
+}))
+```
+
+---
+
+## Task 2: Database Migration
+
+Create migration to add tables:
+
+```bash
+# This should happen automatically with Drizzle, but verify:
+npm run db:push
+```
+
+---
+
+## Task 3: Commission Settings Page (Admin Only)
+
+Create or update Settings page with commission management section.
+
+File: `artifacts/crm/src/pages/Settings.tsx`
+
+Add this section:
+
+```typescript
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
+
+export default function Settings() {
+  const router = useRouter()
+  const { orgId } = router.query
+  const [userRole, setUserRole] = useState(null)
+  const [teamMembers, setTeamMembers] = useState([])
+  const [commissions, setCommissions] = useState({}) // { userId: percentage }
+  const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState('')
+
+  // Fetch team members and their current commissions
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!orgId) return
+
+      try {
+        // Get team members
+        const membersResponse = await fetch(`/api/organizations/${orgId}/members`)
+        const membersData = await membersResponse.json()
+        setTeamMembers(membersData)
+
+        // Get commission settings
+        const commissionsResponse = await fetch(`/api/commissions/settings?orgId=${orgId}`)
+        const commissionsData = await commissionsResponse.json()
+        
+        // Convert to { userId: percentage } format
+        const commissionMap = {}
+        commissionsData.forEach(c => {
+          commissionMap[c.user_id] = c.commission_percentage
+        })
+        setCommissions(commissionMap)
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      }
+    }
+
+    fetchData()
+  }, [orgId])
+
+  // Handle commission % change
+  const handleCommissionChange = (userId, value) => {
+    setCommissions(prev => ({
+      ...prev,
+      [userId]: parseFloat(value) || 0
+    }))
+  }
+
+  // Save commission settings
+  const handleSaveCommissions = async () => {
+    setSaving(true)
+    setSaveMessage('')
+
+    try {
+      const response = await fetch(`/api/commissions/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orgId,
+          commissions, // { userId: percentage }
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        setSaveMessage(`Error: ${error.error}`)
+        setSaving(false)
+        return
+      }
+
+      setSaveMessage('Commission settings saved! ✅')
+      setTimeout(() => setSaveMessage(''), 3000)
+    } catch (error) {
+      console.error('Error saving:', error)
+      setSaveMessage('Failed to save commission settings')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Only admins can see this
+  if (userRole && userRole !== 'admin' && userRole !== 'owner') {
+    return null
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* ... existing sections ... */}
+
+      {/* Commission Settings (Admin Only) */}
+      <section className="mt-8 pt-8 border-t border-slate-700">
+        <h2 className="text-lg font-bold text-white mb-2">💰 Commission Settings</h2>
+        <p className="text-gray-400 text-sm mb-6">Set commission percentage for each team member</p>
+
+        <div className="space-y-4">
+          {teamMembers.map(member => (
+            <div key={member.user_id} className="flex items-end gap-4 bg-slate-800 p-4 rounded border border-slate-700">
+              <div className="flex-1">
+                <label className="block text-sm text-gray-400 mb-2">
+                  {member.firstName} {member.lastName} ({member.email})
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={commissions[member.user_id] || 0}
+                    onChange={(e) => handleCommissionChange(member.user_id, e.target.value)}
+                    className="flex-1 px-4 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-blue-500 focus:outline-none"
+                    placeholder="10"
+                  />
+                  <span className="text-gray-400">%</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {saveMessage && (
+          <div className={`mt-4 p-3 rounded text-sm ${saveMessage.includes('Error') ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+            {saveMessage}
+          </div>
+        )}
+
+        <button
+          onClick={handleSaveCommissions}
+          disabled={saving}
+          className="mt-6 px-6 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 text-white rounded font-medium transition"
+        >
+          {saving ? 'Saving...' : 'Save Commission Settings'}
+        </button>
+      </section>
+    </div>
+  )
+}
+```
+
+---
+
+## Task 4: Commission Calculation on Deal Close
+
+Add to `artifacts/api-server/src/routes/opportunities.ts`:
+
+When opportunity is updated to "Closed Won":
+
+```typescript
+// When updating opportunity status
+app.patch('/api/opportunities/:id', async (req, res) => {
+  const { id } = req.params
+  const { status, orgId } = req.body
+  const userId = req.user.id
+
+  try {
+    // Get opportunity
+    const opportunity = await db.query.opportunities.findFirst({
+      where: eq(opportunities.id, id),
+    })
+
+    if (!opportunity) {
+      return res.status(404).json({ error: 'Opportunity not found' })
+    }
+
+    // Update opportunity
+    await db.update(opportunities)
+      .set({
+        status,
+        updated_at: new Date(),
+      })
+      .where(eq(opportunities.id, id))
+
+    // ✅ IF moved to "Closed Won", calculate commission
+    if (status === 'Closed Won' && opportunity.status !== 'Closed Won') {
+      // Get owner's commission percentage
+      const commissionSetting = await db.query.employeeCommissions.findFirst({
+        where: and(
+          eq(employeeCommissions.org_id, orgId),
+          eq(employeeCommissions.user_id, opportunity.owner_user_id)
+        ),
+      })
+
+      if (commissionSetting) {
+        const commissionPercentage = parseFloat(commissionSetting.commission_percentage)
+        const opportunityValue = parseFloat(opportunity.value)
+        const commissionAmount = (opportunityValue * commissionPercentage) / 100
+
+        // Create commission record
+        await db.insert(commissions).values({
+          org_id: orgId,
+          user_id: opportunity.owner_user_id, // Person who owns the deal
+          opportunity_id: id,
+          opportunity_value: opportunityValue.toString(),
+          commission_percentage: commissionPercentage.toString(),
+          commission_amount: commissionAmount.toString(),
+          earned_date: new Date(),
+        })
+
+        console.log(`[COMMISSION] ${opportunity.owner_user_id} earned $${commissionAmount} on deal ${id}`)
+      }
+    }
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error updating opportunity:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+```
+
+---
+
+## Task 5: Commission Settings API
+
+Create endpoint: `artifacts/api-server/src/routes/commissions.ts`
+
+```typescript
+import { db } from '@/db'
+import { employeeCommissions } from '@/db/schema'
+import { eq, and } from 'drizzle-orm'
+
+// GET commission settings for org
+app.get('/api/commissions/settings', async (req, res) => {
+  const { orgId } = req.query
+  const userId = req.user.id
+
+  try {
+    // Verify user is admin/owner of org
+    const membership = await db.query.orgUsers.findFirst({
+      where: and(
+        eq(orgUsers.org_id, orgId),
+        eq(orgUsers.user_id, userId)
+      ),
+    })
+
+    if (!membership || (membership.role !== 'admin' && membership.role !== 'owner')) {
+      return res.status(403).json({ error: 'Not authorized' })
+    }
+
+    // Get all commission settings for org
+    const commissionSettings = await db.query.employeeCommissions.findMany({
+      where: eq(employeeCommissions.org_id, orgId),
+    })
+
+    res.json(commissionSettings)
+  } catch (error) {
+    console.error('Error fetching commissions:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// POST/UPDATE commission settings
+app.post('/api/commissions/settings', async (req, res) => {
+  const { orgId, commissions } = req.body // { userId: percentage }
+  const userId = req.user.id
+
+  try {
+    // Verify user is admin/owner
+    const membership = await db.query.orgUsers.findFirst({
+      where: and(
+        eq(orgUsers.org_id, orgId),
+        eq(orgUsers.user_id, userId)
+      ),
+    })
+
+    if (!membership || (membership.role !== 'admin' && membership.role !== 'owner')) {
+      return res.status(403).json({ error: 'Not authorized' })
+    }
+
+    // Update each employee's commission
+    for (const [employeeId, percentage] of Object.entries(commissions)) {
+      const existing = await db.query.employeeCommissions.findFirst({
+        where: and(
+          eq(employeeCommissions.org_id, orgId),
+          eq(employeeCommissions.user_id, employeeId)
+        ),
+      })
+
+      if (existing) {
+        // Update
+        await db.update(employeeCommissions)
+          .set({
+            commission_percentage: percentage.toString(),
+            updated_at: new Date(),
+          })
+          .where(eq(employeeCommissions.id, existing.id))
+      } else {
+        // Create
+        await db.insert(employeeCommissions).values({
+          org_id: orgId,
+          user_id: employeeId,
+          commission_percentage: percentage.toString(),
+        })
+      }
+    }
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error updating commissions:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// GET commissions with time filter
+app.get('/api/commissions/earned', async (req, res) => {
+  const { orgId, period = 'month' } = req.query // today, 7days, month, year
+  const userId = req.user.id
+
+  try {
+    // Get user's role
+    const membership = await db.query.orgUsers.findFirst({
+      where: and(
+        eq(orgUsers.org_id, orgId),
+        eq(orgUsers.user_id, userId)
+      ),
+    })
+
+    if (!membership) {
+      return res.status(403).json({ error: 'Not member of org' })
+    }
+
+    // Calculate date range
+    const now = new Date()
+    let startDate = new Date()
+
+    switch (period) {
+      case 'today':
+        startDate.setHours(0, 0, 0, 0)
+        break
+      case '7days':
+        startDate.setDate(now.getDate() - 7)
+        break
+      case 'month':
+        startDate.setDate(1)
+        break
+      case 'year':
+        startDate.setMonth(0, 1)
+        break
+      default:
+        startDate.setDate(now.getDate() - 30)
+    }
+
+    // ✅ Owner sees ALL, employees see only theirs
+    let query = db.query.commissions.findMany({
+      where: and(
+        eq(commissions.org_id, orgId),
+        gte(commissions.earned_date, startDate)
+      ),
+    })
+
+    if (membership.role !== 'owner' && membership.role !== 'admin') {
+      // Regular employee - see only own commissions
+      query = db.query.commissions.findMany({
+        where: and(
+          eq(commissions.org_id, orgId),
+          eq(commissions.user_id, userId),
+          gte(commissions.earned_date, startDate)
+        ),
+      })
+    }
+
+    const commissionRecords = await query
+
+    // Calculate totals
+    const totalCommission = commissionRecords.reduce((sum, c) => sum + parseFloat(c.commission_amount), 0)
+    const dealCount = commissionRecords.length
+    const avgCommission = dealCount > 0 ? totalCommission / dealCount : 0
+
+    res.json({
+      period,
+      totalCommission: totalCommission.toFixed(2),
+      dealCount,
+      averageCommission: avgCommission.toFixed(2),
+      records: commissionRecords,
+    })
+  } catch (error) {
+    console.error('Error fetching commissions:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+```
+
+---
+
+## Task 6: Dashboard Commission Widget
+
+Add to Dashboard page: `artifacts/crm/src/pages/Dashboard.tsx`
+
+```typescript
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
+
+export default function Dashboard() {
+  const router = useRouter()
+  const { orgId } = router.query
+  const [period, setPeriod] = useState('month') // today, 7days, month, year
+  const [commissionData, setCommissionData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  // Fetch commission data
+  useEffect(() => {
+    if (!orgId) return
+
+    const fetchCommissions = async () => {
+      try {
+        const response = await fetch(`/api/commissions/earned?orgId=${orgId}&period=${period}`)
+        const data = await response.json()
+        setCommissionData(data)
+      } catch (error) {
+        console.error('Error fetching commissions:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCommissions()
+  }, [orgId, period])
+
+  return (
+    <div>
+      {/* ... existing dashboard sections ... */}
+
+      {/* Commission Widget */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-white">💰 Commissions Earned</h2>
+          
+          {/* Time Filter Buttons */}
+          <div className="flex gap-2">
+            {['today', '7days', 'month', 'year'].map(p => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`px-4 py-2 rounded text-sm font-medium transition ${
+                  period === p
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                }`}
+              >
+                {p === 'today' && 'Today'}
+                {p === '7days' && 'Past 7 Days'}
+                {p === 'month' && 'Month'}
+                {p === 'year' && 'Year'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="text-gray-400">Loading...</div>
+        ) : commissionData ? (
+          <div className="grid grid-cols-3 gap-6">
+            {/* Total Commission */}
+            <div className="bg-slate-900 rounded-lg p-4">
+              <p className="text-gray-400 text-sm mb-2">Total Commission</p>
+              <p className="text-3xl font-bold text-green-400">${commissionData.totalCommission}</p>
+            </div>
+
+            {/* Deals Closed */}
+            <div className="bg-slate-900 rounded-lg p-4">
+              <p className="text-gray-400 text-sm mb-2">Deals Closed</p>
+              <p className="text-3xl font-bold text-blue-400">{commissionData.dealCount}</p>
+            </div>
+
+            {/* Average Commission */}
+            <div className="bg-slate-900 rounded-lg p-4">
+              <p className="text-gray-400 text-sm mb-2">Avg Commission</p>
+              <p className="text-3xl font-bold text-purple-400">${commissionData.averageCommission}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Commission Records Table */}
+        {commissionData?.records && commissionData.records.length > 0 && (
+          <div className="mt-6 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left py-2 px-4 text-gray-400">Employee</th>
+                  <th className="text-left py-2 px-4 text-gray-400">Deal Amount</th>
+                  <th className="text-left py-2 px-4 text-gray-400">Commission %</th>
+                  <th className="text-left py-2 px-4 text-gray-400">Commission Earned</th>
+                  <th className="text-left py-2 px-4 text-gray-400">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {commissionData.records.map(record => (
+                  <tr key={record.id} className="border-b border-slate-700 hover:bg-slate-700/50">
+                    <td className="py-2 px-4">{record.user_id}</td>
+                    <td className="py-2 px-4">${parseFloat(record.opportunity_value).toFixed(2)}</td>
+                    <td className="py-2 px-4">{record.commission_percentage}%</td>
+                    <td className="py-2 px-4 text-green-400 font-bold">${parseFloat(record.commission_amount).toFixed(2)}</td>
+                    <td className="py-2 px-4 text-gray-500">{new Date(record.earned_date).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+## Task 7: Test Commission Flow
+
+1. **Set commission rates:**
+   - Go to Settings → Commission Settings
+   - Set 10% for Employee 1, 15% for Employee 2
+   - Save
+
+2. **Create and close a deal:**
+   - Go to Pipeline
+   - Create opportunity: $10,000 value, assigned to Employee 1
+   - Move to "Closed Won"
+   - Commission should calculate: $10,000 × 10% = $1,000
+
+3. **Check dashboard:**
+   - Go to Dashboard
+   - See commission widget
+   - Click filters (Today, 7 Days, Month, Year)
+   - See $1,000 commission recorded
+
+4. **Check permissions:**
+   - Employee 1 logs in → Sees only $1,000
+   - Owner logs in → Sees all employees' commissions
+
+---
+
+## Task 8: Commit & Push
+
+```bash
+git add artifacts/api-server/src/db/schema.ts artifacts/api-server/src/routes/commissions.ts artifacts/crm/src/pages/
+
+git commit -m "feat: Add employee commission tracking system with dashboard metrics
+
+Database:
+- employee_commissions table: stores commission % per employee per org
+- commissions table: records earned commissions on closed deals
+
+Features:
+- Admin/Owner can set custom commission % for each employee
+- Commission calculated when opportunity moves to 'Closed Won'
+- Commission = opportunity_value × commission_percentage
+- Dashboard widget shows total, deal count, average commission
+- Time filters: Today, Past 7 Days, Month, Year
+- Owner sees all employees' commissions
+- Employees see only their own commissions
+
+Commission Settings (Settings page):
+- Admin/Owner configurable UI
+- Set percentage for each team member
+- Save settings
+
+Dashboard Widget:
+- Total commission earned (filtered by period)
+- Number of deals closed
+- Average commission per deal
+- Full commission history table
+- Time period selector (Today/7d/Month/Year)
+
+API Endpoints:
+- GET /api/commissions/settings - Get org commission config
+- POST /api/commissions/settings - Update commission rates
+- GET /api/commissions/earned - Get earned commissions (filtered by period & role)
+- PATCH /api/opportunities/:id - Auto-calculate on Close Won
+
+Permission-based visibility:
+- Admin/Owner: See all commissions
+- Employee: See only their own"
+
+git push origin main
+```
+
+Railway will auto-deploy. 🚀
+
+---
+
+## Success Criteria
+
+✅ Admin can set commission % per employee (Settings page)  
+✅ When opportunity moves to "Closed Won" → Commission calculated  
+✅ Commission = opportunity_value × commission_percentage  
+✅ Dashboard widget shows total commission earned  
+✅ Time filters work (Today, 7 Days, Month, Year)  
+✅ Owner sees all employees' commissions  
+✅ Employees see only their own commissions  
+✅ Commission history table shows all records  
+✅ Commission amounts display correctly ($1,234.56 format)  
+
+**After this, commission tracking is fully operational!** 💰

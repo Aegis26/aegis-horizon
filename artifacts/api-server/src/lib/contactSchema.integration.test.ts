@@ -180,3 +180,34 @@ test(
     );
   },
 );
+
+test(
+  "legacy text references remain intact and do not prevent startup",
+  { skip: !integrationEnabled },
+  async () => {
+    assert.ok(client);
+    assert.ok(schema);
+    await client.query(`
+      ALTER TABLE contacts
+        DROP CONSTRAINT contacts_created_by_user_id_users_fk,
+        DROP CONSTRAINT contacts_owner_user_id_users_fk;
+      ALTER TABLE contacts
+        ALTER COLUMN created_by_user_id TYPE text USING created_by_user_id::text,
+        ALTER COLUMN owner_user_id TYPE text USING owner_user_id::text;
+      UPDATE contacts SET created_by_user_id = 'legacy-creator',
+                          owner_user_id = 'legacy-owner';
+    `);
+    await schema.migrateContactSchema(client);
+    await schema.migrateContactSchema(client);
+    const result = await client.query(`
+      SELECT created_by_user_id, owner_user_id,
+             pg_typeof(created_by_user_id)::text AS creator_type
+      FROM contacts
+    `);
+    assert.deepEqual(result.rows, [{
+      created_by_user_id: "legacy-creator",
+      owner_user_id: "legacy-owner",
+      creator_type: "text",
+    }]);
+  },
+);

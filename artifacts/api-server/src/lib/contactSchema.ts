@@ -24,6 +24,15 @@ export async function migrateContactSchema(client: PoolClient): Promise<void> {
     DECLARE
       constraint_name text;
     BEGIN
+      -- Legacy installations may store contact references as text. Preserve
+      -- those values/types; a UUID FK cannot be attached to a text column.
+      IF (SELECT atttypid FROM pg_attribute
+          WHERE attrelid = 'contacts'::regclass AND attname = 'owner_user_id')
+         IS DISTINCT FROM
+         (SELECT atttypid FROM pg_attribute
+          WHERE attrelid = 'users'::regclass AND attname = 'id') THEN
+        RETURN;
+      END IF;
       FOR constraint_name IN
         SELECT c.conname
         FROM pg_constraint c
@@ -76,6 +85,13 @@ export async function migrateContactSchema(client: PoolClient): Promise<void> {
     DECLARE
       constraint_name text;
     BEGIN
+      IF (SELECT atttypid FROM pg_attribute
+          WHERE attrelid = 'contacts'::regclass AND attname = 'created_by_user_id')
+         IS DISTINCT FROM
+         (SELECT atttypid FROM pg_attribute
+          WHERE attrelid = 'users'::regclass AND attname = 'id') THEN
+        RETURN;
+      END IF;
       FOR constraint_name IN
         SELECT c.conname
         FROM pg_constraint c

@@ -1,3 +1,4 @@
+- [Railway schema compatibility](railway-schema-compatibility.md) — account details can fail on related-table schema drift despite successful creation; verify the DB cause.
 - [Orval zod version pin](orval-zod-version.md) — orval emits zod-4 syntax (`zod.int()`) unless `override.zod.version: 3` is set; workspace zod is 3.x.
 - [Private object storage ACL binding](storage-acl-binding.md) — storage template ships private downloads unauthenticated; objects must be org-bound at attach time and checked on download.
 - [api-server esbuild externals](api-server-esbuild-externals.md) — pdfkit/fontkit must stay external in the api-server bundle or the build breaks on @swc/helpers.

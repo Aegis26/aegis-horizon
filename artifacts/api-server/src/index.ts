@@ -6,6 +6,7 @@ import { startWebhookScheduler } from "./services/webhooks";
 import { ensureOrganizationDeletionLedgerSchema } from "./lib/organizationDeletionSchema";
 import { ensureAccountDeletionSchema } from "./lib/accountDeletionSchema";
 import { ensureWindowSessionSchema } from "./lib/windowSessionSchema";
+import { ensureContactSchema } from "./lib/contactSchema";
 import { startAccountDeletionRecovery } from "./services/accountDeletion";
 
 const rawPort = process.env["PORT"];
@@ -25,6 +26,7 @@ if (Number.isNaN(port) || port <= 0) {
 await ensureOrganizationDeletionLedgerSchema();
 await ensureAccountDeletionSchema();
 await ensureWindowSessionSchema();
+await ensureContactSchema();
 
 startWorkflowScheduler();
 startReportScheduler();

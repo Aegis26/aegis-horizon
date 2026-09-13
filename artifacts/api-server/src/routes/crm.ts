@@ -27,6 +27,7 @@ import {
   type Contact,
   type Activity,
   type Segment,
+  type Opportunity,
 } from "@workspace/db";
 import {
   ListAccountsResponse,
@@ -65,8 +66,41 @@ import {
 } from "../services/crmAccess";
 import { isOrgMemberId } from "../services/orgValidation";
 import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
+import { logger } from "../lib/logger";
 const router: IRouter = Router();
 const objectStorage = new ObjectStorageService();
+
+/**
+ * Log only stable PostgreSQL diagnostics. In particular, do not serialize a
+ * Drizzle error's message/params because those can contain query values.
+ */
+function safeDatabaseErrorDetails(error: unknown): Record<string, string> {
+  const values: Record<string, string> = {};
+  const candidates: unknown[] = [error];
+
+  for (let index = 0; index < candidates.length && index < 3; index += 1) {
+    const candidate = candidates[index];
+    if (typeof candidate !== "object" || candidate === null) continue;
+    const record = candidate as Record<string, unknown>;
+    if (record.cause !== undefined) candidates.push(record.cause);
+    for (const key of [
+      "code",
+      "severity",
+      "schema",
+      "table",
+      "column",
+      "constraint",
+      "routine",
+    ]) {
+      const value = record[key];
+      if (typeof value === "string" && value.length <= 128) {
+        values[key] ??= value;
+      }
+    }
+  }
+
+  return values;
+}
 
 /**
  * Bind an uploaded object to the current org (private ACL, org-member read).
@@ -615,29 +649,43 @@ router.get(
       res.status(404).json({ error: "Account not found" });
       return;
     }
-    const [relContacts, relOpps] = await Promise.all([
-      db
-        .select()
-        .from(contacts)
-        .where(
-          and(
-            eq(contacts.accountId, account.id),
-            eq(contacts.isActive, true),
-            eq(contacts.orgId, req.currentOrg!.id),
-            ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
-          ),
-        )
-        .orderBy(contacts.lastName),
-      db
-        .select()
-        .from(opportunities)
-        .where(and(
-          eq(opportunities.accountId, account.id),
-          eq(opportunities.orgId, req.currentOrg!.id),
-          ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
-        ))
-        .orderBy(desc(opportunities.createdAt)),
-    ]);
+    let relContacts: Contact[];
+    let relOpps: Opportunity[];
+    try {
+      [relContacts, relOpps] = await Promise.all([
+        db
+          .select()
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.accountId, account.id),
+              eq(contacts.isActive, true),
+              eq(contacts.orgId, req.currentOrg!.id),
+              ...withCrmVisibility(req, contacts.ownerUserId, contacts.createdByUserId),
+            ),
+          )
+          .orderBy(contacts.lastName),
+        db
+          .select()
+          .from(opportunities)
+          .where(and(
+            eq(opportunities.accountId, account.id),
+            eq(opportunities.orgId, req.currentOrg!.id),
+            ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+          ))
+          .orderBy(desc(opportunities.createdAt)),
+      ]);
+    } catch (error) {
+      logger.error(
+        {
+          requestId: req.id,
+          route: "account-detail",
+          ...safeDatabaseErrorDetails(error),
+        },
+        "Account detail related-record query failed",
+      );
+      throw error;
+    }
     res.json(
       GetAccountResponse.parse({
         ...accountDetail(account),

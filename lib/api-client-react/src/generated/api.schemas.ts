@@ -935,6 +935,10 @@ export interface Opportunity {
   /** @nullable */
   forecastCategory?: string | null;
   /** @nullable */
+  productTypeId?: string | null;
+  /** @nullable */
+  productTypeName?: string | null;
+  /** @nullable */
   ownerUserId?: string | null;
   /** @nullable */
   createdByUserId?: string | null;
@@ -944,6 +948,8 @@ export interface Opportunity {
 
 export interface CommissionSetting {
   userId: string;
+  /** @nullable */
+  productTypeId: string | null;
   /**
      * Percentage from 0 to 100 with at most two decimals.
      * @pattern ^(?:\d{1,3})(?:\.\d{1,2})?$
@@ -954,6 +960,45 @@ export interface CommissionSetting {
 
 export interface CommissionSettingsResponse {
   settings: CommissionSetting[];
+}
+
+export interface ProductType {
+  id: string;
+  name: string;
+  /** @nullable */
+  description: string | null;
+  isActive: boolean;
+}
+
+export interface ProductTypeCreate {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name: string;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  description?: string | null;
+}
+
+export interface ProductTypeUpdate {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name?: string;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  description?: string | null;
+  isActive?: boolean;
+}
+
+export interface ProductTypesResponse {
+  productTypes: ProductType[];
 }
 
 export interface CommissionSettingsUpdate {
@@ -970,6 +1015,10 @@ export interface EarnedCommissionRecord {
   opportunityValue: string;
   commissionPercentage: string;
   commissionAmount: string;
+  /** @nullable */
+  productTypeId?: string | null;
+  /** @nullable */
+  productTypeName?: string | null;
   earnedDate: string;
 }
 
@@ -1600,6 +1649,8 @@ export interface OpportunityCreate {
   /** @nullable */
   expectedCloseDate?: string | null;
   /** @nullable */
+  productTypeId?: string | null;
+  /** @nullable */
   nextAction?: string | null;
   /** @nullable */
   ownerUserId?: string | null;
@@ -1622,6 +1673,8 @@ export interface OpportunityUpdate {
   value?: string | null;
   /** @nullable */
   expectedCloseDate?: string | null;
+  /** @nullable */
+  productTypeId?: string | null;
   /** @nullable */
   forecastCategory?: string | null;
   /** @nullable */
@@ -1655,6 +1708,10 @@ export interface OpportunityDetail {
   probability?: number | null;
   /** @nullable */
   value?: string | null;
+  /** @nullable */
+  productTypeId?: string | null;
+  /** @nullable */
+  productTypeName?: string | null;
   /** @nullable */
   expectedCloseDate?: string | null;
   /** @nullable */
@@ -1838,6 +1895,8 @@ export interface QualifyLeadRequest {
   expectedCloseDate?: string | null;
   /** @nullable */
   accountId?: string | null;
+  /** @nullable */
+  productTypeId?: string | null;
 }
 
 export interface RescoreResult {

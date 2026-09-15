@@ -15,4 +15,6 @@ export interface QualifyLeadRequest {
   expectedCloseDate?: string | null;
   /** @nullable */
   accountId?: string | null;
+  /** @nullable */
+  productTypeId?: string | null;
 }

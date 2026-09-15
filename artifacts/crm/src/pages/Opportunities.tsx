@@ -5,13 +5,20 @@ import {
   useListAccounts, getListAccountsQueryKey,
   useGetMe, getGetMeQueryKey,
   useListMembers, getListMembersQueryKey,
+  useListProductTypes,
   useCreateOpportunity, useUpdateOpportunity, useConvertOpportunityToCustomer,
   useGetOpportunity, getGetOpportunityQueryKey,
   useCreateQuote, getListQuotesQueryKey,
   useGetClosePrediction, getGetClosePredictionQueryKey,
   useRecomputeClosePrediction,
 } from "@workspace/api-client-react";
-import type { Member, Opportunity, ClosePrediction } from "@workspace/api-client-react";
+import type {
+  Member,
+  Opportunity,
+  PipelineStage,
+  ProductType,
+  ClosePrediction,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOrgStore } from "@/store/org-store";
 import { Link, useLocation } from "wouter";
@@ -26,10 +33,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Lock, Plus, Target, LayoutGrid, List, FileText, Trophy, History, Sparkles, RefreshCw } from "lucide-react";
 import { formatDollars, formatDate, formatPredictionPercentage } from "@/lib/format";
-import { earnedCommissionsQueryRoot } from "@/lib/commissions";
+import { earnedCommissionsQueryRoot, productTypesQueryKey } from "@/lib/commissions";
 
 const UNASSIGNED_OWNER = "__unassigned__";
+const GENERAL_PRODUCT = "__general__";
 const MANAGEMENT_ROLES = new Set(["owner", "admin", "manager"]);
+
+function formatProductName(
+  productTypeId?: string | null,
+  productTypeName?: string | null,
+): string {
+  return productTypeId
+    ? productTypeName || "Unknown product"
+    : "General / unclassified";
+}
 
 function LockedState() {
   return (
@@ -86,20 +103,60 @@ export default function Opportunities() {
       queryKey: getListMembersQueryKey(orgId),
     },
   });
+  const productTypesQuery = useListProductTypes(orgId, {
+    query: {
+      enabled: !!orgId,
+      retry: false,
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      queryKey: productTypesQueryKey(orgId, me?.user.id ?? "anonymous"),
+    },
+  });
+  const productTypes = useMemo(
+    () =>
+      (productTypesQuery.data?.productTypes ?? []).filter(
+        (product) => product && product.id && product.name,
+      ),
+    [productTypesQuery.data],
+  );
 
   const updateOpp = useUpdateOpportunity();
   const createOpp = useCreateOpportunity();
 
   const pipeline = pipelines?.[0];
   const stages = useMemo(
-    () => (pipeline?.stages ?? []).slice().sort((a, b) => a.order - b.order),
-    [pipeline],
+    (): PipelineStage[] => {
+      const configuredStages = (pipeline?.stages ?? [])
+        .slice()
+        .sort((a, b) => a.order - b.order);
+      const configuredKeys = new Set(configuredStages.map((stage) => stage.key));
+      const unconfiguredStages = Array.from(
+        new Set(
+          (opps ?? [])
+            .map((opportunity) => opportunity.stage)
+            .filter((stage): stage is string => Boolean(stage)),
+        ),
+      )
+        .filter((stage) => !configuredKeys.has(stage))
+        .map((key, index) => ({
+          key,
+          name: key
+            .replace(/[_-]+/g, " ")
+            .replace(/\b\w/g, (letter) => letter.toUpperCase()),
+          probability: 0,
+          forecastCategory: "pipeline" as const,
+          order: configuredStages.length + index,
+        }));
+      return [...configuredStages, ...unconfiguredStages];
+    },
+    [opps, pipeline],
   );
   const accountName = (id: string | undefined) =>
     (id && accounts?.find((a) => a.id === id)?.name) || "";
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getListOpportunitiesQueryKey(orgId) });
+    queryClient.invalidateQueries({ queryKey: getListPipelinesQueryKey(orgId) });
     if (detailId) queryClient.invalidateQueries({ queryKey: getGetOpportunityQueryKey(orgId, detailId) });
     queryClient.invalidateQueries({ queryKey: earnedCommissionsQueryRoot(orgId) });
   };
@@ -190,6 +247,9 @@ export default function Opportunities() {
                       >
                         <p className="text-sm font-medium text-foreground leading-tight mb-1">{opp.name}</p>
                         <p className="text-xs text-muted-foreground truncate mb-2">{accountName(opp.accountId)}</p>
+                        <p className="text-[11px] text-primary/80 truncate mb-2">
+                          {formatProductName(opp.productTypeId, opp.productTypeName)}
+                        </p>
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-mono font-medium text-foreground">
                             {opp.value ? formatDollars(Number(opp.value)) : "—"}
@@ -213,6 +273,7 @@ export default function Opportunities() {
                   <TableRow>
                     <TableHead>Deal Name</TableHead>
                     <TableHead>Account</TableHead>
+                    <TableHead>Product</TableHead>
                     <TableHead>Stage</TableHead>
                     <TableHead className="text-right">Value</TableHead>
                     <TableHead className="text-right">Probability</TableHead>
@@ -222,7 +283,7 @@ export default function Opportunities() {
                 <TableBody>
                   {opps?.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="p-0">
+                       <TableCell colSpan={7} className="p-0">
                         <div className="flex flex-col items-center justify-center min-h-[384px] px-6 py-20 bg-background/30 text-center">
                           <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-6">
                             <Target className="h-10 w-10 text-primary opacity-50" />
@@ -239,6 +300,9 @@ export default function Opportunities() {
                       <TableRow key={opp.id} className="cursor-pointer" onClick={() => setDetailId(opp.id)}>
                         <TableCell className="font-medium text-foreground">{opp.name}</TableCell>
                         <TableCell className="text-muted-foreground">{accountName(opp.accountId)}</TableCell>
+                         <TableCell className="text-muted-foreground">
+                           {formatProductName(opp.productTypeId, opp.productTypeName)}
+                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="capitalize">
                             {(stages.find((s) => s.key === opp.stage)?.name ?? opp.stage).replace("_", " ")}
@@ -273,6 +337,10 @@ export default function Opportunities() {
         members={members ?? []}
         membersLoading={membersLoading}
         currentUserId={me?.user.id}
+        productTypes={productTypes}
+        productTypesLoading={productTypesQuery.isLoading}
+        productTypesError={productTypesQuery.isError}
+        retryProductTypes={() => void productTypesQuery.refetch()}
         onCreate={(data) =>
           createOpp.mutate(
             { orgId, data },
@@ -303,6 +371,10 @@ export default function Opportunities() {
           canAssign={canAssignOpportunityOwner}
           members={members ?? []}
           membersLoading={membersLoading}
+           productTypes={productTypes}
+           productTypesLoading={productTypesQuery.isLoading}
+           productTypesError={productTypesQuery.isError}
+           retryProductTypes={() => void productTypesQuery.refetch()}
           onClose={() => setDetailId(null)}
           onInvalidate={invalidate}
           onGoToQuotes={() => navigate("/quotes")}
@@ -314,7 +386,8 @@ export default function Opportunities() {
 
 function CreateOpportunityDialog({
   open, onOpenChange, orgId, accounts, stages, canAssign, members,
-  membersLoading, currentUserId, onCreate, pending,
+  membersLoading, currentUserId, productTypes, productTypesLoading,
+  productTypesError, retryProductTypes, onCreate, pending,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -325,6 +398,10 @@ function CreateOpportunityDialog({
   members: Member[];
   membersLoading: boolean;
   currentUserId?: string;
+  productTypes: ProductType[];
+  productTypesLoading: boolean;
+  productTypesError: boolean;
+  retryProductTypes: () => void;
   onCreate: (data: {
     accountId: string;
     name: string;
@@ -332,6 +409,7 @@ function CreateOpportunityDialog({
     value?: string | null;
     expectedCloseDate?: string | null;
     ownerUserId?: string | null;
+    productTypeId?: string | null;
   }) => void;
   pending: boolean;
 }) {
@@ -341,6 +419,7 @@ function CreateOpportunityDialog({
   const [value, setValue] = useState("");
   const [closeDate, setCloseDate] = useState("");
   const [ownerUserId, setOwnerUserId] = useState(UNASSIGNED_OWNER);
+  const [productTypeId, setProductTypeId] = useState(GENERAL_PRODUCT);
 
   useEffect(() => {
     if (!open) return;
@@ -350,7 +429,10 @@ function CreateOpportunityDialog({
     setValue("");
     setCloseDate("");
     setOwnerUserId(currentUserId ?? UNASSIGNED_OWNER);
+    setProductTypeId(GENERAL_PRODUCT);
   }, [open]);
+
+  const assignableProducts = productTypes.filter((product) => product.isActive);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -389,6 +471,34 @@ function CreateOpportunityDialog({
             <Label>Expected close date</Label>
             <Input type="date" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} className="font-mono" />
           </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Product</Label>
+              {productTypesError ? (
+                <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={retryProductTypes}>
+                  <RefreshCw className="mr-1 h-3 w-3" /> Retry
+                </Button>
+              ) : null}
+            </div>
+            <Select value={productTypeId} onValueChange={setProductTypeId} disabled={productTypesLoading || productTypesError}>
+              <SelectTrigger>
+                <SelectValue placeholder={productTypesLoading ? "Loading products..." : "General / unclassified"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={GENERAL_PRODUCT}>General / unclassified</SelectItem>
+                {assignableProducts.map((product) => (
+                  <SelectItem key={product.id} value={product.id}>{product.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {productTypesError ? (
+              <p className="text-xs text-destructive">Product classifications could not be loaded. You can still create an unclassified deal.</p>
+            ) : assignableProducts.length === 0 && !productTypesLoading ? (
+              <p className="text-xs text-muted-foreground">No active products are configured; this deal will use General / unclassified.</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">Product rates are explicit; classified deals do not use the General rate.</p>
+            )}
+          </div>
           {canAssign && (
             <div className="space-y-2">
               <Label>Owner</Label>
@@ -426,6 +536,7 @@ function CreateOpportunityDialog({
                 stage: stage || undefined,
                 value: value ? value : null,
                 expectedCloseDate: closeDate || null,
+                productTypeId: productTypeId === GENERAL_PRODUCT ? null : productTypeId,
                 ...(canAssign
                   ? {
                       ownerUserId:
@@ -445,6 +556,7 @@ function CreateOpportunityDialog({
 
 function OpportunityDetailDialog({
   orgId, opportunityId, stages, canAssign, members, membersLoading,
+  productTypes, productTypesLoading, productTypesError, retryProductTypes,
   onClose, onInvalidate, onGoToQuotes,
 }: {
   orgId: string;
@@ -453,6 +565,10 @@ function OpportunityDetailDialog({
   canAssign: boolean;
   members: Member[];
   membersLoading: boolean;
+  productTypes: ProductType[];
+  productTypesLoading: boolean;
+  productTypesError: boolean;
+  retryProductTypes: () => void;
   onClose: () => void;
   onInvalidate: () => void;
   onGoToQuotes: () => void;
@@ -466,15 +582,34 @@ function OpportunityDetailDialog({
   const convert = useConvertOpportunityToCustomer();
   const createQuote = useCreateQuote();
   const [ownerUserId, setOwnerUserId] = useState(UNASSIGNED_OWNER);
+  const [productTypeId, setProductTypeId] = useState(GENERAL_PRODUCT);
 
   useEffect(() => {
-    if (opp) setOwnerUserId(opp.ownerUserId ?? UNASSIGNED_OWNER);
-  }, [opp?.id, opp?.ownerUserId]);
+    if (opp) {
+      setOwnerUserId(opp.ownerUserId ?? UNASSIGNED_OWNER);
+      setProductTypeId(opp.productTypeId ?? GENERAL_PRODUCT);
+    }
+  }, [opp?.id, opp?.ownerUserId, opp?.productTypeId]);
 
   if (!opp) return null;
   const isClosed = opp.forecastCategory === "closed_won" || opp.forecastCategory === "closed_lost";
   const savedOwnerUserId = opp.ownerUserId ?? UNASSIGNED_OWNER;
   const ownerDirty = ownerUserId !== savedOwnerUserId;
+  const savedProductTypeId = opp.productTypeId ?? GENERAL_PRODUCT;
+  const productDirty = productTypeId !== savedProductTypeId;
+  const selectedInactiveProduct =
+    opp.productTypeId &&
+    !productTypes.some((product) => product.id === opp.productTypeId)
+      ? {
+          id: opp.productTypeId,
+          name: opp.productTypeName || "Inactive product",
+          isActive: false,
+        }
+      : null;
+  const selectableProducts = [
+    ...productTypes.filter((product) => product.isActive || product.id === opp.productTypeId),
+    ...(selectedInactiveProduct ? [selectedInactiveProduct] : []),
+  ];
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -490,6 +625,7 @@ function OpportunityDetailDialog({
             <div><span className="text-muted-foreground">Probability</span><p className="font-mono font-medium">{opp.probability ?? 0}%</p></div>
             <div><span className="text-muted-foreground">Expected close</span><p className="font-mono">{formatDate(opp.expectedCloseDate)}</p></div>
             <div><span className="text-muted-foreground">Forecast</span><p className="capitalize">{(opp.forecastCategory ?? "pipeline").replace("_", " ")}</p></div>
+            <div><span className="text-muted-foreground">Product</span><p className="font-medium">{formatProductName(opp.productTypeId, opp.productTypeName)}</p></div>
           </div>
 
           <div className="space-y-2">
@@ -511,6 +647,83 @@ function OpportunityDetailDialog({
                 {stages.map((s) => <SelectItem key={s.key} value={s.key}>{s.name}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2 border-t border-primary/10 pt-4">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Product</Label>
+              {productTypesError ? (
+                <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={retryProductTypes}>
+                  <RefreshCw className="mr-1 h-3 w-3" /> Retry
+                </Button>
+              ) : null}
+            </div>
+            <Select
+              value={productTypeId}
+              onValueChange={setProductTypeId}
+              disabled={productTypesLoading || productTypesError || updateOpp.isPending}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={productTypesLoading ? "Loading products..." : "General / unclassified"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={GENERAL_PRODUCT}>General / unclassified</SelectItem>
+                {selectableProducts.map((product) => (
+                  <SelectItem key={product.id} value={product.id}>
+                    {product.name}{!product.isActive ? " (inactive — existing deal)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {productTypesError ? (
+              <p className="text-xs text-destructive">Product classifications could not be loaded. Retry to edit this deal.</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">Only active products can be assigned to a deal. Existing inactive products remain visible.</p>
+            )}
+            {productDirty && (
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setProductTypeId(savedProductTypeId)}
+                  disabled={updateOpp.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() =>
+                    updateOpp.mutate(
+                      {
+                        orgId,
+                        opportunityId,
+                        data: {
+                          productTypeId:
+                            productTypeId === GENERAL_PRODUCT ? null : productTypeId,
+                        },
+                      },
+                      {
+                        onSuccess: () => {
+                          onInvalidate();
+                          toast({ title: "Opportunity product updated" });
+                        },
+                        onError: (e) =>
+                          toast({
+                            title: "Could not update product",
+                            description: (e as Error).message,
+                            variant: "destructive",
+                          }),
+                      },
+                    )
+                  }
+                  disabled={updateOpp.isPending}
+                >
+                  {updateOpp.isPending ? "Saving..." : "Save product"}
+                </Button>
+              </div>
+            )}
           </div>
 
           {canAssign && (

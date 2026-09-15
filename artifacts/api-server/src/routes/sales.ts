@@ -5,6 +5,7 @@ import {
   accounts,
   opportunities,
   opportunityStageHistory,
+  productTypes,
   pipelines,
   leads,
   leadScoringRules,
@@ -91,6 +92,25 @@ async function isOrgMember(orgId: string, userId: string): Promise<boolean> {
 /** True when the territory belongs to the org. */
 async function isOrgTerritory(orgId: string, territoryId: string): Promise<boolean> {
   return isOrgTerritoryId(orgId, territoryId);
+}
+
+/** True when the product is an active product owned by this organization. */
+async function isActiveProductType(
+  orgId: string,
+  productTypeId: string,
+): Promise<boolean> {
+  const [product] = await db
+    .select({ id: productTypes.id })
+    .from(productTypes)
+    .where(
+      and(
+        eq(productTypes.id, productTypeId),
+        eq(productTypes.orgId, orgId),
+        eq(productTypes.isActive, true),
+      ),
+    )
+    .limit(1);
+  return Boolean(product);
 }
 
 /* ------------------------------ pipelines ------------------------------ */
@@ -247,7 +267,19 @@ async function crmAssignee(
   return { value: requested };
 }
 
-function opportunitySummary(o: Opportunity) {
+async function opportunitySummary(o: Opportunity) {
+  const [product] = o.productTypeId
+    ? await db
+        .select({ name: productTypes.name })
+        .from(productTypes)
+        .where(
+          and(
+            eq(productTypes.id, o.productTypeId),
+            eq(productTypes.orgId, o.orgId),
+          ),
+        )
+        .limit(1)
+    : [];
   return {
     id: o.id,
     accountId: o.accountId,
@@ -257,6 +289,8 @@ function opportunitySummary(o: Opportunity) {
     value: o.value,
     expectedCloseDate: o.expectedCloseDate,
     forecastCategory: o.forecastCategory,
+    productTypeId: o.productTypeId,
+    productTypeName: product?.name ?? null,
     ownerUserId: o.ownerUserId,
     createdByUserId: o.createdByUserId,
     createdAt: o.createdAt.toISOString(),
@@ -264,7 +298,7 @@ function opportunitySummary(o: Opportunity) {
 }
 
 async function opportunityDetail(o: Opportunity, req: Request) {
-  const [[account], [owner], history] = await Promise.all([
+  const [[account], [owner], history, [product]] = await Promise.all([
     db
       .select({ name: accounts.name })
       .from(accounts)
@@ -302,6 +336,17 @@ async function opportunityDetail(o: Opportunity, req: Request) {
         ),
       )
       .orderBy(desc(opportunityStageHistory.createdAt)),
+    o.productTypeId
+      ? db
+          .select({ name: productTypes.name })
+          .from(productTypes)
+          .where(
+            and(
+              eq(productTypes.id, o.productTypeId),
+              eq(productTypes.orgId, o.orgId),
+            ),
+          )
+      : Promise.resolve([undefined]),
   ]);
   return {
     id: o.id,
@@ -312,6 +357,8 @@ async function opportunityDetail(o: Opportunity, req: Request) {
     stage: o.stage,
     probability: o.probability,
     value: o.value,
+    productTypeId: o.productTypeId,
+    productTypeName: product?.name ?? null,
     expectedCloseDate: o.expectedCloseDate,
     actualCloseDate: o.actualCloseDate,
     forecastCategory: o.forecastCategory,
@@ -382,7 +429,7 @@ router.get("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<void
     .where(and(...where))
     .orderBy(desc(opportunities.createdAt));
   const visibleRows = await visibleOpportunities(req, rows);
-  res.json(ListOpportunitiesResponse.parse(visibleRows.map(opportunitySummary)));
+  res.json(ListOpportunitiesResponse.parse(await Promise.all(visibleRows.map(opportunitySummary))));
 });
 
 router.post("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<void> => {
@@ -414,6 +461,15 @@ router.post("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<voi
     res.status(400).json({ error: "pipelineId must reference a pipeline in this organization" });
     return;
   }
+  if (
+    parsed.data.productTypeId &&
+    !(await isActiveProductType(orgId, parsed.data.productTypeId))
+  ) {
+    res.status(400).json({
+      error: "productTypeId must reference an active product in this organization",
+    });
+    return;
+  }
   const stages = stagesOf(pipeline);
   const stageKey = parsed.data.stage ?? stages[0]?.key ?? "prospecting";
   const stageDef = stages.find((s) => s.key === stageKey);
@@ -439,6 +495,7 @@ router.post("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<voi
       nextAction: parsed.data.nextAction,
       forecastCategory: stageDef?.forecastCategory ?? "pipeline",
       ownerUserId: assignment.value,
+      productTypeId: parsed.data.productTypeId ?? null,
       createdByUserId: req.currentUser!.id,
     }).returning();
     await tx.insert(opportunityStageHistory).values({
@@ -541,6 +598,15 @@ router.patch(
         return;
       }
       updates.ownerUserId = assignment.value;
+    }
+    if (
+      data.productTypeId &&
+      !(await isActiveProductType(orgId, data.productTypeId))
+    ) {
+      res.status(400).json({
+        error: "productTypeId must reference an active product in this organization",
+      });
+      return;
     }
 
     const result = await db.transaction(async (tx) => {
@@ -992,6 +1058,15 @@ router.post(
       return;
     }
     const orgId = req.currentOrg!.id;
+    if (
+      parsed.data.productTypeId &&
+      !(await isActiveProductType(orgId, parsed.data.productTypeId))
+    ) {
+      res.status(400).json({
+        error: "productTypeId must reference an active product in this organization",
+      });
+      return;
+    }
 
     const pipeline = await orgPipeline(orgId, null);
     const stages = stagesOf(pipeline);
@@ -1042,6 +1117,7 @@ router.post(
         forecastCategory: firstStage?.forecastCategory ?? "pipeline",
         value: parsed.data.value,
         expectedCloseDate: parsed.data.expectedCloseDate,
+        productTypeId: parsed.data.productTypeId ?? null,
         ownerUserId: lockedLead.assignedToUserId ?? req.currentUser!.id,
         createdByUserId: req.currentUser!.id,
       }).returning();

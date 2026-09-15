@@ -8,6 +8,8 @@
 
 export interface CommissionSetting {
   userId: string;
+  /** @nullable */
+  productTypeId: string | null;
   /**
      * Percentage from 0 to 100 with at most two decimals.
      * @pattern ^(?:\d{1,3})(?:\.\d{1,2})?$

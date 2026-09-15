@@ -26,6 +26,8 @@ let ownerId = "";
 let teammateId = "";
 let accountId = "";
 let teammateMembershipId = "";
+let consultingProductId = "";
+let softwareProductId = "";
 
 function requireDb(): DbModule {
   assert.ok(dbModule, "database module was not initialized");
@@ -45,14 +47,15 @@ async function createOpportunity(
   name: string,
   value: string | null,
   userId = ownerId,
+  productTypeId: string | null = null,
 ): Promise<string> {
   const id = randomUUID();
   await query(
     `INSERT INTO opportunities (
        id, org_id, account_id, name, stage, probability, value,
-       forecast_category, owner_user_id, created_by_user_id
-     ) VALUES ($1, $2, $3, $4, 'prospecting', 10, $5, 'pipeline', $6, $6)`,
-    [id, organizationId, accountId, name, value, userId],
+       product_type_id, forecast_category, owner_user_id, created_by_user_id
+     ) VALUES ($1, $2, $3, $4, 'prospecting', 10, $5, $6, 'pipeline', $7, $7)`,
+    [id, organizationId, accountId, name, value, productTypeId, userId],
   );
   return id;
 }
@@ -156,6 +159,22 @@ before(async () => {
      VALUES ($1, $2, '10.50', true)`,
     [organizationId, ownerId],
   );
+  consultingProductId = randomUUID();
+  softwareProductId = randomUUID();
+  await query(
+    `INSERT INTO product_types (id, org_id, name, is_active)
+     VALUES ($1, $3, 'Consulting', true), ($2, $3, 'Software', true)`,
+    [consultingProductId, softwareProductId, organizationId],
+  );
+  await query(
+    `INSERT INTO employee_commissions
+       (org_id, user_id, product_type_id, commission_percentage, is_active)
+     VALUES
+       ($1, $2, $4, '10.00', true),
+       ($1, $2, $5, '15.00', true),
+       ($1, $3, $4, '12.00', true)`,
+    [organizationId, ownerId, teammateId, consultingProductId, softwareProductId],
+  );
 
 });
 
@@ -190,14 +209,39 @@ test(
          FROM pg_indexes
         WHERE tablename IN ('employee_commissions', 'commissions')
           AND indexname IN (
-            'employee_commissions_org_user_uq',
+           'employee_commissions_org_user_general_uq',
+           'employee_commissions_org_user_product_uq',
             'commissions_org_opportunity_uq'
           )
         ORDER BY indexname`,
     );
     assert.deepEqual(indexes.rows.map((row) => row.indexname), [
       "commissions_org_opportunity_uq",
-      "employee_commissions_org_user_uq",
+      "employee_commissions_org_user_general_uq",
+      "employee_commissions_org_user_product_uq",
+    ]);
+    const productForeignKeys = await query(
+      `SELECT c.conname, c.confdeltype, c.condeferrable, c.condeferred
+         FROM pg_constraint c
+        WHERE c.conname IN (
+          'opportunities_product_type_id_fkey',
+          'employee_commissions_product_type_id_fkey'
+        )
+        ORDER BY c.conname`,
+    );
+    assert.deepEqual(productForeignKeys.rows, [
+      {
+        conname: "employee_commissions_product_type_id_fkey",
+        confdeltype: "a",
+        condeferrable: true,
+        condeferred: true,
+      },
+      {
+        conname: "opportunities_product_type_id_fkey",
+        confdeltype: "a",
+        condeferrable: true,
+        condeferred: true,
+      },
     ]);
 
     const rollbackId = await createOpportunity("Rollback Deal", null);
@@ -222,7 +266,7 @@ test(
     await query(
       `UPDATE employee_commissions
           SET commission_percentage = '20.00'
-        WHERE org_id = $1 AND user_id = $2`,
+        WHERE org_id = $1 AND user_id = $2 AND product_type_id IS NULL`,
       [organizationId, ownerId],
     );
     const frozenRows = await commissionRows(frozenId);
@@ -233,6 +277,113 @@ test(
       opportunity_value: "10000.00",
       commission_percentage: "10.50",
       commission_amount: "1050.00",
+    }]);
+
+    const consultingId = await createOpportunity(
+      "Consulting Tier Deal",
+      "10000.00",
+      ownerId,
+      consultingProductId,
+    );
+    await closeOpportunity(consultingId);
+    const consultingRows = await query(
+      `SELECT commission_percentage, commission_amount, product_type_id, product_type_name
+         FROM commissions
+        WHERE org_id = $1 AND opportunity_id = $2`,
+      [organizationId, consultingId],
+    );
+    assert.deepEqual(consultingRows.rows, [{
+      commission_percentage: "10.00",
+      commission_amount: "1000.00",
+      product_type_id: consultingProductId,
+      product_type_name: "Consulting",
+    }]);
+    await query(
+      `UPDATE product_types SET name = 'Consulting Renamed'
+        WHERE id = $1 AND org_id = $2`,
+      [consultingProductId, organizationId],
+    );
+    const consultingSnapshot = await query(
+      `SELECT product_type_name
+         FROM commissions
+        WHERE org_id = $1 AND opportunity_id = $2`,
+      [organizationId, consultingId],
+    );
+    assert.deepEqual(consultingSnapshot.rows, [{ product_type_name: "Consulting" }]);
+
+    const softwareId = await createOpportunity(
+      "Software Tier Deal",
+      "5000.00",
+      ownerId,
+      softwareProductId,
+    );
+    await closeOpportunity(softwareId);
+    const softwareRows = await query(
+      `SELECT commission_percentage, commission_amount, product_type_id, product_type_name
+         FROM commissions
+        WHERE org_id = $1 AND opportunity_id = $2`,
+      [organizationId, softwareId],
+    );
+    assert.deepEqual(softwareRows.rows, [{
+      commission_percentage: "15.00",
+      commission_amount: "750.00",
+      product_type_id: softwareProductId,
+      product_type_name: "Software",
+    }]);
+    await assert.rejects(
+      query(
+        `DELETE FROM product_types
+          WHERE id = $1 AND org_id = $2`,
+        [softwareProductId, organizationId],
+      ),
+      /violates foreign key constraint/,
+    );
+
+    // A deactivated product cannot pay a newly classified close.
+    await query(
+      `UPDATE product_types SET is_active = false
+        WHERE id = $1 AND org_id = $2`,
+      [softwareProductId, organizationId],
+    );
+    const inactiveProductId = await createOpportunity(
+      "Inactive Product Deal",
+      "5000.00",
+      ownerId,
+      softwareProductId,
+    );
+    await closeOpportunity(inactiveProductId);
+    assert.equal((await commissionRows(inactiveProductId)).rowCount, 0);
+    await dbModule.db.transaction(async (tx) => {
+      await commissionsModule!.replaceCommissionSettings(tx, organizationId, [
+        {
+          userId: ownerId,
+          productTypeId: null,
+          commissionPercentage: "20.00",
+          isActive: true,
+        },
+        {
+          userId: ownerId,
+          productTypeId: consultingProductId,
+          commissionPercentage: "10.00",
+          isActive: true,
+        },
+        {
+          userId: ownerId,
+          productTypeId: softwareProductId,
+          commissionPercentage: "15.00",
+          isActive: true,
+        },
+      ]);
+    });
+    const preservedInactiveRate = await query(
+      `SELECT is_active, commission_percentage
+         FROM employee_commissions
+        WHERE org_id = $1 AND user_id = $2 AND product_type_id = $3`,
+      [organizationId, ownerId, softwareProductId],
+    );
+    assert.deepEqual(preservedInactiveRate.rows, [{
+      is_active: true,
+      commission_percentage: "15.00",
     }]);
 
     // Reopen and close again after changing the rate. The unique ledger key
@@ -271,11 +422,15 @@ test(
       ]);
     });
     const omittedSetting = await query(
-      `SELECT is_active FROM employee_commissions
-        WHERE org_id = $1 AND user_id = $2`,
+      `SELECT product_type_id, is_active FROM employee_commissions
+        WHERE org_id = $1 AND user_id = $2
+        ORDER BY product_type_id NULLS FIRST`,
       [organizationId, teammateId],
     );
-    assert.deepEqual(omittedSetting.rows, [{ is_active: false }]);
+    assert.deepEqual(omittedSetting.rows, [
+      { product_type_id: null, is_active: false },
+      { product_type_id: consultingProductId, is_active: false },
+    ]);
 
     // Removing and re-adding membership must delete the old setting rather
     // than revive it through the employee_commissions FK.
@@ -400,5 +555,51 @@ test(
     releaseFirst();
     await Promise.all([first, second]);
     assert.equal((await commissionRows(concurrentId)).rowCount, 1);
+
+    // Replacements serialize on the organization row. The first save inserts
+    // a new product key while the second save omits it; the second transaction
+    // must wait, then deactivate the newly inserted key rather than allowing
+    // it to survive as an active setting.
+    const firstReplacement = dbModule.db.transaction(async (tx) => {
+      await tx
+        .select({ id: dbModule!.organizations.id })
+        .from(dbModule!.organizations)
+        .where(eq(dbModule!.organizations.id, organizationId))
+        .for("update");
+      await commissionsModule!.replaceCommissionSettings(tx, organizationId, [
+        { userId: ownerId, productTypeId: null, commissionPercentage: "10.00", isActive: true },
+        { userId: ownerId, productTypeId: consultingProductId, commissionPercentage: "11.00", isActive: true },
+      ]);
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    const secondReplacement = dbModule.db.transaction(async (tx) => {
+      await commissionsModule!.replaceCommissionSettings(tx, organizationId, [
+        { userId: ownerId, productTypeId: null, commissionPercentage: "12.00", isActive: true },
+      ]);
+    });
+    await Promise.all([firstReplacement, secondReplacement]);
+    const omittedConcurrentProduct = await query(
+      `SELECT is_active, commission_percentage
+         FROM employee_commissions
+        WHERE org_id = $1 AND user_id = $2 AND product_type_id = $3`,
+      [organizationId, ownerId, consultingProductId],
+    );
+    assert.deepEqual(omittedConcurrentProduct.rows, [{
+      is_active: false,
+      commission_percentage: "11.00",
+    }]);
+    const deletionRates = await query(
+      `SELECT
+         count(*) FILTER (WHERE product_type_id IS NULL)::int AS general_count,
+         count(*) FILTER (WHERE product_type_id IS NOT NULL)::int AS product_count
+         FROM employee_commissions
+        WHERE org_id = $1`,
+      [organizationId],
+    );
+    assert.deepEqual(deletionRates.rows, [{
+      general_count: 1,
+      product_count: 1,
+    }]);
   },
 );

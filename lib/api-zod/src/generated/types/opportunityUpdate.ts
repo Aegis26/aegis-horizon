@@ -24,6 +24,8 @@ export interface OpportunityUpdate {
   /** @nullable */
   expectedCloseDate?: string | null;
   /** @nullable */
+  productTypeId?: string | null;
+  /** @nullable */
   forecastCategory?: string | null;
   /** @nullable */
   lossReason?: string | null;

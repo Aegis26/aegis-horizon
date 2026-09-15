@@ -15,5 +15,9 @@ export interface EarnedCommissionRecord {
   opportunityValue: string;
   commissionPercentage: string;
   commissionAmount: string;
+  /** @nullable */
+  productTypeId?: string | null;
+  /** @nullable */
+  productTypeName?: string | null;
   earnedDate: Date;
 }

@@ -206,6 +206,7 @@ export default function CommissionDashboardWidget({ orgId }: { orgId: string }) 
                     <TableRow>
                       <TableHead>Employee</TableHead>
                       <TableHead>Opportunity</TableHead>
+                      <TableHead>Product</TableHead>
                       <TableHead className="text-right">Deal value</TableHead>
                       <TableHead className="text-right">Rate</TableHead>
                       <TableHead className="text-right">Commission</TableHead>
@@ -235,6 +236,14 @@ export default function CommissionDashboardWidget({ orgId }: { orgId: string }) 
                           data-testid={`text-commission-opportunity-${record.id}`}
                         >
                           {record.opportunityName || "Unnamed opportunity"}
+                        </TableCell>
+                        <TableCell
+                          className="min-w-[150px]"
+                          data-testid={`text-commission-product-${record.id}`}
+                        >
+                          {record.productTypeId
+                            ? record.productTypeName || "Unknown product"
+                            : "General"}
                         </TableCell>
                         <TableCell
                           className="whitespace-nowrap text-right font-mono"

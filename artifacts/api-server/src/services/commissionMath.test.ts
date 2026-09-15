@@ -6,6 +6,14 @@ import {
 } from "./commissionMath";
 
 test("commission math preserves decimal precision and rounds to cents", () => {
+  assert.deepEqual(calculateCommissionAmount("10000.00", "10"), {
+    opportunityValue: "10000.00",
+    commissionAmount: "1000.00",
+  });
+  assert.deepEqual(calculateCommissionAmount("5000.00", "15"), {
+    opportunityValue: "5000.00",
+    commissionAmount: "750.00",
+  });
   assert.deepEqual(calculateCommissionAmount("10000.00", "10.50"), {
     opportunityValue: "10000.00",
     commissionAmount: "1050.00",

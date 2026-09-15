@@ -669,6 +669,8 @@ export const GetAccountResponse = zod.object({
   "value": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
   "forecastCategory": zod.string().nullish(),
+  "productTypeId": zod.string().uuid().nullish(),
+  "productTypeName": zod.string().nullish(),
   "ownerUserId": zod.string().uuid().nullish(),
   "createdByUserId": zod.string().uuid().nullish(),
   "createdAt": zod.string().nullish()
@@ -1548,6 +1550,8 @@ export const ListOpportunitiesResponseItem = zod.object({
   "value": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
   "forecastCategory": zod.string().nullish(),
+  "productTypeId": zod.string().uuid().nullish(),
+  "productTypeName": zod.string().nullish(),
   "ownerUserId": zod.string().uuid().nullish(),
   "createdByUserId": zod.string().uuid().nullish(),
   "createdAt": zod.string().nullish()
@@ -1576,6 +1580,7 @@ export const CreateOpportunityBody = zod.object({
   "probability": zod.number().int().min(createOpportunityBodyProbabilityMin).max(createOpportunityBodyProbabilityMax).nullish(),
   "value": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
+  "productTypeId": zod.string().uuid().nullish(),
   "nextAction": zod.string().nullish(),
   "ownerUserId": zod.string().uuid().nullish()
 })
@@ -1589,6 +1594,8 @@ export const CreateOpportunityResponse = zod.object({
   "stage": zod.string(),
   "probability": zod.number().nullish(),
   "value": zod.string().nullish(),
+  "productTypeId": zod.string().uuid().nullish(),
+  "productTypeName": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
   "actualCloseDate": zod.string().nullish(),
   "forecastCategory": zod.string().nullish(),
@@ -1626,6 +1633,8 @@ export const GetOpportunityResponse = zod.object({
   "stage": zod.string(),
   "probability": zod.number().nullish(),
   "value": zod.string().nullish(),
+  "productTypeId": zod.string().uuid().nullish(),
+  "productTypeName": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
   "actualCloseDate": zod.string().nullish(),
   "forecastCategory": zod.string().nullish(),
@@ -1668,6 +1677,7 @@ export const UpdateOpportunityBody = zod.object({
   "probability": zod.number().int().min(updateOpportunityBodyProbabilityMin).max(updateOpportunityBodyProbabilityMax).nullish(),
   "value": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
+  "productTypeId": zod.string().uuid().nullish(),
   "forecastCategory": zod.string().nullish(),
   "lossReason": zod.string().nullish(),
   "nextAction": zod.string().nullish(),
@@ -1683,6 +1693,8 @@ export const UpdateOpportunityResponse = zod.object({
   "stage": zod.string(),
   "probability": zod.number().nullish(),
   "value": zod.string().nullish(),
+  "productTypeId": zod.string().uuid().nullish(),
+  "productTypeName": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
   "actualCloseDate": zod.string().nullish(),
   "forecastCategory": zod.string().nullish(),
@@ -1731,6 +1743,8 @@ export const ConvertOpportunityToCustomerResponse = zod.object({
   "stage": zod.string(),
   "probability": zod.number().nullish(),
   "value": zod.string().nullish(),
+  "productTypeId": zod.string().uuid().nullish(),
+  "productTypeName": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
   "actualCloseDate": zod.string().nullish(),
   "forecastCategory": zod.string().nullish(),
@@ -1765,6 +1779,7 @@ export const getCommissionSettingsResponseSettingsItemCommissionPercentageRegExp
 export const GetCommissionSettingsResponse = zod.object({
   "settings": zod.array(zod.object({
   "userId": zod.string().uuid(),
+  "productTypeId": zod.string().uuid().nullable(),
   "commissionPercentage": zod.string().regex(getCommissionSettingsResponseSettingsItemCommissionPercentageRegExp).describe('Percentage from 0 to 100 with at most two decimals.'),
   "isActive": zod.boolean()
 }))
@@ -1786,6 +1801,7 @@ export const updateCommissionSettingsBodySettingsMax = 10000;
 export const UpdateCommissionSettingsBody = zod.object({
   "settings": zod.array(zod.object({
   "userId": zod.string().uuid(),
+  "productTypeId": zod.string().uuid().nullable(),
   "commissionPercentage": zod.string().regex(updateCommissionSettingsBodySettingsItemCommissionPercentageRegExp).describe('Percentage from 0 to 100 with at most two decimals.'),
   "isActive": zod.boolean()
 })).max(updateCommissionSettingsBodySettingsMax)
@@ -1797,6 +1813,7 @@ export const updateCommissionSettingsResponseSettingsItemCommissionPercentageReg
 export const UpdateCommissionSettingsResponse = zod.object({
   "settings": zod.array(zod.object({
   "userId": zod.string().uuid(),
+  "productTypeId": zod.string().uuid().nullable(),
   "commissionPercentage": zod.string().regex(updateCommissionSettingsResponseSettingsItemCommissionPercentageRegExp).describe('Percentage from 0 to 100 with at most two decimals.'),
   "isActive": zod.boolean()
 }))
@@ -1831,8 +1848,82 @@ export const GetEarnedCommissionsResponse = zod.object({
   "opportunityValue": zod.string(),
   "commissionPercentage": zod.string(),
   "commissionAmount": zod.string(),
+  "productTypeId": zod.string().uuid().nullish(),
+  "productTypeName": zod.string().nullish(),
   "earnedDate": zod.coerce.date()
 }))
+})
+
+
+/**
+ * Active product types are visible to members; the owner also receives inactive history.
+ * @summary List organization product types
+ */
+export const ListProductTypesParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const ListProductTypesResponse = zod.object({
+  "productTypes": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "isActive": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Create an organization product type (owner only)
+ */
+export const CreateProductTypeParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const createProductTypeBodyNameMax = 200;
+
+export const createProductTypeBodyDescriptionMax = 2000;
+
+
+
+export const CreateProductTypeBody = zod.object({
+  "name": zod.string().min(1).max(createProductTypeBodyNameMax),
+  "description": zod.string().max(createProductTypeBodyDescriptionMax).nullish()
+})
+
+export const CreateProductTypeResponse = zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "isActive": zod.boolean()
+})
+
+
+/**
+ * @summary Update or deactivate an organization product type (owner only)
+ */
+export const UpdateProductTypeParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "productTypeId": zod.coerce.string().uuid()
+})
+
+export const updateProductTypeBodyNameMax = 200;
+
+export const updateProductTypeBodyDescriptionMax = 2000;
+
+
+
+export const UpdateProductTypeBody = zod.object({
+  "name": zod.string().min(1).max(updateProductTypeBodyNameMax).optional(),
+  "description": zod.string().max(updateProductTypeBodyDescriptionMax).nullish(),
+  "isActive": zod.boolean().optional()
+})
+
+export const UpdateProductTypeResponse = zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "isActive": zod.boolean()
 })
 
 
@@ -2159,7 +2250,8 @@ export const QualifyLeadBody = zod.object({
   "opportunityName": zod.string().nullish(),
   "value": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
-  "accountId": zod.string().nullish()
+  "accountId": zod.string().nullish(),
+  "productTypeId": zod.string().uuid().nullish()
 })
 
 export const QualifyLeadResponse = zod.object({
@@ -2171,6 +2263,8 @@ export const QualifyLeadResponse = zod.object({
   "stage": zod.string(),
   "probability": zod.number().nullish(),
   "value": zod.string().nullish(),
+  "productTypeId": zod.string().uuid().nullish(),
+  "productTypeName": zod.string().nullish(),
   "expectedCloseDate": zod.string().nullish(),
   "actualCloseDate": zod.string().nullish(),
   "forecastCategory": zod.string().nullish(),

@@ -8,10 +8,102 @@ import { withStartupMigrationLock } from "./startupMigration";
 export async function ensureCommissionSchema(): Promise<void> {
   await withStartupMigrationLock("workspace:commission-schema", async (client) => {
     await client.query(`
+      CREATE TABLE IF NOT EXISTS product_types (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        name text NOT NULL,
+        description text,
+        is_active boolean NOT NULL DEFAULT true,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+    await client.query(`
+      ALTER TABLE product_types
+        ADD COLUMN IF NOT EXISTS id uuid DEFAULT gen_random_uuid(),
+        ADD COLUMN IF NOT EXISTS org_id uuid,
+        ADD COLUMN IF NOT EXISTS name text,
+        ADD COLUMN IF NOT EXISTS description text,
+        ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true,
+        ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
+        ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()
+    `);
+    await client.query(`
+      UPDATE product_types SET id = gen_random_uuid() WHERE id IS NULL
+    `);
+    await client.query(`
+      ALTER TABLE product_types
+        ALTER COLUMN id SET DEFAULT gen_random_uuid(),
+        ALTER COLUMN id SET NOT NULL,
+        ALTER COLUMN org_id SET NOT NULL,
+        ALTER COLUMN name SET NOT NULL,
+        ALTER COLUMN is_active SET NOT NULL
+    `);
+
+    // These references are organization-scoped in the API as well. Keep
+    // product rows physically referenced (rather than converting a
+    // classified opportunity/rate into a general row on DELETE). The
+    // deferred NO ACTION constraints still allow organization cascade
+    // deletion: by commit time both the product and its tenant children are
+    // gone.
+    await client.query(`
+      ALTER TABLE opportunities
+        ADD COLUMN IF NOT EXISTS product_type_id uuid
+    `);
+    await client.query(`
+      DO $$
+      DECLARE constraint_name text;
+      BEGIN
+        FOR constraint_name IN
+          SELECT c.conname
+            FROM pg_constraint c
+           WHERE c.conrelid = 'opportunities'::regclass
+             AND c.confrelid = 'product_types'::regclass
+             AND c.contype = 'f'
+             AND c.conname <> 'opportunities_product_type_id_fkey'
+        LOOP
+          EXECUTE format(
+            'ALTER TABLE opportunities DROP CONSTRAINT %I',
+            constraint_name
+          );
+        END LOOP;
+
+        IF EXISTS (
+          SELECT 1
+            FROM pg_constraint c
+           WHERE c.conrelid = 'opportunities'::regclass
+             AND c.conname = 'opportunities_product_type_id_fkey'
+             AND c.contype = 'f'
+             AND c.confdeltype = 'a'
+             AND c.condeferrable
+             AND c.condeferred
+        ) THEN
+          NULL;
+        ELSE
+          IF EXISTS (
+            SELECT 1
+              FROM pg_constraint c
+             WHERE c.conrelid = 'opportunities'::regclass
+               AND c.conname = 'opportunities_product_type_id_fkey'
+          ) THEN
+            ALTER TABLE opportunities
+              DROP CONSTRAINT opportunities_product_type_id_fkey;
+          END IF;
+          ALTER TABLE opportunities
+            ADD CONSTRAINT opportunities_product_type_id_fkey
+            FOREIGN KEY (product_type_id) REFERENCES product_types(id)
+            ON DELETE NO ACTION
+            DEFERRABLE INITIALLY DEFERRED;
+        END IF;
+      END $$;
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS employee_commissions (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         org_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
         user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        product_type_id uuid,
         commission_percentage numeric(5,2) NOT NULL,
         is_active boolean NOT NULL DEFAULT true,
         created_at timestamptz NOT NULL DEFAULT now(),
@@ -23,6 +115,7 @@ export async function ensureCommissionSchema(): Promise<void> {
         ADD COLUMN IF NOT EXISTS id uuid DEFAULT gen_random_uuid(),
         ADD COLUMN IF NOT EXISTS org_id uuid,
         ADD COLUMN IF NOT EXISTS user_id uuid,
+        ADD COLUMN IF NOT EXISTS product_type_id uuid,
         ADD COLUMN IF NOT EXISTS commission_percentage numeric(5,2),
         ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true,
         ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
@@ -41,8 +134,67 @@ export async function ensureCommissionSchema(): Promise<void> {
         ALTER COLUMN user_id SET NOT NULL
     `);
     await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS employee_commissions_org_user_uq
+      DO $$
+      DECLARE constraint_name text;
+      BEGIN
+        FOR constraint_name IN
+          SELECT c.conname
+            FROM pg_constraint c
+           WHERE c.conrelid = 'employee_commissions'::regclass
+             AND c.confrelid = 'product_types'::regclass
+             AND c.contype = 'f'
+             AND c.conname <> 'employee_commissions_product_type_id_fkey'
+        LOOP
+          EXECUTE format(
+            'ALTER TABLE employee_commissions DROP CONSTRAINT %I',
+            constraint_name
+          );
+        END LOOP;
+
+        IF EXISTS (
+          SELECT 1
+            FROM pg_constraint c
+           WHERE c.conrelid = 'employee_commissions'::regclass
+             AND c.conname = 'employee_commissions_product_type_id_fkey'
+             AND c.contype = 'f'
+             AND c.confdeltype = 'a'
+             AND c.condeferrable
+             AND c.condeferred
+        ) THEN
+          NULL;
+        ELSE
+          IF EXISTS (
+            SELECT 1
+              FROM pg_constraint c
+             WHERE c.conrelid = 'employee_commissions'::regclass
+               AND c.conname = 'employee_commissions_product_type_id_fkey'
+          ) THEN
+            ALTER TABLE employee_commissions
+              DROP CONSTRAINT employee_commissions_product_type_id_fkey;
+          END IF;
+          ALTER TABLE employee_commissions
+            ADD CONSTRAINT employee_commissions_product_type_id_fkey
+            FOREIGN KEY (product_type_id) REFERENCES product_types(id)
+            ON DELETE NO ACTION
+            DEFERRABLE INITIALLY DEFERRED;
+        END IF;
+      END $$;
+    `);
+    // The previous migration used one (org,user) unique index. Remove it
+    // before creating the general-vs-product partial indexes so existing
+    // general rows remain intact while multiple product rates are possible.
+    await client.query(`
+      DROP INDEX IF EXISTS employee_commissions_org_user_uq
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS employee_commissions_org_user_general_uq
         ON employee_commissions (org_id, user_id)
+        WHERE product_type_id IS NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS employee_commissions_org_user_product_uq
+        ON employee_commissions (org_id, user_id, product_type_id)
+        WHERE product_type_id IS NOT NULL
     `);
     await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS employee_commissions_id_uq
@@ -77,6 +229,8 @@ export async function ensureCommissionSchema(): Promise<void> {
         opportunity_value numeric(20,2) NOT NULL,
         commission_percentage numeric(5,2) NOT NULL,
         commission_amount numeric(20,2) NOT NULL,
+        product_type_id uuid,
+        product_type_name text,
         earned_date timestamptz NOT NULL,
         created_at timestamptz NOT NULL DEFAULT now()
       )
@@ -92,6 +246,8 @@ export async function ensureCommissionSchema(): Promise<void> {
         ADD COLUMN IF NOT EXISTS opportunity_value numeric(20,2),
         ADD COLUMN IF NOT EXISTS commission_percentage numeric(5,2),
         ADD COLUMN IF NOT EXISTS commission_amount numeric(20,2),
+        ADD COLUMN IF NOT EXISTS product_type_id uuid,
+        ADD COLUMN IF NOT EXISTS product_type_name text,
         ADD COLUMN IF NOT EXISTS earned_date timestamptz,
         ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()
     `);

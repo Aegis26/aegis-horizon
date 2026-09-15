@@ -90,6 +90,27 @@ export const contacts = pgTable("contacts", {
     .$onUpdate(() => new Date()),
 });
 
+/**
+ * Organization-owned opportunity classifications. Products are soft
+ * deactivated so existing opportunities can retain their historical name.
+ */
+export const productTypes = pgTable("product_types", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
 export const opportunities = pgTable("opportunities", {
   id: uuid("id").primaryKey().defaultRandom(),
   orgId: uuid("org_id")
@@ -105,6 +126,9 @@ export const opportunities = pgTable("opportunities", {
   value: numeric("value"),
   expectedCloseDate: date("expected_close_date", { mode: "string" }),
   actualCloseDate: date("actual_close_date", { mode: "string" }),
+  productTypeId: uuid("product_type_id").references(() => productTypes.id, {
+    onDelete: "no action",
+  }),
   ownerUserId: uuid("owner_user_id").references(() => users.id, {
     onDelete: "set null",
   }),
@@ -141,6 +165,10 @@ export const employeeCommissions = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    // NULL is the preserved legacy organization-wide/general rate.
+    productTypeId: uuid("product_type_id").references(() => productTypes.id, {
+      onDelete: "no action",
+    }),
     commissionPercentage: numeric("commission_percentage", {
       precision: 5,
       scale: 2,
@@ -155,7 +183,12 @@ export const employeeCommissions = pgTable(
       .$onUpdate(() => new Date()),
   },
   (t) => [
-    uniqueIndex("employee_commissions_org_user_uq").on(t.orgId, t.userId),
+    uniqueIndex("employee_commissions_org_user_general_uq")
+      .on(t.orgId, t.userId)
+      .where(sql`${t.productTypeId} is null`),
+    uniqueIndex("employee_commissions_org_user_product_uq")
+      .on(t.orgId, t.userId, t.productTypeId)
+      .where(sql`${t.productTypeId} is not null`),
   ],
 );
 
@@ -187,6 +220,10 @@ export const commissions = pgTable(
       precision: 20,
       scale: 2,
     }).notNull(),
+    // The id is useful for filtering; the name is the immutable display
+    // snapshot taken when the commission was earned.
+    productTypeId: uuid("product_type_id"),
+    productTypeName: text("product_type_name"),
     earnedDate: timestamp("earned_date", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -619,6 +656,7 @@ export type Segment = typeof segments.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Opportunity = typeof opportunities.$inferSelect;
+export type ProductType = typeof productTypes.$inferSelect;
 export type EmployeeCommission = typeof employeeCommissions.$inferSelect;
 export type Commission = typeof commissions.$inferSelect;
 export type Activity = typeof activities.$inferSelect;

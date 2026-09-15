@@ -21,6 +21,10 @@ export interface OpportunityDetail {
   /** @nullable */
   value?: string | null;
   /** @nullable */
+  productTypeId?: string | null;
+  /** @nullable */
+  productTypeName?: string | null;
+  /** @nullable */
   expectedCloseDate?: string | null;
   /** @nullable */
   actualCloseDate?: string | null;

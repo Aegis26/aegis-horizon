@@ -24,6 +24,7 @@ const gate = [attachUser, attachOrg] as const;
 function settingOut(row: typeof employeeCommissions.$inferSelect) {
   return {
     userId: row.userId,
+    productTypeId: row.productTypeId,
     commissionPercentage: normalizeCommissionPercentage(row.commissionPercentage),
     isActive: row.isActive,
   };
@@ -84,10 +85,11 @@ router.put(
     try {
       const seen = new Set<string>();
       const normalized = parsed.data.settings.map((setting) => {
-        if (seen.has(setting.userId)) {
-          throw new Error("Each userId may appear only once");
+        const key = `${setting.userId}:${setting.productTypeId ?? "general"}`;
+        if (seen.has(key)) {
+          throw new Error("Each userId/productTypeId key may appear only once");
         }
-        seen.add(setting.userId);
+        seen.add(key);
         return {
           ...setting,
           commissionPercentage: normalizeCommissionPercentage(
@@ -120,6 +122,7 @@ router.put(
         error instanceof Error &&
         (error.message.includes("commission percentage") ||
           error.message.includes("Every commission") ||
+          error.message.includes("Every productTypeId") ||
           error.message.includes("Each userId"))
       ) {
         res.status(400).json({ error: error.message });
@@ -166,6 +169,8 @@ router.get(
       opportunityValue: row.opportunityValue,
       commissionPercentage: row.commissionPercentage,
       commissionAmount: row.commissionAmount,
+      productTypeId: row.productTypeId,
+      productTypeName: row.productTypeName,
       earnedDate: row.earnedDate.toISOString(),
     }));
     res.json(

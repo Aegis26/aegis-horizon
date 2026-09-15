@@ -118,6 +118,10 @@ import type {
   OrganizationUpdate,
   Pipeline,
   PipelineCreate,
+  ProductType,
+  ProductTypeCreate,
+  ProductTypeUpdate,
+  ProductTypesResponse,
   ProviderBindingResult,
   ProviderStatusList,
   ProviderSyncResult,
@@ -5362,6 +5366,230 @@ export function useGetEarnedCommissions<TData = Awaited<ReturnType<typeof getEar
 
 
 
+
+export const getListProductTypesUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/product-types`
+}
+
+/**
+ * Active product types are visible to members; the owner also receives inactive history.
+ * @summary List organization product types
+ */
+export const listProductTypes = async (orgId: string, options?: Parameters<typeof customFetch>[1]): Promise<ProductTypesResponse> => {
+
+  return customFetch<ProductTypesResponse>(getListProductTypesUrl(orgId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProductTypesQueryKey = (orgId: string,) => {
+    return [
+    `/api/orgs/${orgId}/product-types`
+    ] as const;
+    }
+
+
+export const getListProductTypesQueryOptions = <TData = Awaited<ReturnType<typeof listProductTypes>>, TError = ErrorType<unknown>>(orgId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProductTypes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProductTypesQueryKey(orgId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProductTypes>>> = ({ signal }) => listProductTypes(orgId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProductTypes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProductTypesQueryResult = NonNullable<Awaited<ReturnType<typeof listProductTypes>>>
+export type ListProductTypesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List organization product types
+ */
+
+export function useListProductTypes<TData = Awaited<ReturnType<typeof listProductTypes>>, TError = ErrorType<unknown>>(
+ orgId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProductTypes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProductTypesQueryOptions(orgId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateProductTypeUrl = (orgId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/product-types`
+}
+
+/**
+ * @summary Create an organization product type (owner only)
+ */
+export const createProductType = async (orgId: string,
+    productTypeCreate: ProductTypeCreate, options?: Parameters<typeof customFetch>[1]): Promise<ProductType> => {
+
+  return customFetch<ProductType>(getCreateProductTypeUrl(orgId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(productTypeCreate)
+  }
+);}
+
+
+
+
+
+export const getCreateProductTypeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProductType>>, TError,{orgId: string;data: BodyType<ProductTypeCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createProductType>>, TError,{orgId: string;data: BodyType<ProductTypeCreate>}, TContext> => {
+
+const mutationKey = ['createProductType'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createProductType>>, {orgId: string;data: BodyType<ProductTypeCreate>}> = (props) => {
+          const {orgId,data} = props ?? {};
+
+          return  createProductType(orgId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateProductTypeMutationResult = NonNullable<Awaited<ReturnType<typeof createProductType>>>
+    export type CreateProductTypeMutationBody = BodyType<ProductTypeCreate>
+    export type CreateProductTypeMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create an organization product type (owner only)
+ */
+export const useCreateProductType = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProductType>>, TError,{orgId: string;data: BodyType<ProductTypeCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createProductType>>,
+        TError,
+        {orgId: string;data: BodyType<ProductTypeCreate>},
+        TContext
+      > => {
+      return useMutation(getCreateProductTypeMutationOptions(options));
+    }
+
+export const getUpdateProductTypeUrl = (orgId: string,
+    productTypeId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/product-types/${productTypeId}`
+}
+
+/**
+ * @summary Update or deactivate an organization product type (owner only)
+ */
+export const updateProductType = async (orgId: string,
+    productTypeId: string,
+    productTypeUpdate: ProductTypeUpdate, options?: Parameters<typeof customFetch>[1]): Promise<ProductType> => {
+
+  return customFetch<ProductType>(getUpdateProductTypeUrl(orgId,productTypeId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(productTypeUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateProductTypeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProductType>>, TError,{orgId: string;productTypeId: string;data: BodyType<ProductTypeUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateProductType>>, TError,{orgId: string;productTypeId: string;data: BodyType<ProductTypeUpdate>}, TContext> => {
+
+const mutationKey = ['updateProductType'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateProductType>>, {orgId: string;productTypeId: string;data: BodyType<ProductTypeUpdate>}> = (props) => {
+          const {orgId,productTypeId,data} = props ?? {};
+
+          return  updateProductType(orgId,productTypeId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateProductTypeMutationResult = NonNullable<Awaited<ReturnType<typeof updateProductType>>>
+    export type UpdateProductTypeMutationBody = BodyType<ProductTypeUpdate>
+    export type UpdateProductTypeMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update or deactivate an organization product type (owner only)
+ */
+export const useUpdateProductType = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProductType>>, TError,{orgId: string;productTypeId: string;data: BodyType<ProductTypeUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateProductType>>,
+        TError,
+        {orgId: string;productTypeId: string;data: BodyType<ProductTypeUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateProductTypeMutationOptions(options));
+    }
 
 export const getListPipelinesUrl = (orgId: string,) => {
 

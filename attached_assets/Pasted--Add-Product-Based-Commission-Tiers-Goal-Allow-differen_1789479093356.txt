@@ -1,0 +1,627 @@
+# Add Product-Based Commission Tiers
+
+**Goal:** Allow different commission percentages per employee based on product classification.
+
+**Current:** Employee has 1 commission % (e.g., 10%)
+**Needed:** Employee has multiple commission % per product type (e.g., 10% for Product A, 15% for Product B)
+
+**Structure:**
+```
+Employee: John
+  - Product Type 1 (Consulting): 10%
+  - Product Type 2 (Software): 15%
+  - Product Type 3 (Support): 8%
+
+Employee: Sarah
+  - Product Type 1 (Consulting): 12%
+  - Product Type 2 (Software): 18%
+  - Product Type 3 (Support): 10%
+```
+
+---
+
+## Task 1: Add Product Type to Opportunities
+
+First, verify opportunities have a product classification field.
+
+Check schema: `artifacts/api-server/src/db/schema.ts`
+
+Look for:
+- `product_type`
+- `service_type`
+- `product_category`
+- `classification`
+
+**If it doesn't exist, add this to opportunities table:**
+
+```typescript
+export const opportunities = pgTable('opportunities', {
+  // ... existing fields ...
+  
+  // ADD THIS:
+  product_type: text('product_type'), // 'consulting', 'software', 'support', etc.
+  
+  // ... rest of fields ...
+})
+```
+
+---
+
+## Task 2: Create Product Types Configuration
+
+Create or verify a product types table.
+
+Add to schema: `artifacts/api-server/src/db/schema.ts`
+
+```typescript
+export const productTypes = pgTable('product_types', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  org_id: uuid('org_id').notNull(),
+  name: text('name').notNull(), // 'Consulting', 'Software', 'Support', etc.
+  description: text('description'),
+  is_active: boolean('is_active').notNull().default(true),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  
+  foreignKey: {
+    org_id: organizations.id,
+  }
+})
+```
+
+---
+
+## Task 3: Update Commission Schema for Product Types
+
+Replace the old `employeeCommissions` table with new structure.
+
+In schema: `artifacts/api-server/src/db/schema.ts`
+
+**REPLACE THIS:**
+```typescript
+export const employeeCommissions = pgTable('employee_commissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  org_id: uuid('org_id').notNull(),
+  user_id: text('user_id').notNull(),
+  commission_percentage: numeric('commission_percentage', { precision: 5, scale: 2 }).notNull(),
+  is_active: boolean('is_active').notNull().default(true),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+```
+
+**WITH THIS:**
+```typescript
+export const employeeCommissions = pgTable('employee_commissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  org_id: uuid('org_id').notNull(),
+  user_id: text('user_id').notNull(), // Clerk user ID
+  product_type_id: uuid('product_type_id').notNull(), // Link to product type
+  commission_percentage: numeric('commission_percentage', { precision: 5, scale: 2 }).notNull(),
+  is_active: boolean('is_active').notNull().default(true),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  
+  foreignKey: {
+    org_id: organizations.id,
+    user_id: users.id,
+    product_type_id: productTypes.id,
+  }
+})
+```
+
+---
+
+## Task 4: Database Migration
+
+Run migration:
+
+```bash
+npm run db:push
+```
+
+This adds:
+- `product_types` table
+- `product_type` column to opportunities
+- Updated `employee_commissions` schema with product_type_id
+
+---
+
+## Task 5: Update Settings Page - Commission By Product Type
+
+Replace the commission settings section in `artifacts/crm/src/pages/Settings.tsx`:
+
+```typescript
+import { useState, useEffect } from 'react'
+
+export default function Settings() {
+  const router = useRouter()
+  const { orgId } = router.query
+  const [userRole, setUserRole] = useState(null)
+  const [teamMembers, setTeamMembers] = useState([])
+  const [productTypes, setProductTypes] = useState([])
+  const [commissions, setCommissions] = useState({}) // { "userId-productTypeId": percentage }
+  const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState('')
+
+  // Fetch data
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!orgId) return
+
+      try {
+        // Get team members
+        const membersResponse = await fetch(`/api/organizations/${orgId}/members`)
+        const membersData = await membersResponse.json()
+        setTeamMembers(membersData)
+
+        // Get product types
+        const productResponse = await fetch(`/api/product-types?orgId=${orgId}`)
+        const productData = await productResponse.json()
+        setProductTypes(productData)
+
+        // Get commission settings
+        const commissionsResponse = await fetch(`/api/commissions/settings?orgId=${orgId}`)
+        const commissionsData = await commissionsResponse.json()
+        
+        // Convert to { "userId-productTypeId": percentage } format
+        const commissionMap = {}
+        commissionsData.forEach(c => {
+          commissionMap[`${c.user_id}-${c.product_type_id}`] = c.commission_percentage
+        })
+        setCommissions(commissionMap)
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      }
+    }
+
+    fetchData()
+  }, [orgId])
+
+  // Handle commission % change
+  const handleCommissionChange = (userId, productTypeId, value) => {
+    const key = `${userId}-${productTypeId}`
+    setCommissions(prev => ({
+      ...prev,
+      [key]: parseFloat(value) || 0
+    }))
+  }
+
+  // Save commission settings
+  const handleSaveCommissions = async () => {
+    setSaving(true)
+    setSaveMessage('')
+
+    try {
+      const response = await fetch(`/api/commissions/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orgId,
+          commissions, // { "userId-productTypeId": percentage }
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        setSaveMessage(`Error: ${error.error}`)
+        setSaving(false)
+        return
+      }
+
+      setSaveMessage('Commission settings saved! ✅')
+      setTimeout(() => setSaveMessage(''), 3000)
+    } catch (error) {
+      console.error('Error saving:', error)
+      setSaveMessage('Failed to save commission settings')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Only admins can see this
+  if (userRole && userRole !== 'admin' && userRole !== 'owner') {
+    return null
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* ... existing sections ... */}
+
+      {/* Commission Settings By Product Type (Admin Only) */}
+      <section className="mt-8 pt-8 border-t border-slate-700">
+        <h2 className="text-lg font-bold text-white mb-2">💰 Commission Settings</h2>
+        <p className="text-gray-400 text-sm mb-6">Set commission percentage for each employee by product type</p>
+
+        {/* Product Types Header */}
+        <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 mb-6">
+          <p className="text-sm text-gray-400 mb-3">Product Types:</p>
+          <div className="flex flex-wrap gap-2">
+            {productTypes.map(pt => (
+              <span key={pt.id} className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded text-sm">
+                {pt.name}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Commission Grid */}
+        <div className="space-y-6">
+          {teamMembers.map(member => (
+            <div key={member.user_id} className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+              <p className="text-white font-bold mb-4">
+                {member.firstName} {member.lastName} ({member.email})
+              </p>
+              
+              {/* Commission % for each product type */}
+              <div className="grid grid-cols-2 gap-4">
+                {productTypes.map(product => {
+                  const key = `${member.user_id}-${product.id}`
+                  return (
+                    <div key={key}>
+                      <label className="block text-sm text-gray-400 mb-2">
+                        {product.name}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={commissions[key] || 0}
+                          onChange={(e) => handleCommissionChange(member.user_id, product.id, e.target.value)}
+                          className="flex-1 px-4 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-blue-500 focus:outline-none"
+                          placeholder="0"
+                        />
+                        <span className="text-gray-400 min-w-fit">%</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {saveMessage && (
+          <div className={`mt-4 p-3 rounded text-sm ${saveMessage.includes('Error') ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+            {saveMessage}
+          </div>
+        )}
+
+        <button
+          onClick={handleSaveCommissions}
+          disabled={saving}
+          className="mt-6 px-6 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 text-white rounded font-medium transition"
+        >
+          {saving ? 'Saving...' : 'Save Commission Settings'}
+        </button>
+      </section>
+    </div>
+  )
+}
+```
+
+---
+
+## Task 6: Update Commission Calculation Logic
+
+Update opportunity update endpoint: `artifacts/api-server/src/routes/opportunities.ts`
+
+**Replace the commission calculation section with:**
+
+```typescript
+// When moving to "Closed Won", calculate commission based on PRODUCT TYPE
+if (status === 'Closed Won' && opportunity.status !== 'Closed Won') {
+  // Get the product type of this opportunity
+  const productType = opportunity.product_type // e.g., 'consulting'
+  
+  // Find product type ID
+  const productTypeRecord = await db.query.productTypes.findFirst({
+    where: and(
+      eq(productTypes.org_id, orgId),
+      eq(productTypes.name, productType)
+    ),
+  })
+
+  if (productTypeRecord) {
+    // Get employee's commission % for THIS PRODUCT TYPE
+    const commissionSetting = await db.query.employeeCommissions.findFirst({
+      where: and(
+        eq(employeeCommissions.org_id, orgId),
+        eq(employeeCommissions.user_id, opportunity.owner_user_id),
+        eq(employeeCommissions.product_type_id, productTypeRecord.id)
+      ),
+    })
+
+    if (commissionSetting) {
+      const commissionPercentage = parseFloat(commissionSetting.commission_percentage)
+      const opportunityValue = parseFloat(opportunity.value)
+      const commissionAmount = (opportunityValue * commissionPercentage) / 100
+
+      // Create commission record
+      await db.insert(commissions).values({
+        org_id: orgId,
+        user_id: opportunity.owner_user_id,
+        opportunity_id: id,
+        opportunity_value: opportunityValue.toString(),
+        commission_percentage: commissionPercentage.toString(),
+        commission_amount: commissionAmount.toString(),
+        earned_date: new Date(),
+        product_type_id: productTypeRecord.id, // Add product type to commission record
+      })
+
+      console.log(`[COMMISSION] ${opportunity.owner_user_id} earned $${commissionAmount} on ${productType} deal ${id}`)
+    }
+  }
+}
+```
+
+---
+
+## Task 7: Create Product Types API
+
+Create endpoint: `artifacts/api-server/src/routes/productTypes.ts`
+
+```typescript
+import { db } from '@/db'
+import { productTypes } from '@/db/schema'
+import { eq, and } from 'drizzle-orm'
+
+// GET product types for org
+app.get('/api/product-types', async (req, res) => {
+  const { orgId } = req.query
+  const userId = req.user.id
+
+  try {
+    // Verify user is member of org
+    const membership = await db.query.orgUsers.findFirst({
+      where: and(
+        eq(orgUsers.org_id, orgId),
+        eq(orgUsers.user_id, userId),
+        eq(orgUsers.status, 'active')
+      ),
+    })
+
+    if (!membership) {
+      return res.status(403).json({ error: 'Not member of organization' })
+    }
+
+    // Get all product types for org
+    const types = await db.query.productTypes.findMany({
+      where: and(
+        eq(productTypes.org_id, orgId),
+        eq(productTypes.is_active, true)
+      ),
+    })
+
+    res.json(types)
+  } catch (error) {
+    console.error('Error fetching product types:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// CREATE new product type (admin only)
+app.post('/api/product-types', async (req, res) => {
+  const { orgId, name, description } = req.body
+  const userId = req.user.id
+
+  try {
+    // Verify user is admin/owner
+    const membership = await db.query.orgUsers.findFirst({
+      where: and(
+        eq(orgUsers.org_id, orgId),
+        eq(orgUsers.user_id, userId)
+      ),
+    })
+
+    if (!membership || (membership.role !== 'admin' && membership.role !== 'owner')) {
+      return res.status(403).json({ error: 'Not authorized' })
+    }
+
+    // Create product type
+    const newType = await db.insert(productTypes).values({
+      org_id: orgId,
+      name,
+      description,
+    })
+
+    res.json({ success: true, type: newType })
+  } catch (error) {
+    console.error('Error creating product type:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+```
+
+---
+
+## Task 8: Update Opportunities Form
+
+When creating/editing opportunities, allow selecting product type.
+
+In `artifacts/crm/src/pages/opportunities` or opportunity form:
+
+```typescript
+// Add product type dropdown
+<select
+  value={formData.product_type || ''}
+  onChange={(e) => setFormData({ ...formData, product_type: e.target.value })}
+  className="px-4 py-2 bg-slate-700 text-white rounded border border-slate-600"
+>
+  <option value="">Select Product Type</option>
+  {productTypes.map(pt => (
+    <option key={pt.id} value={pt.name}>
+      {pt.name}
+    </option>
+  ))}
+</select>
+```
+
+---
+
+## Task 9: Update Commission Settings API
+
+Update the POST endpoint to handle new structure.
+
+In `artifacts/api-server/src/routes/commissions.ts`:
+
+**Replace the POST endpoint with:**
+
+```typescript
+app.post('/api/commissions/settings', async (req, res) => {
+  const { orgId, commissions } = req.body // { "userId-productTypeId": percentage }
+  const userId = req.user.id
+
+  try {
+    // Verify user is admin/owner
+    const membership = await db.query.orgUsers.findFirst({
+      where: and(
+        eq(orgUsers.org_id, orgId),
+        eq(orgUsers.user_id, userId)
+      ),
+    })
+
+    if (!membership || (membership.role !== 'admin' && membership.role !== 'owner')) {
+      return res.status(403).json({ error: 'Not authorized' })
+    }
+
+    // Update each employee's commission per product type
+    for (const [key, percentage] of Object.entries(commissions)) {
+      const [employeeId, productTypeId] = key.split('-')
+
+      const existing = await db.query.employeeCommissions.findFirst({
+        where: and(
+          eq(employeeCommissions.org_id, orgId),
+          eq(employeeCommissions.user_id, employeeId),
+          eq(employeeCommissions.product_type_id, productTypeId)
+        ),
+      })
+
+      if (existing) {
+        // Update
+        await db.update(employeeCommissions)
+          .set({
+            commission_percentage: percentage.toString(),
+            updated_at: new Date(),
+          })
+          .where(eq(employeeCommissions.id, existing.id))
+      } else {
+        // Create
+        await db.insert(employeeCommissions).values({
+          org_id: orgId,
+          user_id: employeeId,
+          product_type_id: productTypeId,
+          commission_percentage: percentage.toString(),
+        })
+      }
+    }
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error updating commissions:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+```
+
+---
+
+## Task 10: Initialize Default Product Types
+
+When creating organization, add default product types.
+
+In org creation: `artifacts/api-server/src/routes/organizations.ts`
+
+After creating org:
+
+```typescript
+// Add default product types
+const defaultTypes = ['Consulting', 'Software', 'Support']
+
+for (const typeName of defaultTypes) {
+  await db.insert(productTypes).values({
+    org_id: createdOrg.id,
+    name: typeName,
+    description: `${typeName} services`,
+  })
+}
+```
+
+---
+
+## Task 11: Test Product-Based Commissions
+
+1. **Create product types:**
+   - Settings → (add page for product types if needed)
+   - Create: "Consulting" (10% for John, 12% for Sarah)
+   - Create: "Software" (15% for John, 18% for Sarah)
+   - Create: "Support" (8% for John, 10% for Sarah)
+
+2. **Set commissions:**
+   - Settings → Commission Settings
+   - John: Consulting 10%, Software 15%, Support 8%
+   - Sarah: Consulting 12%, Software 18%, Support 10%
+
+3. **Create & close deals:**
+   - Create opportunity: $10,000, Product Type = "Consulting", Owner = John
+   - Move to "Closed Won"
+   - Commission should be: $10,000 × 10% = $1,000
+
+4. **Test different product:**
+   - Create opportunity: $5,000, Product Type = "Software", Owner = John
+   - Move to "Closed Won"
+   - Commission should be: $5,000 × 15% = $750
+
+---
+
+## Task 12: Commit & Push
+
+```bash
+git add artifacts/api-server/src/db/schema.ts artifacts/api-server/src/routes/ artifacts/crm/src/pages/
+
+git commit -m "feat: Add product-type-based commission tiers for employees
+
+Database:
+- productTypes table: store product classifications (Consulting, Software, Support, etc.)
+- product_type field on opportunities
+- Updated employeeCommissions: now includes product_type_id for multi-tier setup
+
+Commission Settings:
+- Settings page shows grid of Employee × Product Type
+- Admin can set different % for same employee across product types
+- Example: John gets 10% on Consulting, 15% on Software
+
+Commission Calculation:
+- When opportunity moves to 'Closed Won', system looks up:
+  1. The product type of the opportunity
+  2. The employee's commission % for THAT product type
+  3. Calculates: opportunity_value × product_type_percentage
+
+Features:
+- Each employee can have different rates per product type
+- Settings UI is clean product-type grid
+- System automatically applies correct % based on product
+- Commission records track which product type earned it
+
+This allows sophisticated multi-tier commission structures based on
+what type of sale was made, not just who made it."
+
+git push origin main
+```
+
+Railway will auto-deploy. 🚀
+
+---
+
+## Success Criteria
+
+✅ Product types can be created and managed  
+✅ Opportunities have product type field  
+✅ Settings shows employee × product type grid  
+✅ Each employee can have different % per product type  
+✅ Commission calculated using correct % for product type  
+✅ Dashboard shows commissions with product type info  
+✅ Example: John Consulting 10%, John Software 15%  
+
+**After this, complex commission structures are fully supported!** 💰

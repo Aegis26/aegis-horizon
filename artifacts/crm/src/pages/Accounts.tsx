@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useListAccounts, getListAccountsQueryKey, useListSegments, getListSegmentsQueryKey, useCreateAccount, useDeleteAccount } from "@workspace/api-client-react";
+import { useListAccounts, getListAccountsQueryKey, useListSegments, getListSegmentsQueryKey, useCreateAccount, useDeleteAccount, getGetOrgDashboardQueryKey } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { Link, useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
@@ -77,6 +77,7 @@ export default function Accounts() {
         setIsCreateOpen(false);
         form.reset();
         queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey(selectedOrgId) });
+        queryClient.invalidateQueries({ queryKey: getGetOrgDashboardQueryKey(selectedOrgId) });
       },
       onError: (err) => {
         toast({ title: "Failed to create account", description: err.message, variant: "destructive" });
@@ -92,6 +93,7 @@ export default function Accounts() {
         onSuccess: () => {
           toast({ title: "Account deleted" });
           queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey(selectedOrgId) });
+          queryClient.invalidateQueries({ queryKey: getGetOrgDashboardQueryKey(selectedOrgId) });
         }
       });
     }

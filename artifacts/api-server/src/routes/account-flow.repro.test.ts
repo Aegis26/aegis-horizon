@@ -98,6 +98,17 @@ test(
     assert.equal(createResponse.status, 201);
     assert.equal(typeof createBody.id, "string");
 
+    const dashboardBeforeDeleteResponse = await fetch(
+      `${baseUrl}/api/orgs/${orgId}/dashboard`,
+      { headers: { "x-aegis-window-session": session.token } },
+    );
+    const dashboardBeforeDelete = await dashboardBeforeDeleteResponse.json() as {
+      accountCount?: number;
+      [key: string]: unknown;
+    };
+    assert.equal(dashboardBeforeDeleteResponse.status, 200);
+    assert.equal(dashboardBeforeDelete.accountCount, 1);
+
     const listResponse = await fetch(`${baseUrl}/api/orgs/${orgId}/accounts`, {
       headers: { "x-aegis-window-session": session.token },
     });
@@ -139,5 +150,33 @@ test(
     console.log("synthetic account timeline", timelineResponse.status, timelineBody);
     assert.equal(timelineResponse.status, 200);
     assert.deepEqual(timelineBody, []);
+
+    const deleteResponse = await fetch(
+      `${baseUrl}/api/orgs/${orgId}/accounts/${createBody.id}`,
+      {
+        method: "DELETE",
+        headers: { "x-aegis-window-session": session.token },
+      },
+    );
+    assert.equal(deleteResponse.status, 204);
+
+    const listAfterDeleteResponse = await fetch(
+      `${baseUrl}/api/orgs/${orgId}/accounts`,
+      { headers: { "x-aegis-window-session": session.token } },
+    );
+    const listAfterDelete = await listAfterDeleteResponse.json() as Array<{ id?: string }>;
+    assert.equal(listAfterDeleteResponse.status, 200);
+    assert.equal(listAfterDelete.some((account) => account.id === createBody.id), false);
+
+    const dashboardAfterDeleteResponse = await fetch(
+      `${baseUrl}/api/orgs/${orgId}/dashboard`,
+      { headers: { "x-aegis-window-session": session.token } },
+    );
+    const dashboardAfterDelete = await dashboardAfterDeleteResponse.json() as {
+      accountCount?: number;
+      [key: string]: unknown;
+    };
+    assert.equal(dashboardAfterDeleteResponse.status, 200);
+    assert.equal(dashboardAfterDelete.accountCount, 0);
   },
 );

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { useBulkImportAccounts, getListAccountsQueryKey } from "@workspace/api-client-react";
+import { useBulkImportAccounts, getListAccountsQueryKey, getGetOrgDashboardQueryKey } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
@@ -53,6 +53,7 @@ export function BulkImportDialog() {
         setOpen(false);
         setData("");
         queryClient.invalidateQueries({ queryKey: getListAccountsQueryKey(selectedOrgId) });
+        queryClient.invalidateQueries({ queryKey: getGetOrgDashboardQueryKey(selectedOrgId) });
       },
       onError: (err) => {
         toast({ title: "Import failed", description: err.message, variant: "destructive" });

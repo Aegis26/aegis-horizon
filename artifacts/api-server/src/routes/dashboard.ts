@@ -64,6 +64,7 @@ router.get("/orgs/:orgId/dashboard", async (req, res): Promise<void> => {
     db.select({ value: count() }).from(orgUsers).where(eq(orgUsers.orgId, org.id)),
     db.select({ value: count() }).from(accounts).where(and(
       eq(accounts.orgId, org.id),
+      eq(accounts.isActive, true),
       ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
     )),
     db

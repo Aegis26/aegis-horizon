@@ -28,6 +28,7 @@ import {
   revokeAllWindowSessions,
   WINDOW_SESSION_HEADER,
 } from "../services/windowSessions";
+import { effectiveMemberDisplayName } from "../lib/memberDisplayName";
 
 const router: IRouter = Router();
 
@@ -314,6 +315,7 @@ router.get("/auth/me", attachUser, async (req, res): Promise<void> => {
         .map((m) => ({
           org: serializeOrg(orgById.get(m.orgId)!),
           role: m.role,
+           displayName: effectiveMemberDisplayName(m, user),
         })),
     }),
   );

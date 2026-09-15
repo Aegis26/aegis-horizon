@@ -306,7 +306,7 @@ paths:
     post:
       operationId: inviteMember
       tags: [members]
-      summary: Invite a user by email with a role (admin+)
+      summary: Invite a user by email with a role and workspace name (owner-only)
       parameters:
         - $ref: "#/components/parameters/OrgId"
       requestBody:
@@ -341,7 +341,7 @@ paths:
     patch:
       operationId: updateMemberRole
       tags: [members]
-      summary: Change a member's role (admin+)
+      summary: Change a member's role or workspace display name (owner-only)
       parameters:
         - $ref: "#/components/parameters/OrgId"
         - $ref: "#/components/parameters/MemberId"
@@ -2676,13 +2676,14 @@ components:
             $ref: "#/components/schemas/OrgMembership"
     OrgMembership:
       type: object
-      required: [org, role]
+      required: [org, role, displayName]
       properties:
         org:
           $ref: "#/components/schemas/Organization"
         role:
           type: string
           enum: [owner, admin, manager, user, viewer]
+        displayName: { type: string }
     Organization:
       type: object
       required: [id, name, slug, plan, enabledFeatures]
@@ -2732,12 +2733,13 @@ components:
         success: { type: boolean, enum: [true] }
     Member:
       type: object
-      required: [id, role, user]
+      required: [id, role, user, displayName]
       properties:
         id: { type: string }
         role:
           type: string
           enum: [owner, admin, manager, user, viewer]
+        displayName: { type: string }
         user:
           $ref: "#/components/schemas/User"
         createdAt: { type: ["string", "null"] }
@@ -2746,6 +2748,9 @@ components:
       required: [email, role]
       properties:
         email: { type: string }
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+        # Retained for clients using the original invite contract. New
+        # workspace-local names should use displayName.
         fullName: { type: string }
         role:
           type: string
@@ -2798,11 +2803,14 @@ components:
             name: { type: string }
     MemberRoleUpdate:
       type: object
-      required: [role]
       properties:
         role:
           type: string
           enum: [owner, admin, manager, user, viewer]
+        displayName:
+          type: ["string", "null"]
+          minLength: 1
+          maxLength: 120
     FeatureEntitlement:
       type: object
       required: [featureKey, enabled]

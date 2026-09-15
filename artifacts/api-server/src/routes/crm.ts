@@ -21,6 +21,7 @@ import {
   contacts,
   activities,
   opportunities,
+  orgUsers,
   segments,
   users,
   type Account,
@@ -67,6 +68,7 @@ import {
 import { isOrgMemberId } from "../services/orgValidation";
 import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
 import { logger } from "../lib/logger";
+import { effectiveMemberDisplayName } from "../lib/memberDisplayName";
 const router: IRouter = Router();
 const objectStorage = new ObjectStorageService();
 
@@ -1074,7 +1076,10 @@ router.post(
       .status(201)
       .json(
         CreateActivityResponse.parse(
-          activityOut(row, req.currentUser!.fullName ?? req.currentUser!.email),
+          activityOut(
+            row,
+            effectiveMemberDisplayName(req.currentMembership!, req.currentUser!),
+          ),
         ),
       );
   },
@@ -1092,9 +1097,21 @@ router.get(
       return;
     }
     const rows = await db
-      .select({ activity: activities, userName: users.fullName, userEmail: users.email })
+        .select({
+          activity: activities,
+          userName: users.fullName,
+          userEmail: users.email,
+          memberDisplayName: orgUsers.displayName,
+        })
       .from(activities)
       .leftJoin(users, eq(activities.createdByUserId, users.id))
+        .leftJoin(
+          orgUsers,
+          and(
+            eq(orgUsers.userId, users.id),
+            eq(orgUsers.orgId, req.currentOrg!.id),
+          ),
+        )
       .where(
         and(
           eq(activities.accountId, account.id),
@@ -1124,7 +1141,12 @@ router.get(
         visibleRows.map((r) =>
           activityOut(
             r.activity,
-            r.userName ?? r.userEmail,
+            r.userName || r.userEmail
+              ? effectiveMemberDisplayName(
+                  { displayName: r.memberDisplayName },
+                  { fullName: r.userName, email: r.userEmail ?? "" },
+                )
+              : null,
             r.relatedVisibility,
           ),
         ),
@@ -1233,7 +1255,10 @@ router.post(
       });
     }
 
-    const userName = req.currentUser!.fullName ?? req.currentUser!.email;
+    const userName = effectiveMemberDisplayName(
+      req.currentMembership!,
+      req.currentUser!,
+    );
     res.json(AttachFileToActivityResponse.parse(activityOut(row, userName)));
   },
 );

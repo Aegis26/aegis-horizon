@@ -33,6 +33,24 @@ export function getInitials(name: string | null | undefined, email: string) {
   return email.substring(0, 2).toUpperCase();
 }
 
+export type WorkspaceMemberLabel = {
+  displayName?: string | null;
+  user: {
+    fullName?: string | null;
+    email: string;
+  };
+};
+
+/** The API supplies the effective workspace name; fallbacks keep older
+ * cached member responses readable while they are refreshed. */
+export function getMemberDisplayName(member: WorkspaceMemberLabel): string {
+  return (
+    member.displayName?.trim() ||
+    member.user.fullName?.trim() ||
+    member.user.email
+  );
+}
+
 /**
  * Formats API prediction/confidence values (0.0 to 1.0) into a percentage string (e.g. 50%).
  */

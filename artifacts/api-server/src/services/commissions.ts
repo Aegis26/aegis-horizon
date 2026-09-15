@@ -13,6 +13,7 @@ import {
   calculateCommissionAmount,
   normalizeCommissionPercentage,
 } from "./commissionMath";
+import { effectiveMemberDisplayName } from "../lib/memberDisplayName";
 
 type DatabaseTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -222,6 +223,7 @@ export async function recordCommissionForClosedWon(
   const [setting] = await tx
     .select({
       percentage: employeeCommissions.commissionPercentage,
+      displayName: orgUsers.displayName,
       employeeName: users.fullName,
       employeeEmail: users.email,
     })
@@ -255,7 +257,10 @@ export async function recordCommissionForClosedWon(
   await tx.insert(commissions).values({
     orgId: next.orgId,
     userId: next.ownerUserId,
-    employeeName: setting.employeeName?.trim() || setting.employeeEmail,
+    employeeName: effectiveMemberDisplayName(
+      { displayName: setting.displayName },
+      { fullName: setting.employeeName, email: setting.employeeEmail },
+    ),
     opportunityId: next.id,
     opportunityName: next.name,
     opportunityValue: calculated.opportunityValue,

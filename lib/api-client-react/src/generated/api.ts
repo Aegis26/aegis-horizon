@@ -1170,7 +1170,7 @@ export const getInviteMemberUrl = (orgId: string,) => {
 }
 
 /**
- * @summary Invite a user by email with a role (admin+)
+ * @summary Invite a user by email with a role and workspace name (owner-only)
  */
 export const inviteMember = async (orgId: string,
     memberInvite: MemberInvite, options?: Parameters<typeof customFetch>[1]): Promise<MemberInvitationResponse> => {
@@ -1220,7 +1220,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type InviteMemberMutationError = ErrorType<unknown>
 
     /**
- * @summary Invite a user by email with a role (admin+)
+ * @summary Invite a user by email with a role and workspace name (owner-only)
  */
 export const useInviteMember = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof inviteMember>>, TError,{orgId: string;data: BodyType<MemberInvite>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -1316,7 +1316,7 @@ export const getUpdateMemberRoleUrl = (orgId: string,
 }
 
 /**
- * @summary Change a member's role (admin+)
+ * @summary Change a member's role or workspace display name (owner-only)
  */
 export const updateMemberRole = async (orgId: string,
     memberId: string,
@@ -1367,7 +1367,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UpdateMemberRoleMutationError = ErrorType<unknown>
 
     /**
- * @summary Change a member's role (admin+)
+ * @summary Change a member's role or workspace display name (owner-only)
  */
 export const useUpdateMemberRole = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMemberRole>>, TError,{orgId: string;memberId: string;data: BodyType<MemberRoleUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}

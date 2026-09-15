@@ -8,6 +8,7 @@ import { ensureAccountDeletionSchema } from "./lib/accountDeletionSchema";
 import { ensureWindowSessionSchema } from "./lib/windowSessionSchema";
 import { ensureContactSchema } from "./lib/contactSchema";
 import { ensureCommissionSchema } from "./lib/commissionSchema";
+import { ensureOrgUserDisplayNameSchema } from "./lib/orgUserDisplayNameSchema";
 import { startAccountDeletionRecovery } from "./services/accountDeletion";
 
 const rawPort = process.env["PORT"];
@@ -29,6 +30,7 @@ await ensureAccountDeletionSchema();
 await ensureWindowSessionSchema();
 await ensureContactSchema();
 await ensureCommissionSchema();
+await ensureOrgUserDisplayNameSchema();
 
 startWorkflowScheduler();
 startReportScheduler();

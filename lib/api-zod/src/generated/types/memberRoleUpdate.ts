@@ -8,5 +8,11 @@
 import type { MemberRoleUpdateRole } from './memberRoleUpdateRole';
 
 export interface MemberRoleUpdate {
-  role: MemberRoleUpdateRole;
+  role?: MemberRoleUpdateRole;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     * @nullable
+     */
+  displayName?: string | null;
 }

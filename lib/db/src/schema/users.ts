@@ -21,6 +21,9 @@ export const orgUsers = pgTable("org_users", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   role: userRoleEnum("role").notNull(),
+  // Workspace-local name override. This intentionally does not modify the
+  // global users identity row or any other organization's view of that user.
+  displayName: text("display_name"),
   permissions: jsonb("permissions").default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

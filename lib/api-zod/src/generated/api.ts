@@ -37,7 +37,8 @@ export const GetMeResponse = zod.object({
   "stripeSubscriptionId": zod.string().nullish(),
   "createdAt": zod.string().nullish()
 }),
-  "role": zod.enum(['owner', 'admin', 'manager', 'user', 'viewer'])
+  "role": zod.enum(['owner', 'admin', 'manager', 'user', 'viewer']),
+  "displayName": zod.string()
 }))
 })
 
@@ -230,6 +231,7 @@ export const ListMembersParams = zod.object({
 export const ListMembersResponseItem = zod.object({
   "id": zod.string(),
   "role": zod.enum(['owner', 'admin', 'manager', 'user', 'viewer']),
+  "displayName": zod.string(),
   "user": zod.object({
   "id": zod.string(),
   "clerkId": zod.string().optional(),
@@ -242,14 +244,19 @@ export const ListMembersResponse = zod.array(ListMembersResponseItem)
 
 
 /**
- * @summary Invite a user by email with a role (admin+)
+ * @summary Invite a user by email with a role and workspace name (owner-only)
  */
 export const InviteMemberParams = zod.object({
   "orgId": zod.coerce.string()
 })
 
+export const inviteMemberBodyDisplayNameMax = 120;
+
+
+
 export const InviteMemberBody = zod.object({
   "email": zod.string(),
+  "displayName": zod.string().min(1).max(inviteMemberBodyDisplayNameMax).optional(),
   "fullName": zod.string().optional(),
   "role": zod.enum(['admin', 'manager', 'user', 'viewer'])
 })
@@ -257,6 +264,7 @@ export const InviteMemberBody = zod.object({
 export const InviteMemberResponse = zod.object({
   "id": zod.string(),
   "role": zod.enum(['owner', 'admin', 'manager', 'user', 'viewer']),
+  "displayName": zod.string(),
   "user": zod.object({
   "id": zod.string(),
   "clerkId": zod.string().optional(),
@@ -283,6 +291,7 @@ export const ResendMemberInviteParams = zod.object({
 export const ResendMemberInviteResponse = zod.object({
   "id": zod.string(),
   "role": zod.enum(['owner', 'admin', 'manager', 'user', 'viewer']),
+  "displayName": zod.string(),
   "user": zod.object({
   "id": zod.string(),
   "clerkId": zod.string().optional(),
@@ -299,20 +308,26 @@ export const ResendMemberInviteResponse = zod.object({
 
 
 /**
- * @summary Change a member's role (admin+)
+ * @summary Change a member's role or workspace display name (owner-only)
  */
 export const UpdateMemberRoleParams = zod.object({
   "orgId": zod.coerce.string(),
   "memberId": zod.coerce.string()
 })
 
+export const updateMemberRoleBodyDisplayNameMax = 120;
+
+
+
 export const UpdateMemberRoleBody = zod.object({
-  "role": zod.enum(['owner', 'admin', 'manager', 'user', 'viewer'])
+  "role": zod.enum(['owner', 'admin', 'manager', 'user', 'viewer']).optional(),
+  "displayName": zod.string().min(1).max(updateMemberRoleBodyDisplayNameMax).nullish()
 })
 
 export const UpdateMemberRoleResponse = zod.object({
   "id": zod.string(),
   "role": zod.enum(['owner', 'admin', 'manager', 'user', 'viewer']),
+  "displayName": zod.string(),
   "user": zod.object({
   "id": zod.string(),
   "clerkId": zod.string().optional(),

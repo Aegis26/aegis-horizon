@@ -9,6 +9,11 @@ import type { MemberInviteRole } from './memberInviteRole';
 
 export interface MemberInvite {
   email: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  displayName?: string;
   fullName?: string;
   role: MemberInviteRole;
 }

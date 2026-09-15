@@ -80,6 +80,7 @@ import {
   withCrmVisibility,
 } from "../services/crmAccess";
 import { recordCommissionForClosedWon } from "../services/commissions";
+import { effectiveMemberDisplayName } from "../lib/memberDisplayName";
 
 const router: IRouter = Router();
 const gate = [attachUser, attachOrg, requireFeature("sales")] as const;
@@ -311,7 +312,11 @@ async function opportunityDetail(o: Opportunity, req: Request) {
       ),
     o.ownerUserId
       ? db
-          .select({ fullName: users.fullName, email: users.email })
+          .select({
+            displayName: orgUsers.displayName,
+            fullName: users.fullName,
+            email: users.email,
+          })
           .from(users)
           .innerJoin(orgUsers, eq(orgUsers.userId, users.id))
           .where(and(eq(users.id, o.ownerUserId), eq(orgUsers.orgId, o.orgId)))
@@ -321,6 +326,7 @@ async function opportunityDetail(o: Opportunity, req: Request) {
         entry: opportunityStageHistory,
         userName: users.fullName,
         userEmail: users.email,
+        memberDisplayName: orgUsers.displayName,
       })
       .from(opportunityStageHistory)
       .leftJoin(users, eq(opportunityStageHistory.changedByUserId, users.id))
@@ -366,12 +372,17 @@ async function opportunityDetail(o: Opportunity, req: Request) {
     nextAction: o.nextAction,
     ownerUserId: o.ownerUserId,
     createdByUserId: o.createdByUserId,
-    ownerName: owner ? (owner.fullName ?? owner.email) : null,
+    ownerName: owner ? effectiveMemberDisplayName(owner, owner) : null,
     stageHistory: history.map((h) => ({
       id: h.entry.id,
       fromStage: h.entry.fromStage,
       toStage: h.entry.toStage,
-      changedByName: h.userName ?? h.userEmail ?? null,
+      changedByName: h.userName
+        ? effectiveMemberDisplayName(
+            { displayName: h.memberDisplayName },
+            { fullName: h.userName, email: h.userEmail ?? "" },
+          )
+        : h.userEmail ?? null,
       createdAt: h.entry.createdAt.toISOString(),
     })),
     createdAt: o.createdAt.toISOString(),
@@ -815,7 +826,11 @@ async function leadOut(req: Request, l: Lead) {
   const [assignee, territory, convertedOpportunityVisible] = await Promise.all([
     l.assignedToUserId
       ? db
-          .select({ fullName: users.fullName, email: users.email })
+          .select({
+            displayName: orgUsers.displayName,
+            fullName: users.fullName,
+            email: users.email,
+          })
           .from(users)
           .innerJoin(orgUsers, eq(orgUsers.userId, users.id))
           .where(and(eq(users.id, l.assignedToUserId), eq(orgUsers.orgId, l.orgId)))
@@ -852,7 +867,9 @@ async function leadOut(req: Request, l: Lead) {
     score: l.score,
     assignedToUserId: l.assignedToUserId,
     createdByUserId: l.createdByUserId,
-    assignedToName: assignee ? (assignee.fullName ?? assignee.email) : null,
+     assignedToName: assignee
+       ? effectiveMemberDisplayName(assignee, assignee)
+       : null,
     territoryId: l.territoryId,
     territoryName: territory?.name ?? null,
     convertedOpportunityId: convertedOpportunityVisible
@@ -1662,7 +1679,11 @@ router.post("/orgs/:orgId/quotes/:quoteId/accept", ...gate, async (req, res): Pr
 async function territoryOut(t: Territory) {
   const owner = t.ownerUserId
     ? await db
-        .select({ fullName: users.fullName, email: users.email })
+        .select({
+          displayName: orgUsers.displayName,
+          fullName: users.fullName,
+          email: users.email,
+        })
         .from(users)
         .innerJoin(orgUsers, eq(orgUsers.userId, users.id))
         .where(and(
@@ -1675,7 +1696,7 @@ async function territoryOut(t: Territory) {
     id: t.id,
     name: t.name,
     ownerUserId: t.ownerUserId,
-    ownerName: owner ? (owner.fullName ?? owner.email) : null,
+    ownerName: owner ? effectiveMemberDisplayName(owner, owner) : null,
     countries: t.countries ?? [],
     states: t.states ?? [],
     products: t.products ?? [],
@@ -1854,7 +1875,11 @@ router.get(
         const quota = t.quota ? Number(t.quota) : null;
         const owner = t.ownerUserId
           ? await db
-              .select({ fullName: users.fullName, email: users.email })
+              .select({
+                displayName: orgUsers.displayName,
+                fullName: users.fullName,
+                email: users.email,
+              })
               .from(users)
               .innerJoin(orgUsers, eq(orgUsers.userId, users.id))
               .where(and(
@@ -1866,7 +1891,7 @@ router.get(
         return {
           territoryId: t.id,
           territoryName: t.name,
-          ownerName: owner ? (owner.fullName ?? owner.email) : null,
+          ownerName: owner ? effectiveMemberDisplayName(owner, owner) : null,
           accountCount: terrAccounts.length,
           quota,
           openPipelineValue: Math.round(openPipelineValue * 100) / 100,

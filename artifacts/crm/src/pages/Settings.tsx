@@ -7,7 +7,7 @@ import {
   useListWebhooks, useCreateWebhook, useDeleteWebhook, getListWebhooksQueryKey, useRevokeApiToken, useTestWebhookDelivery,
   useListAuditEvents, getListAuditEventsQueryKey,
   useListIndustryTemplates, useApplyIndustryTemplate, getListIndustryTemplatesQueryKey,
-  useListWebhookDeliveries, useGetMe, getGetMeQueryKey
+  useListWebhookDeliveries, useGetMe, getGetMeQueryKey, type Member
 } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,8 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { getInitials, formatDate } from "@/lib/format";
-import { Building2, Users, Save, Trash2, Mail, ShieldCheck, Key, Webhook, ActivitySquare, LayoutTemplate, Plus, Copy, CheckCircle2, LogOut, Settings as SettingsIcon, Percent } from "lucide-react";
+import { getInitials, formatDate, getMemberDisplayName } from "@/lib/format";
+import { Building2, Users, Save, Trash2, Mail, ShieldCheck, Key, Webhook, ActivitySquare, LayoutTemplate, Plus, Copy, CheckCircle2, LogOut, Settings as SettingsIcon, Percent, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { ProviderSettings } from "@/components/settings/ProviderSettings";
 import { DeleteOrganizationDangerZone } from "@/components/settings/DeleteOrganizationDangerZone";
@@ -131,7 +131,11 @@ export default function Settings() {
   // Modals
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"admin" | "manager" | "user">("user");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteRole, setInviteRole] = useState<"admin" | "manager" | "user" | "viewer">("user");
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [memberNameDraft, setMemberNameDraft] = useState("");
+  const [memberNameError, setMemberNameError] = useState<string | null>(null);
 
   const [newTokenName, setNewTokenName] = useState("");
   const [newTokenOpen, setNewTokenOpen] = useState(false);
@@ -164,7 +168,14 @@ export default function Settings() {
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail) return;
-    inviteMember.mutate({ orgId: selectedOrgId!, data: { email: inviteEmail, role: inviteRole } }, {
+    inviteMember.mutate({
+      orgId: selectedOrgId!,
+      data: {
+        email: inviteEmail,
+        role: inviteRole,
+        ...(inviteName.trim() ? { displayName: inviteName.trim() } : {}),
+      },
+    }, {
       onSuccess: (result) => {
         const deliveryFailed = result.delivery.status === "failed";
         toast({
@@ -174,7 +185,7 @@ export default function Settings() {
             : `Invited ${inviteEmail} as ${inviteRole}`,
           variant: deliveryFailed ? "destructive" : "default",
         });
-        setInviteOpen(false); setInviteEmail("");
+        setInviteOpen(false); setInviteEmail(""); setInviteName("");
         queryClient.invalidateQueries({ queryKey: getListMembersQueryKey(selectedOrgId!) });
       },
       onError: () => {
@@ -210,11 +221,54 @@ export default function Settings() {
   };
 
   const handleRoleChange = (memberId: string, role: string) => {
-    updateRole.mutate({ orgId: selectedOrgId!, memberId, data: { role: role as "owner" | "admin" | "manager" | "user" } }, {
+    updateRole.mutate({ orgId: selectedOrgId!, memberId, data: { role: role as "owner" | "admin" | "manager" | "user" | "viewer" } }, {
       onSuccess: () => {
         toast({ title: "Role updated" });
         queryClient.invalidateQueries({ queryKey: getListMembersQueryKey(selectedOrgId!) });
       }
+    });
+  };
+
+  const handleEditMemberName = (member: Member) => {
+    setEditingMember(member);
+    setMemberNameDraft(member.displayName);
+    setMemberNameError(null);
+  };
+
+  const closeMemberNameDialog = () => {
+    if (updateRole.isPending) return;
+    setEditingMember(null);
+    setMemberNameDraft("");
+    setMemberNameError(null);
+  };
+
+  const handleSaveMemberName = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingMember) return;
+    const displayName = memberNameDraft.trim();
+    if (displayName.length > 120) {
+      setMemberNameError("Name must be 120 characters or fewer.");
+      return;
+    }
+    setMemberNameError(null);
+    updateRole.mutate({
+      orgId: selectedOrgId!,
+      memberId: editingMember.id,
+      data: { displayName: displayName || null },
+    }, {
+      onSuccess: () => {
+        toast({ title: "Member name updated" });
+        queryClient.invalidateQueries({ queryKey: getListMembersQueryKey(selectedOrgId!) });
+        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        closeMemberNameDialog();
+      },
+      onError: (error) => {
+        setMemberNameError(
+          error instanceof Error
+            ? error.message
+            : "Unable to update the member name. Please try again.",
+        );
+      },
     });
   };
 
@@ -364,6 +418,17 @@ export default function Settings() {
                           <Input type="email" required value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="colleague@company.com" className="bg-background" />
                         </div>
                         <div className="space-y-2">
+                          <Label>Name</Label>
+                          <Input
+                            required
+                            value={inviteName}
+                            onChange={e => setInviteName(e.target.value)}
+                            placeholder="Alex Morgan"
+                            maxLength={120}
+                            className="bg-background"
+                          />
+                        </div>
+                        <div className="space-y-2">
                           <Label>Role</Label>
                           <Select value={inviteRole} onValueChange={(val: any) => setInviteRole(val)}>
                             <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
@@ -378,6 +443,59 @@ export default function Settings() {
                         <div className="flex justify-end pt-4">
                           <Button type="submit" disabled={inviteMember.isPending} className="font-display">
                             <Mail className="w-4 h-4 mr-2"/> Send Invite
+                          </Button>
+                        </div>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                  <Dialog
+                    open={Boolean(editingMember)}
+                    onOpenChange={(open) => {
+                      if (!open) closeMemberNameDialog();
+                    }}
+                  >
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Edit member name</DialogTitle>
+                        <DialogDescription>
+                          This name is only used in this workspace and does not
+                          change the person&apos;s global account profile.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <form onSubmit={handleSaveMemberName} className="space-y-4 mt-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="member-display-name">Name</Label>
+                          <Input
+                            id="member-display-name"
+                            value={memberNameDraft}
+                            onChange={(event) => {
+                              setMemberNameDraft(event.target.value);
+                              setMemberNameError(null);
+                            }}
+                            maxLength={120}
+                            autoFocus
+                            className="bg-background"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Leave blank to use the person&apos;s profile name or email.
+                          </p>
+                          {memberNameError && (
+                            <p className="text-sm text-destructive" role="alert">
+                              {memberNameError}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={closeMemberNameDialog}
+                            disabled={updateRole.isPending}
+                          >
+                            Cancel
+                          </Button>
+                          <Button type="submit" disabled={updateRole.isPending}>
+                            {updateRole.isPending ? "Saving..." : "Save"}
                           </Button>
                         </div>
                       </form>
@@ -401,11 +519,11 @@ export default function Settings() {
                             <div className="flex items-center gap-3">
                               <Avatar className="h-8 w-8">
                                 <AvatarFallback className="bg-primary/10 text-primary font-medium text-xs">
-                                  {getInitials(member.user.fullName, member.user.email)}
+                                  {getInitials(getMemberDisplayName(member), member.user.email)}
                                 </AvatarFallback>
                               </Avatar>
                               <div className="flex flex-col">
-                                <span className="font-medium text-sm">{member.user.fullName || "User"}</span>
+                                <span className="font-medium text-sm">{getMemberDisplayName(member)}</span>
                                 <span className="text-xs text-muted-foreground">{member.user.email}</span>
                               </div>
                             </div>
@@ -431,6 +549,15 @@ export default function Settings() {
                             {formatDate(member.createdAt)}
                           </TableCell>
                           <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditMemberName(member)}
+                              disabled={updateRole.isPending}
+                              className="text-muted-foreground hover:text-foreground"
+                            >
+                              <Pencil className="h-4 w-4 mr-1" /> Edit name
+                            </Button>
                             {member.role !== "owner" && (
                               <Button
                                 variant="ghost"

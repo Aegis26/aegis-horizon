@@ -32,7 +32,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Lock, Plus, Target, LayoutGrid, List, FileText, Trophy, History, Sparkles, RefreshCw } from "lucide-react";
-import { formatDollars, formatDate, formatPredictionPercentage } from "@/lib/format";
+import {
+  formatDollars,
+  formatDate,
+  formatPredictionPercentage,
+  getMemberDisplayName,
+} from "@/lib/format";
 import { earnedCommissionsQueryRoot, productTypesQueryKey } from "@/lib/commissions";
 
 const UNASSIGNED_OWNER = "__unassigned__";
@@ -514,7 +519,7 @@ function CreateOpportunityDialog({
                   <SelectItem value={UNASSIGNED_OWNER}>Unassigned</SelectItem>
                   {members.map((member) => (
                     <SelectItem key={member.user.id} value={member.user.id}>
-                      {member.user.fullName || member.user.email}
+                      {getMemberDisplayName(member)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -741,7 +746,7 @@ function OpportunityDetailDialog({
                   <SelectItem value={UNASSIGNED_OWNER}>Unassigned</SelectItem>
                   {members.map((member) => (
                     <SelectItem key={member.user.id} value={member.user.id}>
-                      {member.user.fullName || member.user.email}
+                      {getMemberDisplayName(member)}
                     </SelectItem>
                   ))}
                 </SelectContent>

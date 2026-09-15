@@ -11,6 +11,7 @@ import type { User } from './user';
 export interface Member {
   id: string;
   role: MemberRole;
+  displayName: string;
   user: User;
   /** @nullable */
   createdAt?: string | null;

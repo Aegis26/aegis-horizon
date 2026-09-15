@@ -11,4 +11,5 @@ import type { OrgMembershipRole } from './orgMembershipRole';
 export interface OrgMembership {
   org: Organization;
   role: OrgMembershipRole;
+  displayName: string;
 }

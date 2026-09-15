@@ -30,7 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { getInitials } from "@/lib/format";
+import { getInitials, getMemberDisplayName } from "@/lib/format";
 import {
   commissionSettingsQueryKey,
   productTypesQueryKey,
@@ -444,7 +444,7 @@ export default function CommissionSettingsSection({
                   ))}
                 </div>
                 {members.map((member) => {
-                  const displayName = member.user.fullName || member.user.email;
+                  const displayName = getMemberDisplayName(member);
                   return (
                     <div
                       key={member.id}
@@ -455,7 +455,7 @@ export default function CommissionSettingsSection({
                       <div className="flex min-w-0 items-start gap-3 p-3">
                         <Avatar className="h-9 w-9 shrink-0">
                           <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                            {getInitials(member.user.fullName, member.user.email)}
+                            {getInitials(displayName, member.user.email)}
                           </AvatarFallback>
                         </Avatar>
                         <div className="min-w-0">

@@ -12,3 +12,4 @@
 - [Workspace deletion safety](workspace-deletion-safety.md) — drain admitted writers before external cleanup; separate advisory-lock pools and preserve only minimal deletion audit.
 - [Independent CRM window sessions](window-session-auth.md) — opaque per-window app auth, safe startup migration, hashed browser lock names, and deletion fencing.
 - [Commission policy](commission-policy.md) — Owner-only configuration/team visibility; snapshots are not retroactively recalculated or duplicated on reclose.
+- [Member display names](member-display-names.md) — Owner-managed names are workspace-specific, never global identity edits.

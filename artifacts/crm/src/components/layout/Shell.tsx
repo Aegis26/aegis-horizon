@@ -34,6 +34,7 @@ import {
   hasAuthenticatedOrganizationMembership,
 } from "@/lib/auth-scope";
 import { useWindowAuth } from "@/components/auth/WindowAuthProvider";
+import { getInitials } from "@/lib/format";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -87,6 +88,8 @@ export function Shell({ children }: { children: ReactNode }) {
       : undefined
     : undefined;
   const currentOrg = selectedMembership?.org || (!selectedOrgId ? orgs[0]?.org : undefined);
+  const currentMemberName =
+    selectedMembership?.displayName || me?.user.fullName || me?.user.email || "User";
   const { online, pendingLeads } = useOfflineLeads(currentOrg?.id);
 
   // The API response is the source of truth for membership. In particular,
@@ -191,11 +194,11 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3">
             <Avatar className="h-9 w-9 border border-primary/20 shadow-sm">
               <AvatarFallback className="bg-primary/10 text-primary text-xs font-display font-bold">
-                {me?.user.fullName?.substring(0, 2).toUpperCase() || me?.user.email.substring(0, 2).toUpperCase() || "AH"}
+                {getInitials(currentMemberName, me?.user.email || "ah@example.com")}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-medium truncate font-sans text-foreground">{me?.user.fullName || (online ? "User" : "Offline workspace")}</p>
+              <p className="text-sm font-medium truncate font-sans text-foreground">{currentMemberName || (online ? "User" : "Offline workspace")}</p>
               <p className="text-xs text-muted-foreground truncate">{me?.user.email || "Changes remain on this device"}</p>
             </div>
           </div>

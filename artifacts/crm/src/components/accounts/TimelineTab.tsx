@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MessageSquare, Phone, Mail, FileText, Send, Lock, Globe, AtSign } from "lucide-react";
-import { formatDate } from "@/lib/format";
+import { formatDate, getMemberDisplayName } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -196,7 +196,7 @@ function InternalNotesFeed({ orgId, accountId }: { orgId: string, accountId: str
   const getMemberName = (userId: string) => {
     if (!members) return "Team Member";
     const member = members.find(m => m.user.id === userId);
-    return member?.user.fullName || member?.user.email || "Team Member";
+    return member ? getMemberDisplayName(member) : "Team Member";
   };
 
   const getMemberInitials = (userId: string) => {
@@ -215,7 +215,7 @@ function InternalNotesFeed({ orgId, accountId }: { orgId: string, accountId: str
     const mentionedUserIds: string[] = [];
     if (members) {
       members.forEach(m => {
-        const firstName = m.user.fullName?.split(' ')[0] || '';
+        const firstName = getMemberDisplayName(m).split(" ")[0] || "";
         if (firstName && newNote.includes(`@${firstName}`)) {
           mentionedUserIds.push(m.user.id);
         }

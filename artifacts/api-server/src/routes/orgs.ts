@@ -43,6 +43,7 @@ import {
   OrganizationDeletionError,
 } from "../services/orgDeletion";
 import { removeEmployeeCommissionForMembership } from "../services/commissions";
+import { effectiveMemberDisplayName } from "../lib/memberDisplayName";
 
 const router: IRouter = Router();
 
@@ -92,6 +93,7 @@ function memberResponse(
   return {
     id: membership.id,
     role: membership.role,
+    displayName: effectiveMemberDisplayName(membership, user),
     createdAt: membership.createdAt.toISOString(),
     user: {
       id: user.id,
@@ -209,6 +211,7 @@ router.get("/orgs/:orgId/members", async (req, res): Promise<void> => {
     .select({
       id: orgUsers.id,
       role: orgUsers.role,
+      displayName: orgUsers.displayName,
       createdAt: orgUsers.createdAt,
       user: users,
     })
@@ -221,6 +224,7 @@ router.get("/orgs/:orgId/members", async (req, res): Promise<void> => {
       rows.map((r) => ({
         id: r.id,
         role: r.role,
+        displayName: effectiveMemberDisplayName(r, r.user),
         createdAt: r.createdAt.toISOString(),
         user: {
           id: r.user.id,
@@ -248,6 +252,12 @@ router.post(
       return;
     }
     const org = req.currentOrg!;
+    const requestedDisplayName =
+      parsed.data.displayName?.trim() || parsed.data.fullName?.trim() || null;
+    if (requestedDisplayName && requestedDisplayName.length > 120) {
+      res.status(400).json({ error: "Display name must be 120 characters or fewer" });
+      return;
+    }
 
     let [user] = await db.select().from(users).where(eq(users.email, email));
     if (!user) {
@@ -257,7 +267,10 @@ router.post(
         .values({
           clerkId: `pending:${email}`,
           email,
-          fullName: parsed.data.fullName ?? null,
+          // Keep the original fullName field populated for compatibility with
+          // existing invite consumers. The workspace override below remains
+          // the source of truth for this organization's display.
+          fullName: requestedDisplayName,
         })
         .returning();
     }
@@ -277,7 +290,12 @@ router.post(
 
     const [membership] = await db
       .insert(orgUsers)
-      .values({ orgId: org.id, userId: user.id, role: parsed.data.role })
+      .values({
+        orgId: org.id,
+        userId: user.id,
+        role: parsed.data.role,
+        displayName: requestedDisplayName,
+      })
       .returning();
     const delivery = await deliverInvitation({
       membershipId: membership.id,
@@ -352,6 +370,24 @@ router.patch(
       res.status(400).json({ error: parsed.error.message });
       return;
     }
+    if (parsed.data.role === undefined && parsed.data.displayName === undefined) {
+      res.status(400).json({ error: "At least one member field must be provided" });
+      return;
+    }
+    const requestedDisplayName =
+      parsed.data.displayName === null
+        ? null
+        : parsed.data.displayName?.trim();
+    if (
+      parsed.data.displayName !== undefined &&
+      requestedDisplayName !== null &&
+      (requestedDisplayName === undefined ||
+        requestedDisplayName.length < 1 ||
+        requestedDisplayName.length > 120)
+    ) {
+      res.status(400).json({ error: "Display name must be between 1 and 120 characters" });
+      return;
+    }
     const memberId = Array.isArray(req.params.memberId)
       ? req.params.memberId[0]
       : req.params.memberId;
@@ -385,7 +421,11 @@ router.patch(
         return { kind: "deleting" as const };
       }
 
-      if (membership.role === "owner" && parsed.data.role !== "owner") {
+      if (
+        parsed.data.role !== undefined &&
+        membership.role === "owner" &&
+        parsed.data.role !== "owner"
+      ) {
         const owners = await tx
           .select()
           .from(orgUsers)
@@ -398,9 +438,14 @@ router.patch(
         if (owners.length <= 1) return { kind: "last_owner" as const };
       }
 
+      const updates: Partial<typeof orgUsers.$inferInsert> = {};
+      if (parsed.data.role !== undefined) updates.role = parsed.data.role;
+      if (parsed.data.displayName !== undefined) {
+        updates.displayName = requestedDisplayName ?? null;
+      }
       const [updated] = await tx
         .update(orgUsers)
-        .set({ role: parsed.data.role })
+        .set(updates)
         .where(eq(orgUsers.id, membership.id))
         .returning();
       return { kind: "updated" as const, updated, user: targetUser };
@@ -421,15 +466,7 @@ router.patch(
 
     res.json(
       UpdateMemberRoleResponse.parse({
-        id: updated.id,
-        role: updated.role,
-        createdAt: updated.createdAt.toISOString(),
-        user: {
-          id: user.id,
-          clerkId: user.clerkId,
-          email: user.email,
-          fullName: user.fullName,
-        },
+        ...memberResponse(updated, user),
       }),
     );
   },

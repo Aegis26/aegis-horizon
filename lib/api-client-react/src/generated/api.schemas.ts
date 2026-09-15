@@ -645,6 +645,7 @@ export const OrgMembershipRole = {
 export interface OrgMembership {
   org: Organization;
   role: OrgMembershipRole;
+  displayName: string;
 }
 
 export interface Me {
@@ -712,6 +713,7 @@ export const MemberRole = {
 export interface Member {
   id: string;
   role: MemberRole;
+  displayName: string;
   user: User;
   /** @nullable */
   createdAt?: string | null;
@@ -729,6 +731,11 @@ export const MemberInviteRole = {
 
 export interface MemberInvite {
   email: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  displayName?: string;
   fullName?: string;
   role: MemberInviteRole;
 }
@@ -805,7 +812,13 @@ export const MemberRoleUpdateRole = {
 } as const;
 
 export interface MemberRoleUpdate {
-  role: MemberRoleUpdateRole;
+  role?: MemberRoleUpdateRole;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     * @nullable
+     */
+  displayName?: string | null;
 }
 
 export interface FeatureEntitlement {

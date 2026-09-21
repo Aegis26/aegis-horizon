@@ -1,0 +1,424 @@
+# Add Account Owner Filtering - Dropdown Selector
+
+**Goal:** Add filter dropdown to Accounts page to view accounts by owner.
+
+**Current:** Owner sees ALL accounts from all team members (flat list)
+
+**Needed:** Filter dropdown with options:
+- All Accounts (default)
+- My Accounts (logged-in user's only)
+- Jake's Accounts
+- Bob's Accounts
+- Jim's Accounts
+(dynamically populated from org team members)
+
+**Behavior:**
+- Dropdown shows all team members in the organization
+- Selecting a member filters to show only accounts where `owner_user_id` matches that member
+- "My Accounts" filters to current user's accounts
+- "All Accounts" shows everything again
+- Filter persists in UI but resets on page reload (or can use URL param)
+
+---
+
+## Task 1: Find Accounts Page
+
+Locate the Accounts list page:
+
+```bash
+find artifacts/crm/src/pages -name "*accounts*" -o -name "*Accounts*" -type f
+grep -r "export default.*Accounts\|function Accounts" artifacts/crm/src --include="*.tsx"
+```
+
+Look for the component that displays the accounts table/list.
+
+**Report back:**
+- File path
+- Current structure (how accounts are fetched and displayed)
+
+---
+
+## Task 2: Fetch Team Members
+
+The dropdown needs to show all team members. Add this to the Accounts page component:
+
+```typescript
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
+
+export default function AccountsPage() {
+  const router = useRouter()
+  const { orgId } = router.query
+  const [teamMembers, setTeamMembers] = useState([])
+  const [selectedOwnerId, setSelectedOwnerId] = useState('all') // 'all', 'me', or userId
+  const [accounts, setAccounts] = useState([])
+  const [currentUserId, setCurrentUserId] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  // Fetch current user ID (from Clerk)
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        const data = await response.json()
+        setCurrentUserId(data.userId)
+      } catch (error) {
+        console.error('Error fetching current user:', error)
+      }
+    }
+    fetchCurrentUser()
+  }, [])
+
+  // Fetch team members
+  useEffect(() => {
+    const fetchTeamMembers = async () => {
+      if (!orgId) return
+
+      try {
+        const response = await fetch(`/api/organizations/${orgId}/members`)
+        const data = await response.json()
+        setTeamMembers(data)
+      } catch (error) {
+        console.error('Error fetching team members:', error)
+      }
+    }
+
+    fetchTeamMembers()
+  }, [orgId])
+
+  // Fetch accounts based on selected filter
+  useEffect(() => {
+    const fetchAccounts = async () => {
+      if (!orgId) return
+
+      setLoading(true)
+
+      try {
+        // Build query params based on filter
+        let url = `/api/accounts?orgId=${orgId}`
+        
+        if (selectedOwnerId === 'me') {
+          url += `&ownerId=${currentUserId}`
+        } else if (selectedOwnerId !== 'all') {
+          url += `&ownerId=${selectedOwnerId}`
+        }
+
+        const response = await fetch(url)
+        const data = await response.json()
+        setAccounts(data)
+      } catch (error) {
+        console.error('Error fetching accounts:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchAccounts()
+  }, [orgId, selectedOwnerId, currentUserId])
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Accounts</h1>
+          <p className="text-gray-400 text-sm">Manage your customer organizations.</p>
+        </div>
+        <button className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded font-medium">
+          + Create Account
+        </button>
+      </div>
+
+      {/* ✅ Filter Dropdown */}
+      <div className="mb-6 flex items-center gap-4">
+        <label className="text-gray-400 text-sm">Filter by Account Owner:</label>
+        <select
+          value={selectedOwnerId}
+          onChange={(e) => setSelectedOwnerId(e.target.value)}
+          className="px-4 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-blue-500 focus:outline-none"
+        >
+          <option value="all">All Accounts</option>
+          {currentUserId && (
+            <option value="me">My Accounts</option>
+          )}
+          {teamMembers.map(member => (
+            <option key={member.user_id} value={member.user_id}>
+              {member.firstName} {member.lastName}'s Accounts
+            </option>
+          ))}
+        </select>
+        
+        {/* Show selected filter info */}
+        {selectedOwnerId !== 'all' && (
+          <span className="text-sm text-gray-400">
+            Showing {selectedOwnerId === 'me' ? 'your' : 'their'} accounts ({accounts.length})
+          </span>
+        )}
+      </div>
+
+      {/* Accounts Table */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
+        {loading ? (
+          <div className="p-8 text-center text-gray-400">Loading accounts...</div>
+        ) : accounts.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">
+            No accounts found for this filter.
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead className="border-b border-slate-700 bg-slate-900">
+              <tr>
+                <th className="text-left py-3 px-4 text-gray-400 font-medium">Name</th>
+                <th className="text-left py-3 px-4 text-gray-400 font-medium">Industry</th>
+                <th className="text-left py-3 px-4 text-gray-400 font-medium">Location</th>
+                <th className="text-left py-3 px-4 text-gray-400 font-medium">Owner</th>
+                <th className="text-left py-3 px-4 text-gray-400 font-medium">Health</th>
+                <th className="text-left py-3 px-4 text-gray-400 font-medium">Added</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map(account => (
+                <tr key={account.id} className="border-b border-slate-700 hover:bg-slate-700/50 cursor-pointer">
+                  <td className="py-3 px-4 text-white font-medium">{account.name}</td>
+                  <td className="py-3 px-4 text-gray-400">{account.industry}</td>
+                  <td className="py-3 px-4 text-gray-400">{account.city}, {account.state}</td>
+                  <td className="py-3 px-4 text-gray-400">{account.owner_name}</td>
+                  <td className="py-3 px-4">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      account.health_score === 'GREEN' ? 'bg-green-500/20 text-green-400' :
+                      account.health_score === 'YELLOW' ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-red-500/20 text-red-400'
+                    }`}>
+                      {account.health_score}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-gray-400 text-sm">{new Date(account.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+## Task 3: Create/Update Accounts API Endpoint
+
+Verify the GET `/api/accounts` endpoint handles the `ownerId` filter parameter.
+
+Check: `artifacts/api-server/src/routes/accounts.ts` (or wherever accounts are fetched)
+
+**Should look like:**
+
+```typescript
+app.get('/api/accounts', async (req, res) => {
+  const { orgId, ownerId } = req.query
+  const userId = req.user.id
+
+  try {
+    // Verify user is member of org
+    const membership = await db.query.orgUsers.findFirst({
+      where: and(
+        eq(orgUsers.org_id, orgId),
+        eq(orgUsers.user_id, userId),
+        eq(orgUsers.status, 'active')
+      ),
+    })
+
+    if (!membership) {
+      return res.status(403).json({ error: 'Not member of organization' })
+    }
+
+    // Build WHERE clause
+    let whereClause = eq(accounts.org_id, orgId)
+
+    // If ownerId filter provided, add it
+    if (ownerId) {
+      whereClause = and(
+        eq(accounts.org_id, orgId),
+        eq(accounts.owner_user_id, ownerId)
+      )
+    }
+
+    // Fetch accounts
+    const accountList = await db.query.accounts.findMany({
+      where: whereClause,
+    })
+
+    // Add owner names for display
+    const accountsWithNames = await Promise.all(
+      accountList.map(async (account) => {
+        // Get owner's name from Clerk or users table
+        const owner = await db.query.orgUsers.findFirst({
+          where: eq(orgUsers.user_id, account.owner_user_id),
+        })
+
+        return {
+          ...account,
+          owner_name: owner ? `${owner.firstName} ${owner.lastName}` : 'Unknown',
+        }
+      })
+    )
+
+    res.json(accountsWithNames)
+  } catch (error) {
+    console.error('Error fetching accounts:', error)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+```
+
+---
+
+## Task 4: Verify Existing Accounts Page Structure
+
+Look at the current Accounts page to understand:
+1. Where accounts are fetched
+2. How they're displayed (table, cards, etc.)
+3. Where to insert the filter dropdown
+4. Any existing filters or search functionality
+
+**Adapt the code above to fit your existing structure.**
+
+---
+
+## Task 5: Create Auth Endpoint (if needed)
+
+If the endpoint `/api/auth/me` doesn't exist, create it:
+
+```typescript
+app.get('/api/auth/me', async (req, res) => {
+  const userId = req.user.id // From auth middleware
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Not authenticated' })
+  }
+
+  res.json({ userId })
+})
+```
+
+---
+
+## Task 6: Test the Filter
+
+After deployment:
+
+1. **Go to Accounts page**
+2. **See dropdown with:**
+   - All Accounts (selected by default)
+   - My Accounts
+   - Jake's Accounts
+   - Bob's Accounts
+   - Jim's Accounts
+
+3. **Select different filters:**
+   - "Jake's Accounts" → Shows only accounts where owner = Jake
+   - "My Accounts" → Shows only your accounts
+   - "All Accounts" → Shows everything again
+
+4. **Verify:**
+   - Correct accounts display per filter
+   - Count updates correctly
+   - Table data matches the filtered owner
+
+---
+
+## Task 7: Optional Enhancements
+
+### A. URL Query Parameter (So filter persists on reload)
+
+```typescript
+// When filter changes
+const handleFilterChange = (value) => {
+  setSelectedOwnerId(value)
+  // Also update URL
+  router.push(`/accounts?orgId=${orgId}&filter=${value}`, undefined, { shallow: true })
+}
+
+// On mount, check URL for filter param
+useEffect(() => {
+  if (router.query.filter) {
+    setSelectedOwnerId(router.query.filter)
+  }
+}, [router.query.filter])
+```
+
+### B. Quick Stats (Accounts by Owner)
+
+Show a summary badge next to filter:
+
+```typescript
+<div className="mb-6 flex items-center gap-4">
+  <select ...>...</select>
+  
+  {/* Stats */}
+  <div className="text-sm text-gray-400">
+    Total: {accounts.length} | Jake: 5 | Bob: 3 | Jim: 2
+  </div>
+</div>
+```
+
+### C. Bulk Actions by Owner Filter
+
+Once filtered, allow bulk actions on filtered results:
+- Export selected
+- Reassign owner
+- Add tag
+- Change health status
+
+---
+
+## Task 8: Commit & Push
+
+```bash
+git add artifacts/crm/src/pages/ artifacts/api-server/src/routes/
+
+git commit -m "feat: Add account owner filtering with dropdown selector
+
+UI Changes:
+- Accounts page has new filter dropdown
+- Options: All Accounts, My Accounts, Each team member's accounts
+- Filter updates table in real-time
+- Shows account count for current filter
+
+API:
+- GET /api/accounts now accepts ?ownerId query param
+- Filters accounts by owner_user_id when provided
+- Includes owner name in response for display
+- Respects existing org/role permissions
+
+Features:
+- Quick switch between viewing all accounts vs. individual team member accounts
+- Helps owners understand account distribution across team
+- Easy way to see your own accounts vs. delegated accounts
+
+Example workflow:
+1. Owner goes to Accounts
+2. Selects 'Bob' from dropdown
+3. Sees all accounts assigned to Bob
+4. Can compare with Jake's accounts, Jim's accounts, etc."
+
+git push origin main
+```
+
+Railway will auto-deploy. 🚀
+
+---
+
+## Success Criteria
+
+✅ Dropdown appears on Accounts page  
+✅ Options include: All, My Accounts, Jake, Bob, Jim  
+✅ Selecting filter updates table in real-time  
+✅ Correct accounts display per filter  
+✅ Account count shows per filter  
+✅ "My Accounts" shows only logged-in user's accounts  
+✅ Individual member filters show only their accounts  
+✅ "All Accounts" shows everything again  
+
+**After this, owners can easily view accounts by team member!** 👥

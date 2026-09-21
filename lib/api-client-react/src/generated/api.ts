@@ -1948,7 +1948,7 @@ export const getListAccountsQueryKey = (orgId: string,
     }
 
 
-export const getListAccountsQueryOptions = <TData = Awaited<ReturnType<typeof listAccounts>>, TError = ErrorType<FeatureGateError>>(orgId: string,
+export const getListAccountsQueryOptions = <TData = Awaited<ReturnType<typeof listAccounts>>, TError = ErrorType<ErrorEnvelope | FeatureGateError>>(orgId: string,
     params?: ListAccountsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
@@ -1968,14 +1968,14 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type ListAccountsQueryResult = NonNullable<Awaited<ReturnType<typeof listAccounts>>>
-export type ListAccountsQueryError = ErrorType<FeatureGateError>
+export type ListAccountsQueryError = ErrorType<ErrorEnvelope | FeatureGateError>
 
 
 /**
  * @summary List accounts with search/filter (requires 'crm' feature; 403 otherwise)
  */
 
-export function useListAccounts<TData = Awaited<ReturnType<typeof listAccounts>>, TError = ErrorType<FeatureGateError>>(
+export function useListAccounts<TData = Awaited<ReturnType<typeof listAccounts>>, TError = ErrorType<ErrorEnvelope | FeatureGateError>>(
  orgId: string,
     params?: ListAccountsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 

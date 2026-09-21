@@ -32,6 +32,7 @@ import {
 } from "@workspace/db";
 import {
   ListAccountsResponse,
+  ListAccountsQueryParams,
   CreateAccountBody,
   UpdateAccountBody,
   CreateAccountResponse,
@@ -459,12 +460,35 @@ async function requestedOwner(
   return { owner: requested };
 }
 
+export function accountListScope(
+  req: Request,
+  ownerUserId?: string,
+): SQL[] {
+  const where: SQL[] = [eq(accounts.orgId, req.currentOrg!.id)];
+  where.push(...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId));
+  if (ownerUserId) {
+    where.push(eq(accounts.ownerUserId, ownerUserId));
+  }
+  return where;
+}
+
 router.get(
   "/orgs/:orgId/accounts",
   attachUser,
   attachOrg,
   requireFeature("crm"),
   async (req, res): Promise<void> => {
+    const ownerQuery = ListAccountsQueryParams.pick({ ownerUserId: true }).safeParse(req.query);
+    if (!ownerQuery.success) {
+      res.status(400).json({ error: ownerQuery.error.issues[0]?.message ?? "Invalid query" });
+      return;
+    }
+    const { ownerUserId } = ownerQuery.data;
+    if (ownerUserId && !(await isOrgMemberId(req.currentOrg!.id, ownerUserId))) {
+      res.status(400).json({ error: "ownerUserId must reference a member of this organization" });
+      return;
+    }
+
     const { q, industry, segmentId, includeInactive } = req.query as {
       q?: string;
       industry?: string;
@@ -472,8 +496,7 @@ router.get(
       includeInactive?: string;
     };
 
-    const where: SQL[] = [eq(accounts.orgId, req.currentOrg!.id)];
-    where.push(...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId));
+    const where = accountListScope(req, ownerUserId);
     if (includeInactive !== "true") {
       where.push(eq(accounts.isActive, true));
     }

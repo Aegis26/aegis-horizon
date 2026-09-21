@@ -14,7 +14,7 @@ import {
   segments,
   users,
 } from "@workspace/db";
-import { segmentVisibilityScope } from "../routes/crm";
+import { accountListScope, segmentVisibilityScope } from "../routes/crm";
 import {
   crmRecordCondition,
   crmVisibility,
@@ -40,6 +40,42 @@ test("management roles receive organization-wide CRM visibility", () => {
       undefined,
     );
   }
+});
+
+test("account owner filter matches the requested owner", () => {
+  const query = db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(and(...accountListScope(request("manager", "manager-a", "org-a"), "owner-a")))
+    .toSQL();
+
+  assert.match(query.sql.replaceAll('"', ""), /accounts\.org_id = \$1 and accounts\.owner_user_id = \$2/);
+  assert.deepEqual(query.params, ["org-a", "owner-a"]);
+});
+
+test("all-accounts scope omits the owner filter", () => {
+  const query = db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(and(...accountListScope(request("manager", "manager-a", "org-a"))))
+    .toSQL();
+
+  assert.doesNotMatch(query.sql.replaceAll('"', ""), /owner_user_id/);
+  assert.deepEqual(query.params, ["org-a"]);
+});
+
+test("account owner filter preserves employee visibility predicates", () => {
+  const query = db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(and(...accountListScope(request("user", "user-a", "org-a"), "owner-a")))
+    .toSQL();
+  const sql = query.sql.replaceAll('"', "");
+
+  assert.match(sql, /accounts\.owner_user_id is not null/);
+  assert.match(sql, /accounts\.owner_user_id = \$2 or accounts\.created_by_user_id = \$3/);
+  assert.match(sql, /accounts\.owner_user_id = \$4/);
+  assert.deepEqual(query.params, ["org-a", "user-a", "user-a", "owner-a"]);
 });
 
 test("users require a non-null owner and owner-or-creator match", () => {

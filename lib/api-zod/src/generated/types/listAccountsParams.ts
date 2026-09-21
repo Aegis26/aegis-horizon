@@ -17,4 +17,8 @@ industry?: string;
  */
 segmentId?: string;
 includeInactive?: boolean;
+/**
+ * Filter accounts by an owner who belongs to this organization
+ */
+ownerUserId?: string;
 };

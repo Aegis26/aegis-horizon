@@ -492,6 +492,11 @@ paths:
           in: query
           required: false
           schema: { type: boolean }
+        - name: ownerUserId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filter accounts by an owner who belongs to this organization
       responses:
         "200":
           description: Accounts
@@ -501,6 +506,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Account"
+        "400":
+          description: Invalid owner filter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "403":
           description: Feature not enabled
           content:

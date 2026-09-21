@@ -483,7 +483,8 @@ export const ListAccountsQueryParams = zod.object({
   "q": zod.coerce.string().optional().describe('Search by name, industry, location, or custom field values'),
   "industry": zod.coerce.string().optional(),
   "segmentId": zod.coerce.string().optional().describe('Filter by a saved segment\'s conditions'),
-  "includeInactive": zod.coerce.boolean().optional()
+  "includeInactive": zod.coerce.boolean().optional(),
+  "ownerUserId": zod.coerce.string().uuid().optional().describe('Filter accounts by an owner who belongs to this organization')
 })
 
 export const ListAccountsResponseItem = zod.object({

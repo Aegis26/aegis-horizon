@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useListAccounts, getListAccountsQueryKey, useListSegments, getListSegmentsQueryKey, useCreateAccount, useDeleteAccount, getGetOrgDashboardQueryKey } from "@workspace/api-client-react";
+import { useEffect, useState } from "react";
+import { useListAccounts, getListAccountsQueryKey, useListSegments, getListSegmentsQueryKey, useCreateAccount, useDeleteAccount, getGetOrgDashboardQueryKey, useGetMe, getGetMeQueryKey, useListMembers, getListMembersQueryKey } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { Link, useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Lock, Plus, Users, Search, Filter, Trash2, ArrowRight } from "lucide-react";
-import { formatDate } from "@/lib/format";
+import { formatDate, getMemberDisplayName } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -18,6 +18,10 @@ import * as z from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
+import { Label } from "@/components/ui/label";
+
+const ALL_ACCOUNTS = "__all_accounts__";
+const MY_ACCOUNTS = "__my_accounts__";
 
 const accountSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -35,17 +39,53 @@ export default function Accounts() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [segmentId, setSegmentId] = useState<string>("");
+  const [ownerFilter, setOwnerFilter] = useState({
+    orgId: selectedOrgId,
+    value: ALL_ACCOUNTS,
+  });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const { data: accounts, error, isLoading } = useListAccounts(selectedOrgId || "", {
+  useEffect(() => {
+    setOwnerFilter({ orgId: selectedOrgId, value: ALL_ACCOUNTS });
+  }, [selectedOrgId]);
+
+  const { data: me, isLoading: meLoading, error: meError } = useGetMe({
+    query: {
+      enabled: !!selectedOrgId,
+      retry: false,
+      queryKey: getGetMeQueryKey(),
+    },
+  });
+
+  const selectedOwner = ownerFilter.orgId === selectedOrgId
+    ? ownerFilter.value
+    : ALL_ACCOUNTS;
+  const effectiveOwnerUserId = selectedOwner === MY_ACCOUNTS
+    ? me?.user.id
+    : selectedOwner === ALL_ACCOUNTS
+      ? undefined
+      : selectedOwner;
+  const accountQuery = {
     q: search || undefined,
     segmentId: segmentId || undefined,
+    ownerUserId: effectiveOwnerUserId,
+  };
+  const { data: accounts, error, isLoading } = useListAccounts(selectedOrgId || "", {
+    ...accountQuery,
   }, {
     query: {
       enabled: !!selectedOrgId,
       retry: false,
-      queryKey: getListAccountsQueryKey(selectedOrgId || "", { q: search || undefined, segmentId: segmentId || undefined })
+      queryKey: getListAccountsQueryKey(selectedOrgId || "", accountQuery)
     }
+  });
+
+  const { data: members, isLoading: membersLoading, error: membersError } = useListMembers(selectedOrgId || "", {
+    query: {
+      enabled: !!selectedOrgId,
+      retry: false,
+      queryKey: getListMembersQueryKey(selectedOrgId || ""),
+    },
   });
 
   const { data: segments } = useListSegments(selectedOrgId || "", {
@@ -185,7 +225,7 @@ export default function Accounts() {
       </header>
 
       <div className="p-8">
-        <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 mb-2">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
@@ -211,6 +251,40 @@ export default function Accounts() {
               </SelectContent>
             </Select>
           </div>
+          <div className="w-full sm:w-64 space-y-1.5">
+            <Label htmlFor="account-owner-filter">Account owner</Label>
+            <Select
+              value={selectedOwner}
+              onValueChange={(value) => setOwnerFilter({ orgId: selectedOrgId, value })}
+              disabled={meLoading || membersLoading}
+            >
+              <SelectTrigger
+                id="account-owner-filter"
+                aria-label="Filter accounts by owner"
+                className="bg-card border-primary/20"
+              >
+                <SelectValue placeholder={meLoading || membersLoading ? "Loading owners..." : "All Accounts"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_ACCOUNTS}>All Accounts</SelectItem>
+                {me?.user.id && <SelectItem value={MY_ACCOUNTS}>My Accounts</SelectItem>}
+                {members?.map((member) => (
+                  <SelectItem key={member.user.id} value={member.user.id}>
+                    {getMemberDisplayName(member)}&apos;s Accounts
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="mb-6 min-h-5 text-sm text-muted-foreground" aria-live="polite">
+          {meLoading || membersLoading
+            ? "Loading account owners..."
+            : meError || membersError
+            ? "Account owners could not be loaded. All accessible accounts remain available."
+            : isLoading
+              ? "Loading accounts..."
+              : `${accounts?.length ?? 0} ${(accounts?.length ?? 0) === 1 ? "account" : "accounts"} shown`}
         </div>
 
         <Card className="border-primary/10 shadow-md bg-card/80 backdrop-blur">
@@ -242,7 +316,7 @@ export default function Accounts() {
                         </div>
                         <h3 className="font-display text-2xl font-bold mb-2">No accounts found</h3>
                         <p className="text-muted-foreground max-w-sm">
-                          {search || segmentId ? "No accounts match your filters." : "Start by adding your first customer organization."}
+                          {search || segmentId || selectedOwner !== ALL_ACCOUNTS ? "No accounts match your filters." : "Start by adding your first customer organization."}
                         </p>
                       </div>
                     </TableCell>

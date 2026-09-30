@@ -8,6 +8,7 @@ import {
   useListProductTypes,
   useCreateOpportunity, useUpdateOpportunity, useConvertOpportunityToCustomer,
   useGetOpportunity, getGetOpportunityQueryKey,
+  getGetForecastQueryKey, getGetOrgDashboardQueryKey,
   useCreateQuote, getListQuotesQueryKey,
   useGetClosePrediction, getGetClosePredictionQueryKey,
   useRecomputeClosePrediction,
@@ -39,6 +40,7 @@ import {
   getMemberDisplayName,
 } from "@/lib/format";
 import { earnedCommissionsQueryRoot, productTypesQueryKey } from "@/lib/commissions";
+import { dealDraftFromOpportunity, parseDealDraft } from "@/lib/dealEdit";
 
 const UNASSIGNED_OWNER = "__unassigned__";
 const GENERAL_PRODUCT = "__general__";
@@ -163,6 +165,8 @@ export default function Opportunities() {
     queryClient.invalidateQueries({ queryKey: getListOpportunitiesQueryKey(orgId) });
     queryClient.invalidateQueries({ queryKey: getListPipelinesQueryKey(orgId) });
     if (detailId) queryClient.invalidateQueries({ queryKey: getGetOpportunityQueryKey(orgId, detailId) });
+    queryClient.invalidateQueries({ queryKey: getGetForecastQueryKey(orgId) });
+    queryClient.invalidateQueries({ queryKey: getGetOrgDashboardQueryKey(orgId) });
     queryClient.invalidateQueries({ queryKey: earnedCommissionsQueryRoot(orgId) });
   };
 
@@ -171,7 +175,7 @@ export default function Opportunities() {
 
   const moveToStage = (oppId: string, stage: string) => {
     const opp = opps?.find((o) => o.id === oppId);
-    if (!opp || opp.stage === stage) return;
+    if (!opp || opp.stage === stage || membership?.role === "viewer" || updateOpp.isPending || detailId) return;
     updateOpp.mutate(
       { orgId, opportunityId: oppId, data: { stage } },
       {
@@ -208,9 +212,11 @@ export default function Opportunities() {
               <List className="h-4 w-4" />
             </Button>
           </div>
-          <Button className="gap-2" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> Create opportunity
-          </Button>
+          {membership?.role !== "viewer" && (
+            <Button className="gap-2" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" /> Create opportunity
+            </Button>
+          )}
         </div>
       </header>
 
@@ -245,7 +251,7 @@ export default function Opportunities() {
                     {stageOpps.map((opp) => (
                       <div
                         key={opp.id}
-                        draggable
+                         draggable={membership?.role !== "viewer" && !updateOpp.isPending && !detailId}
                         onDragStart={(e) => { setDragId(opp.id); e.dataTransfer.setData("text/plain", opp.id); }}
                         onClick={() => setDetailId(opp.id)}
                         className="rounded-md border border-border/60 bg-card p-3 cursor-pointer hover:border-primary/40 transition-colors"
@@ -257,7 +263,7 @@ export default function Opportunities() {
                         </p>
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-mono font-medium text-foreground">
-                            {opp.value ? formatDollars(Number(opp.value)) : "—"}
+                             {opp.value != null ? formatDollars(Number(opp.value)) : "—"}
                           </span>
                           <span className="text-xs font-mono text-muted-foreground">{opp.probability ?? 0}%</span>
                         </div>
@@ -314,7 +320,7 @@ export default function Opportunities() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right font-mono font-medium text-foreground">
-                          {opp.value ? formatDollars(Number(opp.value)) : "—"}
+                           {opp.value != null ? formatDollars(Number(opp.value)) : "—"}
                         </TableCell>
                         <TableCell className="text-right font-mono text-muted-foreground/80">
                           {opp.probability != null ? `${opp.probability}%` : "—"}
@@ -373,6 +379,7 @@ export default function Opportunities() {
           orgId={orgId}
           opportunityId={detailId}
           stages={stages}
+           canEdit={Boolean(membership && membership.role !== "viewer")}
           canAssign={canAssignOpportunityOwner}
           members={members ?? []}
           membersLoading={membersLoading}
@@ -560,13 +567,14 @@ function CreateOpportunityDialog({
 }
 
 function OpportunityDetailDialog({
-  orgId, opportunityId, stages, canAssign, members, membersLoading,
+  orgId, opportunityId, stages, canEdit, canAssign, members, membersLoading,
   productTypes, productTypesLoading, productTypesError, retryProductTypes,
   onClose, onInvalidate, onGoToQuotes,
 }: {
   orgId: string;
   opportunityId: string;
   stages: { key: string; name: string }[];
+  canEdit: boolean;
   canAssign: boolean;
   members: Member[];
   membersLoading: boolean;
@@ -588,13 +596,47 @@ function OpportunityDetailDialog({
   const createQuote = useCreateQuote();
   const [ownerUserId, setOwnerUserId] = useState(UNASSIGNED_OWNER);
   const [productTypeId, setProductTypeId] = useState(GENERAL_PRODUCT);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ name: "", value: "", expectedCloseDate: "", probability: "", nextAction: "" });
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     if (opp) {
       setOwnerUserId(opp.ownerUserId ?? UNASSIGNED_OWNER);
       setProductTypeId(opp.productTypeId ?? GENERAL_PRODUCT);
+      if (!editing) setDraft(dealDraftFromOpportunity(opp));
     }
-  }, [opp?.id, opp?.ownerUserId, opp?.productTypeId]);
+  }, [opp?.id, opp?.name, opp?.value, opp?.expectedCloseDate, opp?.probability, opp?.nextAction, opp?.ownerUserId, opp?.productTypeId, editing]);
+
+  useEffect(() => {
+    setEditing(false);
+    setFormError("");
+  }, [opportunityId]);
+
+  const busy = updateOpp.isPending || convert.isPending || createQuote.isPending;
+  const blocked = editing || busy;
+
+  const saveDeal = () => {
+    if (!opp || busy) return;
+    const parsed = parseDealDraft(draft, opp.forecastCategory === "closed_won");
+    if (!parsed.data) { setFormError(parsed.error); return; }
+    setFormError("");
+    updateOpp.mutate({
+      orgId, opportunityId,
+      data: parsed.data,
+    }, {
+      onSuccess: (updated) => {
+        queryClient.setQueryData(getGetOpportunityQueryKey(orgId, opportunityId), updated);
+        setEditing(false);
+        onInvalidate();
+        toast({ title: "Deal updated" });
+      },
+      onError: (e) => {
+        setFormError((e as Error).message);
+        toast({ title: "Could not update deal", description: (e as Error).message, variant: "destructive" });
+      },
+    });
+  };
 
   if (!opp) return null;
   const isClosed = opp.forecastCategory === "closed_won" || opp.forecastCategory === "closed_lost";
@@ -617,26 +659,47 @@ function OpportunityDetailDialog({
   ];
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg">
+    <Dialog open onOpenChange={(v) => !v && !busy && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display">{opp.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {canEdit && !editing && (
+            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => { setFormError(""); setEditing(true); }} data-testid="button-edit-deal">Edit deal</Button>
+          )}
+          {editing ? (
+            <form id="edit-deal-form" className="space-y-3 border-b border-primary/10 pb-4" onSubmit={(e) => { e.preventDefault(); saveDeal(); }}>
+              <div className="space-y-1"><Label htmlFor="edit-deal-name">Deal name</Label><Input id="edit-deal-name" data-testid="input-edit-deal-name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} disabled={busy} required /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1"><Label htmlFor="edit-deal-value">Value (USD)</Label><Input id="edit-deal-value" data-testid="input-edit-deal-value" type="number" min="0" step="any" value={draft.value} onChange={(e) => setDraft({ ...draft, value: e.target.value })} disabled={busy} /></div>
+                <div className="space-y-1"><Label htmlFor="edit-deal-probability">Probability (%)</Label><Input id="edit-deal-probability" data-testid="input-edit-deal-probability" type="number" min="0" max="100" step="1" value={draft.probability} onChange={(e) => setDraft({ ...draft, probability: e.target.value })} disabled={busy} /></div>
+              </div>
+              <div className="space-y-1"><Label htmlFor="edit-deal-close-date">Expected close date</Label><Input id="edit-deal-close-date" data-testid="input-edit-deal-close-date" type="date" value={draft.expectedCloseDate} onChange={(e) => setDraft({ ...draft, expectedCloseDate: e.target.value })} disabled={busy} /></div>
+              <div className="space-y-1"><Label htmlFor="edit-deal-next-action">Next action</Label><Input id="edit-deal-next-action" data-testid="input-edit-deal-next-action" value={draft.nextAction} onChange={(e) => setDraft({ ...draft, nextAction: e.target.value })} disabled={busy} /></div>
+              {formError && <p role="alert" className="text-sm text-destructive" data-testid="error-edit-deal">{formError}</p>}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" disabled={busy} onClick={() => { setEditing(false); setFormError(""); }} data-testid="button-cancel-edit-deal">Cancel</Button>
+                <Button type="submit" disabled={busy} data-testid="button-save-edit-deal">{updateOpp.isPending ? "Saving..." : "Save deal"}</Button>
+              </div>
+            </form>
+          ) : null}
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <div><span className="text-muted-foreground">Account</span><p className="font-medium">{opp.accountName ?? "—"}</p></div>
             <div><span className="text-muted-foreground">Owner</span><p className="font-medium">{opp.ownerName ?? "Unassigned"}</p></div>
-            <div><span className="text-muted-foreground">Value</span><p className="font-mono font-medium">{opp.value ? formatDollars(Number(opp.value)) : "—"}</p></div>
+            <div><span className="text-muted-foreground">Value</span><p className="font-mono font-medium">{opp.value != null ? formatDollars(Number(opp.value)) : "—"}</p></div>
             <div><span className="text-muted-foreground">Probability</span><p className="font-mono font-medium">{opp.probability ?? 0}%</p></div>
             <div><span className="text-muted-foreground">Expected close</span><p className="font-mono">{formatDate(opp.expectedCloseDate)}</p></div>
             <div><span className="text-muted-foreground">Forecast</span><p className="capitalize">{(opp.forecastCategory ?? "pipeline").replace("_", " ")}</p></div>
             <div><span className="text-muted-foreground">Product</span><p className="font-medium">{formatProductName(opp.productTypeId, opp.productTypeName)}</p></div>
+            <div className="col-span-2"><span className="text-muted-foreground">Next action</span><p>{opp.nextAction || "—"}</p></div>
           </div>
 
           <div className="space-y-2">
             <Label>Stage</Label>
             <Select
               value={opp.stage}
+              disabled={!canEdit || blocked}
               onValueChange={(stage) =>
                 updateOpp.mutate(
                   { orgId, opportunityId, data: { stage } },
@@ -666,7 +729,7 @@ function OpportunityDetailDialog({
             <Select
               value={productTypeId}
               onValueChange={setProductTypeId}
-              disabled={productTypesLoading || productTypesError || updateOpp.isPending}
+              disabled={!canEdit || blocked || productTypesLoading || productTypesError}
             >
               <SelectTrigger>
                 <SelectValue placeholder={productTypesLoading ? "Loading products..." : "General / unclassified"} />
@@ -685,14 +748,14 @@ function OpportunityDetailDialog({
             ) : (
               <p className="text-xs text-muted-foreground">Only active products can be assigned to a deal. Existing inactive products remain visible.</p>
             )}
-            {productDirty && (
+            {canEdit && productDirty && (
               <div className="flex items-center justify-end gap-2 pt-1">
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={() => setProductTypeId(savedProductTypeId)}
-                  disabled={updateOpp.isPending}
+                   disabled={blocked}
                 >
                   Cancel
                 </Button>
@@ -723,7 +786,7 @@ function OpportunityDetailDialog({
                       },
                     )
                   }
-                  disabled={updateOpp.isPending}
+                   disabled={blocked}
                 >
                   {updateOpp.isPending ? "Saving..." : "Save product"}
                 </Button>
@@ -731,13 +794,13 @@ function OpportunityDetailDialog({
             )}
           </div>
 
-          {canAssign && (
+           {canAssign && (
             <div className="space-y-2 border-t border-primary/10 pt-4">
               <Label>Owner</Label>
               <Select
                 value={ownerUserId}
                 onValueChange={setOwnerUserId}
-                disabled={updateOpp.isPending || membersLoading}
+                 disabled={blocked || membersLoading}
               >
                 <SelectTrigger data-testid="select-edit-opportunity-owner">
                   <SelectValue placeholder={membersLoading ? "Loading members..." : "Select owner"} />
@@ -751,14 +814,14 @@ function OpportunityDetailDialog({
                   ))}
                 </SelectContent>
               </Select>
-              {ownerDirty && (
+              {canEdit && ownerDirty && (
                 <div className="flex items-center justify-end gap-2 pt-1">
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => setOwnerUserId(savedOwnerUserId)}
-                    disabled={updateOpp.isPending}
+                     disabled={blocked}
                     data-testid="button-cancel-opportunity-owner"
                   >
                     Cancel
@@ -792,7 +855,7 @@ function OpportunityDetailDialog({
                         },
                       )
                     }
-                    disabled={updateOpp.isPending}
+                     disabled={blocked}
                     data-testid="button-save-opportunity-owner"
                   >
                     {updateOpp.isPending ? "Saving..." : "Save owner"}
@@ -830,7 +893,7 @@ function OpportunityDetailDialog({
           <Button
             variant="outline"
             className="gap-2"
-            disabled={createQuote.isPending}
+             disabled={!canEdit || blocked}
             onClick={() =>
               createQuote.mutate(
                 { orgId, data: { opportunityId } },
@@ -847,12 +910,15 @@ function OpportunityDetailDialog({
           >
             <FileText className="h-4 w-4" /> {createQuote.isPending ? "Creating..." : "Create quote"}
           </Button>
-          {!isClosed && (
+           {!isClosed && canEdit && (
             <Button
               className="gap-2"
-              disabled={convert.isPending}
+               disabled={blocked}
+               data-testid="button-mark-deal-won"
               onClick={() =>
-                convert.mutate(
+                 !opp.value
+                   ? toast({ title: "Deal value required", description: "Save a value before marking this deal won.", variant: "destructive" })
+                   : convert.mutate(
                   { orgId, opportunityId },
                   {
                     onSuccess: () => {

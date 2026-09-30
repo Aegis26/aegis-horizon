@@ -81,6 +81,7 @@ import {
 } from "../services/crmAccess";
 import { recordCommissionForClosedWon } from "../services/commissions";
 import { effectiveMemberDisplayName } from "../lib/memberDisplayName";
+import { opportunityValueError } from "../lib/opportunityValue";
 
 const router: IRouter = Router();
 const gate = [attachUser, attachOrg, requireFeature("sales")] as const;
@@ -488,6 +489,8 @@ router.post("/orgs/:orgId/opportunities", ...gate, async (req, res): Promise<voi
     res.status(400).json({ error: "stage is not part of the selected pipeline" });
     return;
   }
+  const valueError = opportunityValueError(parsed.data.value, stageDef?.forecastCategory === "closed_won");
+  if (valueError) { res.status(400).json({ error: valueError }); return; }
   const row = await db.transaction(async (tx) => {
     const [lockedAccount] = await tx.select({ id: accounts.id }).from(accounts).where(and(
       eq(accounts.id, parsed.data.accountId), eq(accounts.orgId, orgId),
@@ -573,6 +576,12 @@ router.patch(
     const orgId = req.currentOrg!.id;
     const data = parsed.data;
     const updates: Partial<typeof opportunities.$inferInsert> = { ...data };
+    if (data.name !== undefined) {
+      updates.name = data.name.trim();
+      if (!updates.name) { res.status(400).json({ error: "Deal name is required" }); return; }
+    }
+    const valueError = data.value === undefined ? null : opportunityValueError(data.value);
+    if (valueError) { res.status(400).json({ error: valueError }); return; }
 
     const stageChanged = data.stage !== undefined && data.stage !== opp.stage;
     if (stageChanged) {
@@ -633,6 +642,9 @@ router.patch(
         ))
         .for("update");
       if (!locked) return undefined;
+      const won = (updates.forecastCategory ?? locked.forecastCategory) === "closed_won";
+      const closeValueError = opportunityValueError(data.value === undefined ? locked.value : data.value, won);
+      if (closeValueError) return { error: closeValueError };
       const [row] = await tx
         .update(opportunities)
         .set(updates)
@@ -656,6 +668,7 @@ router.patch(
       return { before: locked, row };
     });
     if (!result) { res.status(404).json({ error: "Opportunity not found" }); return; }
+    if ("error" in result) { res.status(400).json({ error: result.error }); return; }
     const { before: lockedOpp, row } = result;
     await appendAuditEvent({
       orgId,
@@ -736,6 +749,8 @@ router.post(
         ))
         .for("update");
       if (!locked) return undefined;
+      const valueError = opportunityValueError(locked.value, locked.forecastCategory !== "closed_won");
+      if (valueError) return { error: valueError };
       const [row] = await tx
         .update(opportunities)
         .set({
@@ -764,6 +779,7 @@ router.post(
       return { before: locked, row };
     });
     if (!result) { res.status(404).json({ error: "Opportunity not found" }); return; }
+    if ("error" in result) { res.status(400).json({ error: result.error }); return; }
     const { before: lockedOpp, row } = result;
     await appendAuditEvent({
       orgId,

@@ -6,9 +6,10 @@ import {
   useGetMe, getGetMeQueryKey,
   useListMembers, getListMembersQueryKey,
   useListProductTypes,
-  useCreateOpportunity, useUpdateOpportunity, useConvertOpportunityToCustomer,
+  useCreateOpportunity, useUpdateOpportunity, useDeleteOpportunity, useConvertOpportunityToCustomer,
   useGetOpportunity, getGetOpportunityQueryKey,
-  getGetForecastQueryKey, getGetOrgDashboardQueryKey,
+  getGetForecastQueryKey, getGetWeightedRevenueForecastQueryKey,
+  getGetTerritoryCoverageQueryKey, getGetOrgDashboardQueryKey, getGetAccountQueryKey,
   useCreateQuote, getListQuotesQueryKey,
   useGetClosePrediction, getGetClosePredictionQueryKey,
   useRecomputeClosePrediction,
@@ -28,11 +29,15 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Lock, Plus, Target, LayoutGrid, List, FileText, Trophy, History, Sparkles, RefreshCw } from "lucide-react";
+import { Lock, Plus, Target, LayoutGrid, List, FileText, Trophy, History, Sparkles, RefreshCw, Trash2 } from "lucide-react";
 import {
   formatDollars,
   formatDate,
@@ -161,10 +166,10 @@ export default function Opportunities() {
   const accountName = (id: string | undefined) =>
     (id && accounts?.find((a) => a.id === id)?.name) || "";
 
-  const invalidate = () => {
+  const invalidate = (includeDetail = true) => {
     queryClient.invalidateQueries({ queryKey: getListOpportunitiesQueryKey(orgId) });
     queryClient.invalidateQueries({ queryKey: getListPipelinesQueryKey(orgId) });
-    if (detailId) queryClient.invalidateQueries({ queryKey: getGetOpportunityQueryKey(orgId, detailId) });
+    if (includeDetail && detailId) queryClient.invalidateQueries({ queryKey: getGetOpportunityQueryKey(orgId, detailId) });
     queryClient.invalidateQueries({ queryKey: getGetForecastQueryKey(orgId) });
     queryClient.invalidateQueries({ queryKey: getGetOrgDashboardQueryKey(orgId) });
     queryClient.invalidateQueries({ queryKey: earnedCommissionsQueryRoot(orgId) });
@@ -388,7 +393,7 @@ export default function Opportunities() {
            productTypesError={productTypesQuery.isError}
            retryProductTypes={() => void productTypesQuery.refetch()}
           onClose={() => setDetailId(null)}
-          onInvalidate={invalidate}
+           onInvalidate={invalidate}
           onGoToQuotes={() => navigate("/quotes")}
         />
       )}
@@ -583,7 +588,7 @@ function OpportunityDetailDialog({
   productTypesError: boolean;
   retryProductTypes: () => void;
   onClose: () => void;
-  onInvalidate: () => void;
+  onInvalidate: (includeDetail?: boolean) => void;
   onGoToQuotes: () => void;
 }) {
   const { toast } = useToast();
@@ -592,6 +597,7 @@ function OpportunityDetailDialog({
     query: { queryKey: getGetOpportunityQueryKey(orgId, opportunityId) },
   });
   const updateOpp = useUpdateOpportunity();
+  const deleteOpp = useDeleteOpportunity();
   const convert = useConvertOpportunityToCustomer();
   const createQuote = useCreateQuote();
   const [ownerUserId, setOwnerUserId] = useState(UNASSIGNED_OWNER);
@@ -599,6 +605,8 @@ function OpportunityDetailDialog({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ name: "", value: "", expectedCloseDate: "", probability: "", nextAction: "" });
   const [formError, setFormError] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     if (opp) {
@@ -611,10 +619,37 @@ function OpportunityDetailDialog({
   useEffect(() => {
     setEditing(false);
     setFormError("");
+    setDeleteOpen(false);
+    setDeleteError("");
   }, [opportunityId]);
 
-  const busy = updateOpp.isPending || convert.isPending || createQuote.isPending;
+  const busy = updateOpp.isPending || convert.isPending || createQuote.isPending || deleteOpp.isPending;
   const blocked = editing || busy;
+
+  const confirmDelete = () => {
+    if (!opp || !canEdit || blocked) return;
+    setDeleteError("");
+    deleteOpp.mutate({ orgId, opportunityId }, {
+      onSuccess: () => {
+        setDeleteOpen(false);
+        onClose();
+        queryClient.removeQueries({ queryKey: getGetOpportunityQueryKey(orgId, opportunityId) });
+        queryClient.removeQueries({ queryKey: getGetClosePredictionQueryKey(orgId, opportunityId) });
+        queryClient.setQueryData<Opportunity[]>(
+          getListOpportunitiesQueryKey(orgId),
+          (current) => current?.filter((item) => item.id !== opportunityId),
+        );
+        onInvalidate(false);
+        queryClient.invalidateQueries({ queryKey: getGetWeightedRevenueForecastQueryKey(orgId) });
+        queryClient.invalidateQueries({ queryKey: getGetTerritoryCoverageQueryKey(orgId) });
+        queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey(orgId, opp.accountId) });
+        toast({ title: "Deal deleted", description: `"${opp.name}" was removed. The customer account was kept.` });
+      },
+      onError: (error) => {
+        setDeleteError((error as Error).message || "Could not delete this deal. Please try again.");
+      },
+    });
+  };
 
   const saveDeal = () => {
     if (!opp || busy) return;
@@ -659,7 +694,8 @@ function OpportunityDetailDialog({
   ];
 
   return (
-    <Dialog open onOpenChange={(v) => !v && !busy && onClose()}>
+    <>
+    <Dialog open onOpenChange={(v) => !v && !busy && !deleteOpen && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display">{opp.name}</DialogTitle>
@@ -704,7 +740,7 @@ function OpportunityDetailDialog({
                 updateOpp.mutate(
                   { orgId, opportunityId, data: { stage } },
                   {
-                    onSuccess: onInvalidate,
+                    onSuccess: () => onInvalidate(),
                     onError: (e) => toast({ title: "Could not update stage", description: (e as Error).message, variant: "destructive" }),
                   },
                 )
@@ -890,6 +926,18 @@ function OpportunityDetailDialog({
           )}
         </div>
         <DialogFooter className="flex-col sm:flex-row gap-2">
+          {canEdit && (
+            <Button
+              type="button"
+              variant="destructive"
+              className="gap-2"
+              disabled={blocked}
+              data-testid="button-delete-deal"
+              onClick={() => { setDeleteError(""); setDeleteOpen(true); }}
+            >
+              <Trash2 className="h-4 w-4" /> Delete deal
+            </Button>
+          )}
           <Button
             variant="outline"
             className="gap-2"
@@ -936,6 +984,33 @@ function OpportunityDetailDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <AlertDialog open={deleteOpen} onOpenChange={(open) => {
+      if (deleteOpp.isPending) return;
+      setDeleteOpen(open);
+      if (!open) setDeleteError("");
+    }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete deal “{opp.name}”?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This permanently removes the deal and its stage history. The customer account will be retained. This cannot be undone. Deals with linked quotes, earned commissions, or a closed-won status cannot be deleted.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {deleteError && <p role="alert" className="text-sm text-destructive" data-testid="error-delete-deal">{deleteError}</p>}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleteOpp.isPending} data-testid="button-cancel-delete-deal">Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={blocked}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            data-testid="button-confirm-delete-deal"
+            onClick={(event) => { event.preventDefault(); confirmDelete(); }}
+          >
+            {deleteOpp.isPending ? "Deleting..." : "Delete deal"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 

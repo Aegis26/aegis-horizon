@@ -15,6 +15,12 @@ Earned commissions are snapshots, not a live recalculation of the current deal o
 
 **How to apply:** Treat backfill, reversals, and retrospective adjustments as explicit future business decisions rather than side effects of ordinary deal editing. Complete account deletion must also remove the deleted person's commission snapshots from surviving workspaces.
 
+Pipeline duplicate deletion must not erase quote documents or financial history; use archival rather than relaxing deletion protections if historical deals later need to be hidden.
+
+**Why:** Duplicate cleanup is not permission to remove issued documents or earned commissions. Reopened deals can still carry earned commission history.
+
+**How to apply:** Keep ordinary duplicate cleanup separate from historical-record retention and commission reversal workflows.
+
 Product names are Owner-defined, with a separately configured rate for every employee/product pair—not one shared percentage for all employees.
 
 **Why:** The user explicitly clarified that the Owner classifies the products and that rates can differ by employee for each product.

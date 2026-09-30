@@ -3,6 +3,7 @@ import { and, desc, eq, gte, ilike, isNull, lt, or, sql } from "drizzle-orm";
 import {
   db,
   accounts,
+  commissions,
   opportunities,
   opportunityStageHistory,
   productTypes,
@@ -79,7 +80,7 @@ import {
   crmRecordCondition,
   withCrmVisibility,
 } from "../services/crmAccess";
-import { recordCommissionForClosedWon } from "../services/commissions";
+import { isClosedWonOpportunity, recordCommissionForClosedWon } from "../services/commissions";
 import { effectiveMemberDisplayName } from "../lib/memberDisplayName";
 import { opportunityValueError } from "../lib/opportunityValue";
 
@@ -699,23 +700,55 @@ router.delete(
   "/orgs/:orgId/opportunities/:opportunityId",
   ...gate,
   async (req, res): Promise<void> => {
-    const opp = await findOpportunity(req);
-    if (!opp) {
-      res.status(404).json({ error: "Opportunity not found" });
+    const orgId = req.currentOrg!.id;
+    const result = await db.transaction(async (tx) => {
+      // Quote creation takes this same row lock before inserting its quote.
+      // A concurrent creator must finish before the checks below, or find no
+      // opportunity after this deletion commits.
+      const [opp] = await tx.select().from(opportunities).where(and(
+        eq(opportunities.id, req.params.opportunityId as string),
+        eq(opportunities.orgId, orgId),
+        ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+      )).for("update");
+      if (!opp) return { status: 404 as const };
+      const [account] = await tx.select({ id: accounts.id }).from(accounts).where(and(
+        eq(accounts.id, opp.accountId),
+        eq(accounts.orgId, orgId),
+        ...withCrmVisibility(req, accounts.ownerUserId, accounts.createdByUserId),
+      )).limit(1);
+      if (!account) return { status: 404 as const };
+      if (isClosedWonOpportunity(opp)) {
+        return { status: 409 as const, error: "Closed-won deals cannot be deleted. Keep the deal for sales history." };
+      }
+      const [earned] = await tx.select({ id: commissions.id }).from(commissions).where(and(
+        eq(commissions.orgId, orgId), eq(commissions.opportunityId, opp.id),
+      )).limit(1);
+      if (earned) {
+        return { status: 409 as const, error: "This deal has earned commission history and cannot be deleted, even if reopened." };
+      }
+      const [quote] = await tx.select({ id: quotes.id }).from(quotes).where(and(
+        eq(quotes.orgId, orgId), eq(quotes.opportunityId, opp.id),
+      )).limit(1);
+      if (quote) {
+        return { status: 409 as const, error: "This deal has a linked quote and cannot be deleted. Keep the quote document or delete an eligible draft quote first." };
+      }
+      const [deleted] = await tx.delete(opportunities).where(and(
+        eq(opportunities.id, opp.id), eq(opportunities.orgId, orgId),
+        ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId),
+      )).returning();
+      return deleted ? { status: 204 as const, deleted } : { status: 404 as const };
+    });
+    if (result.status !== 204) {
+      res.status(result.status).json({ error: result.status === 404 ? "Opportunity not found" : result.error });
       return;
     }
-    const [deleted] = await db.delete(opportunities)
-      .where(and(eq(opportunities.id, opp.id), eq(opportunities.orgId, req.currentOrg!.id),
-        ...withCrmVisibility(req, opportunities.ownerUserId, opportunities.createdByUserId)))
-      .returning();
-    if (!deleted) { res.status(404).json({ error: "Opportunity not found" }); return; }
     await appendAuditEvent({
-      orgId: opp.orgId,
+      orgId,
       action: "opportunity.deleted",
       entityType: "opportunity",
-      entityId: opp.id,
+      entityId: result.deleted.id,
       ...auditContext(req),
-      metadata: { before: opportunityAudit(deleted ?? opp) },
+      metadata: { before: opportunityAudit(result.deleted) },
     });
     res.status(204).end();
   },

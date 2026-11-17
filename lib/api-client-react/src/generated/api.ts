@@ -86,6 +86,9 @@ import type {
   GetForecastParams,
   GetWeightedRevenueForecastParams,
   HealthStatus,
+  InboundLeadHealth200,
+  InboundLeadInput,
+  InboundLeadResult,
   IndustryTemplate,
   IndustryTemplateApplication,
   InternalNote,
@@ -5812,6 +5815,142 @@ export const useUpdatePipeline = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdatePipelineMutationOptions(options));
+    }
+
+export const getInboundLeadHealthUrl = () => {
+
+
+
+
+  return `/api/v1/inbound/health`
+}
+
+export const inboundLeadHealth = async ( options?: Parameters<typeof customFetch>[1]): Promise<InboundLeadHealth200> => {
+
+  return customFetch<InboundLeadHealth200>(getInboundLeadHealthUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getInboundLeadHealthQueryKey = () => {
+    return [
+    `/api/v1/inbound/health`
+    ] as const;
+    }
+
+
+export const getInboundLeadHealthQueryOptions = <TData = Awaited<ReturnType<typeof inboundLeadHealth>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof inboundLeadHealth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInboundLeadHealthQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof inboundLeadHealth>>> = ({ signal }) => inboundLeadHealth({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof inboundLeadHealth>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type InboundLeadHealthQueryResult = NonNullable<Awaited<ReturnType<typeof inboundLeadHealth>>>
+export type InboundLeadHealthQueryError = ErrorType<void>
+
+
+
+export function useInboundLeadHealth<TData = Awaited<ReturnType<typeof inboundLeadHealth>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof inboundLeadHealth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getInboundLeadHealthQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getIngestInboundLeadUrl = () => {
+
+
+
+
+  return `/api/v1/inbound/leads`
+}
+
+export const ingestInboundLead = async (inboundLeadInput: InboundLeadInput, options?: Parameters<typeof customFetch>[1]): Promise<InboundLeadResult> => {
+
+  return customFetch<InboundLeadResult>(getIngestInboundLeadUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(inboundLeadInput)
+  }
+);}
+
+
+
+
+
+export const getIngestInboundLeadMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof ingestInboundLead>>, TError,{data: BodyType<InboundLeadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof ingestInboundLead>>, TError,{data: BodyType<InboundLeadInput>}, TContext> => {
+
+const mutationKey = ['ingestInboundLead'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof ingestInboundLead>>, {data: BodyType<InboundLeadInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  ingestInboundLead(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type IngestInboundLeadMutationResult = NonNullable<Awaited<ReturnType<typeof ingestInboundLead>>>
+    export type IngestInboundLeadMutationBody = BodyType<InboundLeadInput>
+    export type IngestInboundLeadMutationError = ErrorType<void>
+
+    export const useIngestInboundLead = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof ingestInboundLead>>, TError,{data: BodyType<InboundLeadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof ingestInboundLead>>,
+        TError,
+        {data: BodyType<InboundLeadInput>},
+        TContext
+      > => {
+      return useMutation(getIngestInboundLeadMutationOptions(options));
     }
 
 export const getListLeadsUrl = (orgId: string,

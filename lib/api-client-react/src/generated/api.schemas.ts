@@ -1748,6 +1748,110 @@ export interface OpportunityDetail {
   updatedAt?: string | null;
 }
 
+export type InboundLeadInputLeadType = typeof InboundLeadInputLeadType[keyof typeof InboundLeadInputLeadType];
+
+
+export const InboundLeadInputLeadType = {
+  web_dev: 'web_dev',
+  cyber: 'cyber',
+  both: 'both',
+} as const;
+
+export interface InboundLeadInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  external_id: string;
+  lead_type: InboundLeadInputLeadType;
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  company_name: string;
+  /** @maxLength 2000 */
+  website?: string;
+  /** @maxLength 200 */
+  city?: string;
+  /** @maxLength 200 */
+  state?: string;
+  /** @maxLength 200 */
+  industry?: string;
+  /**
+     * @minimum 0
+     * @maximum 2147483647
+     */
+  employee_estimate?: number;
+  /** @maxLength 300 */
+  contact_name?: string;
+  /** @maxLength 320 */
+  contact_email?: string;
+  /** @maxLength 80 */
+  contact_phone?: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  source: string;
+  /** @maxLength 2000 */
+  source_url?: string;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  signal_summary: string;
+  /**
+     * @minimum 1
+     * @maximum 10
+     */
+  score: number;
+  /** @maxLength 2000 */
+  suggested_offer?: string;
+  /**
+     * @maxItems 30
+     * @items.minLength 1
+     * @items.maxLength 1000
+     */
+  talking_points?: string[];
+  detected_at: string;
+}
+
+export type InboundLeadResultStatus = typeof InboundLeadResultStatus[keyof typeof InboundLeadResultStatus];
+
+
+export const InboundLeadResultStatus = {
+  created: 'created',
+  updated: 'updated',
+} as const;
+
+export interface InboundLeadResult {
+  status: InboundLeadResultStatus;
+  lead_id: string;
+}
+
+export type LeadRadarDetailsLeadType = typeof LeadRadarDetailsLeadType[keyof typeof LeadRadarDetailsLeadType];
+
+
+export const LeadRadarDetailsLeadType = {
+  web_dev: 'web_dev',
+  cyber: 'cyber',
+  both: 'both',
+} as const;
+
+export interface LeadRadarDetails {
+  lead_type: LeadRadarDetailsLeadType;
+  score: number;
+  signal_summary: string;
+  talking_points: string[];
+  source: string;
+  /** @nullable */
+  source_url?: string | null;
+  /** @nullable */
+  suggested_offer?: string | null;
+  detected_at: string;
+  note: string;
+}
+
 export type LeadStatus = typeof LeadStatus[keyof typeof LeadStatus];
 
 
@@ -1759,6 +1863,7 @@ export const LeadStatus = {
 } as const;
 
 export interface Lead {
+  leadRadar?: LeadRadarDetails;
   id: string;
   firstName: string;
   lastName: string;
@@ -3028,6 +3133,10 @@ export const GetEarnedCommissionsPeriod = {
   month: 'month',
   year: 'year',
 } as const;
+
+export type InboundLeadHealth200 = {
+  ok: boolean;
+};
 
 export type ListLeadsParams = {
 status?: string;

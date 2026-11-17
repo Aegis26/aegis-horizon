@@ -593,7 +593,11 @@ export const leads = pgTable("leads", {
     .defaultNow()
     .notNull()
     .$onUpdate(() => new Date()),
-});
+}, (t) => [
+  uniqueIndex("leads_radar_external_unique")
+    .on(t.orgId, sql`(${t.metadata}->'leadRadar'->>'external_id')`)
+    .where(sql`${t.metadata}->'leadRadar'->>'external_id' IS NOT NULL`),
+]);
 
 export const leadScoringRules = pgTable("lead_scoring_rules", {
   id: uuid("id").primaryKey().defaultRandom(),

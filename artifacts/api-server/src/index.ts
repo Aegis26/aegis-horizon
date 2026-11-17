@@ -10,6 +10,7 @@ import { ensureContactSchema } from "./lib/contactSchema";
 import { ensureCommissionSchema } from "./lib/commissionSchema";
 import { ensureOrgUserDisplayNameSchema } from "./lib/orgUserDisplayNameSchema";
 import { startAccountDeletionRecovery } from "./services/accountDeletion";
+import { ensureInboundLeadSchema } from "./lib/inboundLeadSchema";
 
 const rawPort = process.env["PORT"];
 
@@ -31,6 +32,7 @@ await ensureWindowSessionSchema();
 await ensureContactSchema();
 await ensureCommissionSchema();
 await ensureOrgUserDisplayNameSchema();
+await ensureInboundLeadSchema();
 
 startWorkflowScheduler();
 startReportScheduler();

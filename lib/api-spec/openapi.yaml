@@ -1475,6 +1475,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Pipeline"
+  /v1/inbound/health:
+    get:
+      operationId: inboundLeadHealth
+      security: [{ InboundLeadKey: [] }]
+      responses:
+        "200":
+          description: Ready to accept leads
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+        "401": { description: Missing or incorrect API key }
+        "429": { description: Rate limit exceeded }
+        "503": { description: Intake not configured or unavailable }
+  /v1/inbound/leads:
+    post:
+      operationId: ingestInboundLead
+      security: [{ InboundLeadKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InboundLeadInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InboundLeadResult" }
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InboundLeadResult" }
+        "400": { description: Invalid JSON or field errors }
+        "401": { description: Missing or incorrect API key }
+        "429": { description: Rate limit exceeded }
+        "503": { description: Intake unavailable }
   /orgs/{orgId}/leads:
     get:
       operationId: listLeads
@@ -2240,6 +2282,11 @@ paths:
   /orgs/{orgId}/industry-templates/{templateKey}/apply:
     post: { operationId: applyIndustryTemplate, tags: [orgs], parameters: [{ $ref: "#/components/parameters/OrgId" }, { name: templateKey, in: path, required: true, schema: { type: string, enum: [k12, construction, healthcare] } }], responses: { "200": { description: Idempotently applied template, content: { application/json: { schema: { $ref: "#/components/schemas/IndustryTemplateApplication" } } } } } }
 components:
+  securitySchemes:
+    InboundLeadKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
   parameters:
     WindowSessionHeader:
       name: X-Aegis-Window-Session
@@ -3566,10 +3613,57 @@ components:
             $ref: "#/components/schemas/StageHistoryEntry"
         createdAt: { type: ["string", "null"] }
         updatedAt: { type: ["string", "null"] }
+    InboundLeadInput:
+      type: object
+      additionalProperties: false
+      required: [external_id, lead_type, company_name, source, signal_summary, score, detected_at]
+      properties:
+        external_id: { type: string, minLength: 1, maxLength: 200 }
+        lead_type: { type: string, enum: [web_dev, cyber, both] }
+        company_name: { type: string, minLength: 1, maxLength: 300 }
+        website: { type: string, format: uri, maxLength: 2000 }
+        city: { type: string, maxLength: 200 }
+        state: { type: string, maxLength: 200 }
+        industry: { type: string, maxLength: 200 }
+        employee_estimate: { type: integer, minimum: 0, maximum: 2147483647 }
+        contact_name: { type: string, maxLength: 300 }
+        contact_email: { type: string, format: email, maxLength: 320 }
+        contact_phone: { type: string, maxLength: 80 }
+        source: { type: string, minLength: 1, maxLength: 200 }
+        source_url: { type: string, format: uri, maxLength: 2000 }
+        signal_summary: { type: string, minLength: 1, maxLength: 4000 }
+        score: { type: integer, minimum: 1, maximum: 10 }
+        suggested_offer: { type: string, maxLength: 2000 }
+        talking_points:
+          type: array
+          maxItems: 30
+          items: { type: string, minLength: 1, maxLength: 1000 }
+        detected_at: { type: string, format: date-time }
+    InboundLeadResult:
+      type: object
+      required: [status, lead_id]
+      properties:
+        status: { type: string, enum: [created, updated] }
+        lead_id: { type: string, format: uuid }
+    LeadRadarDetails:
+      type: object
+      required: [lead_type, score, signal_summary, talking_points, source, detected_at, note]
+      properties:
+        lead_type: { type: string, enum: [web_dev, cyber, both] }
+        score: { type: integer }
+        signal_summary: { type: string }
+        talking_points: { type: array, items: { type: string } }
+        source: { type: string }
+        source_url: { type: ["string", "null"] }
+        suggested_offer: { type: ["string", "null"] }
+        detected_at: { type: string }
+        note: { type: string }
     Lead:
       type: object
       required: [id, firstName, lastName, status, score]
       properties:
+        leadRadar:
+          $ref: "#/components/schemas/LeadRadarDetails"
         id: { type: string }
         firstName: { type: string }
         lastName: { type: string }

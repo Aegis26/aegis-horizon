@@ -9,3 +9,4 @@ export * from "./enterprise";
 export * from "./orgDeletion";
 export * from "./userDeletion";
 export * from "./windowSessions";
+export * from "./inboundLeads";

@@ -246,6 +246,7 @@ function leadAudit(l: Lead) {
     firstName: l.firstName,
     lastName: l.lastName,
     company: l.company,
+    leadRadar: (l.metadata as { leadRadar?: Record<string, unknown> } | null)?.leadRadar,
     status: l.status,
     score: l.score,
     assignedToUserId: l.assignedToUserId,

@@ -55,6 +55,12 @@ export default function Leads() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editRule, setEditRule] = useState<LeadScoringRule | null>(null);
   const [ruleOpen, setRuleOpen] = useState(false);
+  const [radarOnly, setRadarOnly] = useState(false);
+  const [radarType, setRadarType] = useState("all");
+  const [radarMinScore, setRadarMinScore] = useState("0");
+  useEffect(() => {
+    setRadarOnly(false); setRadarType("all"); setRadarMinScore("0"); setEditLead(null);
+  }, [orgId]);
 
   const {
     data: leads,
@@ -68,8 +74,14 @@ export default function Leads() {
       retry: false,
       networkMode: "always",
       queryKey: getListLeadsQueryKey(orgId),
+      refetchInterval: 30000,
     },
   });
+  const radarFiltering = radarOnly || radarType !== "all" || radarMinScore !== "0";
+  const visibleLeads = (leads ?? []).filter((lead) =>
+    (!radarOnly || lead.source === "Lead Radar") &&
+    (radarType === "all" || lead.leadRadar?.lead_type === radarType) &&
+    (radarMinScore === "0" || (lead.leadRadar?.score ?? -1) >= Number(radarMinScore)));
   const { data: rules } = useListLeadScoringRules(orgId, {
     query: {
       enabled: !!orgId,
@@ -80,6 +92,7 @@ export default function Leads() {
   });
 
   const { pendingLeads, online, syncing, queueLead, syncNow } = useOfflineLeads(orgId);
+  const visiblePendingLeads = radarFiltering ? [] : pendingLeads;
   const updateLead = useUpdateLead();
   const deleteLead = useDeleteLead();
   const qualifyLead = useQualifyLead();
@@ -164,6 +177,24 @@ export default function Leads() {
           </TabsList>
 
           <TabsContent value="leads">
+            <div className="mb-4 flex flex-wrap gap-4">
+              <div><Label htmlFor="radar-source">Source</Label>
+                <select id="radar-source" className="block rounded border bg-background p-2" value={radarOnly ? "radar" : "all"} onChange={(e) => setRadarOnly(e.target.value === "radar")}>
+                  <option value="all">All sources</option><option value="radar">Lead Radar</option>
+                </select>
+              </div>
+              <div><Label htmlFor="radar-type">Lead type</Label>
+                <select id="radar-type" className="block rounded border bg-background p-2" value={radarType} onChange={(e) => setRadarType(e.target.value)}>
+                  <option value="all">All types</option><option value="web_dev">Web development</option><option value="cyber">Cybersecurity</option><option value="both">Both</option>
+                </select>
+              </div>
+              <div><Label htmlFor="radar-score">Radar score at least</Label>
+                <select id="radar-score" className="block rounded border bg-background p-2" value={radarMinScore} onChange={(e) => setRadarMinScore(e.target.value)}>
+                  <option value="0">Any score</option>
+                  {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+                </select>
+              </div>
+            </div>
             <Card className="overflow-hidden">
               <CardContent className="p-0 overflow-x-auto">
                 <Table>
@@ -199,21 +230,21 @@ export default function Leads() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ) : pendingLeads.length === 0 && (!leads || leads.length === 0) ? (
+                    ) : visiblePendingLeads.length === 0 && visibleLeads.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="p-0">
                           <div className="flex flex-col items-center justify-center min-h-[320px] px-6 py-16 bg-background/30 text-center">
                             <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-6">
                               <UserPlus className="h-10 w-10 text-primary opacity-50" />
                             </div>
-                            <h3 className="font-display text-2xl font-bold mb-2">No leads yet</h3>
+                            <h3 className="font-display text-2xl font-bold mb-2">{radarFiltering ? "No leads match these filters" : "No leads yet"}</h3>
                             <p className="text-muted-foreground max-w-sm">Add a lead and scoring rules will rank it automatically.</p>
                           </div>
                         </TableCell>
                       </TableRow>
                     ) : (
                       <>
-                      {pendingLeads.map((lead) => (
+                      {visiblePendingLeads.map((lead) => (
                         <TableRow key={lead.id} className="bg-amber-500/5">
                           <TableCell className="font-medium text-foreground">{lead.data.firstName} {lead.data.lastName}</TableCell>
                           <TableCell className="text-muted-foreground">{lead.data.company ?? "—"}</TableCell>
@@ -225,9 +256,11 @@ export default function Leads() {
                           <TableCell><span className="text-xs text-muted-foreground">{lead.lastError ? "Retry queued" : "Queued"}</span></TableCell>
                         </TableRow>
                       ))}
-                      {(leads ?? []).map((lead) => (
+                      {visibleLeads.map((lead) => (
                         <TableRow key={lead.id}>
-                          <TableCell className="font-medium text-foreground">{lead.firstName} {lead.lastName}</TableCell>
+                          <TableCell className="font-medium text-foreground">{lead.firstName} {lead.lastName}
+                            {lead.leadRadar && <div className="mt-1 flex flex-wrap gap-1"><Badge variant="outline">Lead Radar</Badge><Badge variant="outline">{lead.leadRadar.lead_type === "web_dev" ? "Web development" : lead.leadRadar.lead_type === "cyber" ? "Cybersecurity" : "Both"}</Badge><Badge variant="outline">{lead.leadRadar.score}/10</Badge></div>}
+                          </TableCell>
                           <TableCell className="text-muted-foreground">{lead.company ?? "—"}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className={`capitalize ${STATUS_COLORS[lead.status] ?? ""}`}>{lead.status}</Badge>
@@ -413,6 +446,18 @@ function LeadFormDialog({ orgId, lead, onClose, onSave, pending }: {
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-lg max-h-[92vh] w-[calc(100%-1rem)] overflow-y-auto p-4 sm:p-6">
         <DialogHeader><DialogTitle className="font-display">{lead ? "Edit lead" : "Add lead"}</DialogTitle></DialogHeader>
+        {lead?.leadRadar && (
+          <section className="space-y-3 rounded border border-primary/30 bg-primary/5 p-4" aria-label="Lead Radar details">
+            <div className="flex flex-wrap gap-2"><Badge>Lead Radar</Badge><Badge variant="outline">{lead.leadRadar.score}/10</Badge><Badge variant="outline">{lead.leadRadar.lead_type === "web_dev" ? "Web development" : lead.leadRadar.lead_type === "cyber" ? "Cybersecurity" : "Both"}</Badge></div>
+            <p className="text-sm">{lead.leadRadar.signal_summary}</p>
+            {lead.leadRadar.suggested_offer && <p className="text-sm"><strong>Suggested offer: </strong>{lead.leadRadar.suggested_offer}</p>}
+            <h3 className="text-sm font-semibold">Talking points</h3>
+            <ul className="list-disc space-y-1 pl-5 text-sm">{lead.leadRadar.talking_points.map((point, i) => <li key={i}>{point}</li>)}</ul>
+            <p className="text-sm text-muted-foreground">Source: {lead.leadRadar.source} · Detected {formatDate(lead.leadRadar.detected_at)}</p>
+            {lead.leadRadar.source_url && /^https?:\/\//i.test(lead.leadRadar.source_url) && <a className="text-sm text-primary underline" href={lead.leadRadar.source_url} target="_blank" rel="noopener noreferrer">Open source</a>}
+            <p className="whitespace-pre-wrap border-t pt-2 text-xs text-muted-foreground">{lead.leadRadar.note}</p>
+          </section>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2"><Label>First name</Label><Input value={form.firstName} onChange={set("firstName")} /></div>
           <div className="space-y-2"><Label>Last name</Label><Input value={form.lastName} onChange={set("lastName")} /></div>

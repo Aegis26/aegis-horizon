@@ -5,9 +5,11 @@
  * Multi-tenant CRM SaaS API (Phase 1 foundation)
  * OpenAPI spec version: 0.1.0
  */
+import type { LeadRadarDetails } from './leadRadarDetails';
 import type { LeadStatus } from './leadStatus';
 
 export interface Lead {
+  leadRadar?: LeadRadarDetails;
   id: string;
   firstName: string;
   lastName: string;

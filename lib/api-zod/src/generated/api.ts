@@ -2074,6 +2074,75 @@ export const UpdatePipelineResponse = zod.object({
 })
 
 
+export const InboundLeadHealthResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+export const ingestInboundLeadBodyExternalIdMax = 200;
+
+export const ingestInboundLeadBodyCompanyNameMax = 300;
+
+export const ingestInboundLeadBodyWebsiteMax = 2000;
+
+export const ingestInboundLeadBodyCityMax = 200;
+
+export const ingestInboundLeadBodyStateMax = 200;
+
+export const ingestInboundLeadBodyIndustryMax = 200;
+
+export const ingestInboundLeadBodyEmployeeEstimateMin = 0;
+export const ingestInboundLeadBodyEmployeeEstimateMax = 2147483647;
+
+export const ingestInboundLeadBodyContactNameMax = 300;
+
+export const ingestInboundLeadBodyContactEmailMax = 320;
+
+export const ingestInboundLeadBodyContactPhoneMax = 80;
+
+export const ingestInboundLeadBodySourceMax = 200;
+
+export const ingestInboundLeadBodySourceUrlMax = 2000;
+
+export const ingestInboundLeadBodySignalSummaryMax = 4000;
+
+export const ingestInboundLeadBodyScoreMax = 10;
+
+export const ingestInboundLeadBodySuggestedOfferMax = 2000;
+
+export const ingestInboundLeadBodyTalkingPointsItemMax = 1000;
+
+export const ingestInboundLeadBodyTalkingPointsMax = 30;
+
+
+
+export const IngestInboundLeadBody = zod.object({
+  "external_id": zod.string().min(1).max(ingestInboundLeadBodyExternalIdMax),
+  "lead_type": zod.enum(['web_dev', 'cyber', 'both']),
+  "company_name": zod.string().min(1).max(ingestInboundLeadBodyCompanyNameMax),
+  "website": zod.string().url().max(ingestInboundLeadBodyWebsiteMax).optional(),
+  "city": zod.string().max(ingestInboundLeadBodyCityMax).optional(),
+  "state": zod.string().max(ingestInboundLeadBodyStateMax).optional(),
+  "industry": zod.string().max(ingestInboundLeadBodyIndustryMax).optional(),
+  "employee_estimate": zod.number().int().min(ingestInboundLeadBodyEmployeeEstimateMin).max(ingestInboundLeadBodyEmployeeEstimateMax).optional(),
+  "contact_name": zod.string().max(ingestInboundLeadBodyContactNameMax).optional(),
+  "contact_email": zod.string().email().max(ingestInboundLeadBodyContactEmailMax).optional(),
+  "contact_phone": zod.string().max(ingestInboundLeadBodyContactPhoneMax).optional(),
+  "source": zod.string().min(1).max(ingestInboundLeadBodySourceMax),
+  "source_url": zod.string().url().max(ingestInboundLeadBodySourceUrlMax).optional(),
+  "signal_summary": zod.string().min(1).max(ingestInboundLeadBodySignalSummaryMax),
+  "score": zod.number().int().min(1).max(ingestInboundLeadBodyScoreMax),
+  "suggested_offer": zod.string().max(ingestInboundLeadBodySuggestedOfferMax).optional(),
+  "talking_points": zod.array(zod.string().min(1).max(ingestInboundLeadBodyTalkingPointsItemMax)).max(ingestInboundLeadBodyTalkingPointsMax).optional(),
+  "detected_at": zod.coerce.date()
+})
+
+export const IngestInboundLeadResponse = zod.object({
+  "status": zod.enum(['created', 'updated']),
+  "lead_id": zod.string().uuid()
+})
+
+
 /**
  * @summary List leads with scores
  */
@@ -2087,6 +2156,17 @@ export const ListLeadsQueryParams = zod.object({
 })
 
 export const ListLeadsResponseItem = zod.object({
+  "leadRadar": zod.object({
+  "lead_type": zod.enum(['web_dev', 'cyber', 'both']),
+  "score": zod.number().int(),
+  "signal_summary": zod.string(),
+  "talking_points": zod.array(zod.string()),
+  "source": zod.string(),
+  "source_url": zod.string().nullish(),
+  "suggested_offer": zod.string().nullish(),
+  "detected_at": zod.string(),
+  "note": zod.string()
+}).optional(),
   "id": zod.string(),
   "firstName": zod.string(),
   "lastName": zod.string(),
@@ -2149,6 +2229,17 @@ export const CreateLeadBody = zod.object({
 })
 
 export const CreateLeadResponse = zod.object({
+  "leadRadar": zod.object({
+  "lead_type": zod.enum(['web_dev', 'cyber', 'both']),
+  "score": zod.number().int(),
+  "signal_summary": zod.string(),
+  "talking_points": zod.array(zod.string()),
+  "source": zod.string(),
+  "source_url": zod.string().nullish(),
+  "suggested_offer": zod.string().nullish(),
+  "detected_at": zod.string(),
+  "note": zod.string()
+}).optional(),
   "id": zod.string(),
   "firstName": zod.string(),
   "lastName": zod.string(),
@@ -2216,6 +2307,17 @@ export const UpdateLeadBody = zod.object({
 })
 
 export const UpdateLeadResponse = zod.object({
+  "leadRadar": zod.object({
+  "lead_type": zod.enum(['web_dev', 'cyber', 'both']),
+  "score": zod.number().int(),
+  "signal_summary": zod.string(),
+  "talking_points": zod.array(zod.string()),
+  "source": zod.string(),
+  "source_url": zod.string().nullish(),
+  "suggested_offer": zod.string().nullish(),
+  "detected_at": zod.string(),
+  "note": zod.string()
+}).optional(),
   "id": zod.string(),
   "firstName": zod.string(),
   "lastName": zod.string(),

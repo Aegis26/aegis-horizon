@@ -14,3 +14,4 @@
 - [Commission policy](commission-policy.md) — Owner-only configuration/team visibility; snapshots are not retroactively recalculated or duplicated on reclose.
 - [Member display names](member-display-names.md) — Owner-managed names are workspace-specific, never global identity edits.
 - [API test bundling](api-integration-test-bundling.md) — full-app tests need ESM and external logging/Stripe packages, not standalone CommonJS bundles.
+- [Lead Radar policy](inbound-leads-policy.md) — server-configured Aegis organization only; unassigned management-only leads; future hashed per-org keys are out of scope.

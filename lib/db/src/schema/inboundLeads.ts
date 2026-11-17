@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, primaryKey, index } from "drizzle-orm/pg-core";
 import { organizations } from "./organizations";
 
 export const inboundLeadLog = pgTable("inbound_lead_log", {
@@ -8,7 +8,7 @@ export const inboundLeadLog = pgTable("inbound_lead_log", {
   externalId: text("external_id"),
   result: text("result").notNull(),
   error: text("error"),
-});
+}, (t) => [index("inbound_lead_log_timestamp_idx").on(t.timestamp)]);
 
 export const inboundLeadRate = pgTable("inbound_lead_rate", {
   orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),

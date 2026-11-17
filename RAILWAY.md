@@ -54,6 +54,16 @@ does not consume them.
 
 ## PostgreSQL
 
+### Lead Radar additive migration
+
+On an existing Horizon database, Lead Radar's tables and indexes are created
+automatically by the API startup migration before it accepts requests.
+Do **not** run the general `db:push` command below just for Lead Radar.
+See `docs/inbound-leads.md` for the exact startup path, configuration,
+organization UUID lookup SQL, and automatic 90-day request-log retention.
+
+### Initial database setup
+
 Add a Railway PostgreSQL service and reference its `DATABASE_URL` from the web
 service. Apply the schema once, after reviewing the target database:
 

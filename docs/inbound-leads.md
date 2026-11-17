@@ -24,6 +24,26 @@ The API startup runs the additive, idempotent migration in
 the Radar external identifier in lead metadata. It does not replace existing
 tables, change existing records, or require a broad schema push.
 
+Railway's `railway.json` starts `pnpm run start:railway`, which starts the
+compiled API entry point. That entry point awaits this migration before
+listening on its port, using the API service's production `DATABASE_URL`.
+The migration uses a database advisory lock so concurrent replicas do not
+interleave schema changes. **No separate migration command or `db:push` is
+needed for this feature on the existing production database.** A migration
+failure prevents the new API process from starting successfully.
+
+To find the organization UUID, run this read-only query in production:
+
+```sql
+SELECT id AS organization_uuid, name, slug
+FROM organizations
+WHERE lower(trim(name)) = lower('Aegis Cyber Defense, Inc')
+ORDER BY slug;
+```
+
+Verify the name and slug before using the UUID. If no row matches, inspect
+the saved organization name rather than substituting a guessed ID.
+
 Deploy the code and configure both variables before connecting Lead Radar.
 Use HTTPS. A successful authenticated health request returns `{"ok":true}`.
 No live configuration or production data was changed during implementation.
@@ -124,6 +144,18 @@ parsing have a null external ID. No API key, raw payload, contact fields or
 raw SQL/parser exception is logged. If the database is unavailable, intake
 fails closed with 503 and emits a safe server event; a database log cannot
 be guaranteed during a database outage.
+
+### Log retention
+
+The API runs log cleanup at startup and every 24 hours while running. It
+permanently removes only `inbound_lead_log` rows whose timestamp is strictly
+older than 90 days, using database time. It retains rows exactly on the
+cutoff and all newer rows. Between daily sweeps an expired row can remain
+for up to one additional day; a stopped service catches up on next startup.
+The startup migration creates `inbound_lead_log_timestamp_idx` for cleanup.
+Multiple replicas may safely perform the same cleanup; repeated runs are
+idempotent. Failures are logged without payloads and retried on the next run.
+CRM leads, companies, contacts, and the rate-limit counter are not deleted.
 
 ## Verification
 

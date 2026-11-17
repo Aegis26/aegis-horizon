@@ -21,6 +21,37 @@ test("Radar validates URLs and non-coercing field types", () => {
   }
 });
 
+test("90-day retention removes only expired log entries", {
+  skip: process.env.RUN_INBOUND_INTEGRATION !== "1",
+}, async () => {
+  assert.notEqual(process.env.NODE_ENV, "production", "Development DB only");
+  const { pool } = await import("@workspace/db");
+  const { cleanupInboundLeadLogs } = await import("../services/inboundLeadRetention");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // A temp table shadows the real log table on this connection. No existing
+    // logs or customer records are touched. now() is stable in the transaction.
+    await client.query(`
+      CREATE TEMP TABLE inbound_lead_log (
+        id text PRIMARY KEY, timestamp timestamptz NOT NULL
+      ) ON COMMIT DROP;
+      INSERT INTO inbound_lead_log (id, timestamp) VALUES
+        ('expired', now() - interval '90 days 1 second'),
+        ('boundary', now() - interval '90 days'),
+        ('recent', now() - interval '89 days'),
+        ('new', now());
+    `);
+    assert.equal(await cleanupInboundLeadLogs(client), 1);
+    const remaining = await client.query("SELECT id FROM inbound_lead_log ORDER BY id");
+    assert.deepEqual(remaining.rows.map((r) => r.id), ["boundary", "new", "recent"]);
+    assert.equal(await cleanupInboundLeadLogs(client), 0);
+  } finally {
+    await client.query("ROLLBACK");
+    client.release();
+  }
+});
+
 test("Radar intake creates, matches, updates and protects tenant boundaries", {
   skip: process.env.RUN_INBOUND_INTEGRATION !== "1",
 }, async () => {

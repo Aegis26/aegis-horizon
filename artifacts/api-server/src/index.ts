@@ -11,6 +11,7 @@ import { ensureCommissionSchema } from "./lib/commissionSchema";
 import { ensureOrgUserDisplayNameSchema } from "./lib/orgUserDisplayNameSchema";
 import { startAccountDeletionRecovery } from "./services/accountDeletion";
 import { ensureInboundLeadSchema } from "./lib/inboundLeadSchema";
+import { startInboundLeadRetention } from "./services/inboundLeadRetention";
 
 const rawPort = process.env["PORT"];
 
@@ -37,6 +38,7 @@ await ensureInboundLeadSchema();
 startWorkflowScheduler();
 startReportScheduler();
 startWebhookScheduler();
+startInboundLeadRetention();
 
 app.listen(port, (err) => {
   if (err) {

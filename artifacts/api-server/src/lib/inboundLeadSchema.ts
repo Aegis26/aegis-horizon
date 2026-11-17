@@ -17,6 +17,8 @@ export async function ensureInboundLeadSchema(): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS leads_radar_external_unique
         ON leads (org_id, (metadata->'leadRadar'->>'external_id'))
         WHERE metadata->'leadRadar'->>'external_id' IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS inbound_lead_log_timestamp_idx
+        ON inbound_lead_log (timestamp);
     `);
   });
 }

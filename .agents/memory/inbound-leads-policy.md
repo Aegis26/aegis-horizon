@@ -12,3 +12,10 @@ New leads remain unassigned and management-only.
 **How to apply:** Keep the single-org release scoped to environment configuration.
 Structure authentication for a future table of hashed API keys, each tied to
 one organization, but do not implement multi-customer key management until asked.
+
+Retain inbound request logs for 90 days, with automatic cleanup.
+
+**Why:** The user explicitly approved this retention period before the first push.
+
+**How to apply:** Expire only request logs, never CRM records or idempotency data;
+keep the production migration and retention instructions consistent.

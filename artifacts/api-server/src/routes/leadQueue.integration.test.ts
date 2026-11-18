@@ -21,7 +21,8 @@ test("Lead queue enforces roles, isolation, atomic claims, lifecycle and safe ba
   const roles = ["owner", "admin", "manager", "user", "viewer"] as const;
   const ids = roles.map(() => randomUUID());
   const outsider = randomUUID();
-  const allUsers = [...ids, outsider];
+  const userB = randomUUID();
+  const allUsers = [...ids, outsider, userB];
   const tokens: string[] = [];
   const {default: app} = await import("../app");
   const server = createServer(app);
@@ -158,6 +159,86 @@ test("Lead queue enforces roles, isolation, atomic claims, lifecycle and safe ba
     for (let actor=0; actor<5; actor++) {
       const id = await newLead({company_name:`Role company ${actor}`,website:`https://role-${actor}.synthetic.invalid`});
       assert.equal((await request(actor,`/${id}/actions`,{action:"claim"})).status,200);
+    }
+    // A real reassignment between distinct regular users hands off only the
+    // entities provisioned for this lead, preserving original creator history.
+    const handoff = await newLead({company_name:"Handoff company",website:"https://handoff.synthetic.invalid"});
+    assert.equal((await request(3,`/${handoff}/actions`,{action:"claim"})).status,200);
+    assert.equal((await request(0,`/${handoff}/actions`,{action:"return"})).status,200);
+    assert.equal((await request(6,`/${handoff}/actions`,{action:"claim"})).status,200);
+    const handoffRow = (await pool.query("SELECT metadata FROM leads WHERE id=$1",[handoff])).rows[0];
+    const linkedAccount = handoffRow.metadata.leadRadar.account_id;
+    const linkedContact = handoffRow.metadata.leadRadar.contact_id;
+    assert.equal((await pool.query("SELECT owner_user_id FROM accounts WHERE id=$1",[linkedAccount])).rows[0].owner_user_id,userB);
+    assert.equal((await pool.query("SELECT owner_user_id FROM contacts WHERE id=$1",[linkedContact])).rows[0].owner_user_id,userB);
+    assert.equal((await request(6,`/${linkedAccount}`,undefined,org,"accounts")).status,200);
+    assert.equal((await request(6,`/${handoff}/qualify`,{},org,"leads")).status,201);
+    // Genuine legacy entities were inserted in the lead's original transaction.
+    const legacyProvisioned = randomUUID(), legacyAccount = randomUUID(), legacyContact = randomUUID();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("INSERT INTO accounts (id,org_id,name,website) VALUES ($1,$2,'Legacy provisioned','https://legacy.synthetic.invalid')",[legacyAccount,org]);
+      await client.query("INSERT INTO contacts (id,org_id,account_id,first_name,last_name,email) VALUES ($1,$2,$3,'Legacy','Contact','legacy@synthetic.invalid')",[legacyContact,org,legacyAccount]);
+      await client.query(`INSERT INTO leads (id,org_id,first_name,last_name,company,status,source,metadata)
+        VALUES ($1,$2,'Legacy','Contact','Legacy provisioned','new','Lead Radar',$3)`,
+        [legacyProvisioned,org,JSON.stringify({leadRadar:{...radar,external_id:legacyProvisioned,company_name:"Legacy provisioned",
+          website:"https://legacy.synthetic.invalid",contact_name:"Legacy Contact",contact_email:"legacy@synthetic.invalid",
+          account_id:legacyAccount,contact_id:legacyContact}})]);
+      await client.query("COMMIT");
+    } finally { client.release(); }
+    await ensureInboundLeadSchema();
+    assert.equal((await request(6,`/${legacyProvisioned}/actions`,{action:"claim"})).status,200);
+    assert.equal((await pool.query("SELECT owner_user_id FROM accounts WHERE id=$1",[legacyAccount])).rows[0].owner_user_id,userB);
+    assert.equal((await pool.query("SELECT owner_user_id FROM contacts WHERE id=$1",[legacyContact])).rows[0].owner_user_id,userB);
+    assert.equal((await request(6,`/${legacyProvisioned}/qualify`,{},org,"leads")).status,201);
+    // Unrelated client entities must never be transferred by a queue claim.
+    const clientAccount = randomUUID();
+    await pool.query("INSERT INTO accounts (id,org_id,name,website,owner_user_id,created_by_user_id) VALUES ($1,$2,'Current client','https://current-client.synthetic.invalid',$3,$3)",[clientAccount,org,ids[0]]);
+    const existingClientLead = await newLead({company_name:"Current client",website:"https://current-client.synthetic.invalid"});
+    assert.equal((await request(6,`/${existingClientLead}/actions`,{action:"claim"})).status,200);
+    assert.equal((await pool.query("SELECT owner_user_id FROM accounts WHERE id=$1",[clientAccount])).rows[0].owner_user_id,ids[0]);
+    // Hold the row so intake and PATCH both read the old snapshot, then let
+    // intake commit first. PATCH must modify current metadata, not restore it.
+    const refreshLead = await newLead({company_name:"Refresh race",website:"https://refresh.synthetic.invalid"});
+    assert.equal((await request(3,`/${refreshLead}/actions`,{action:"claim"})).status,200);
+    const originalKey = process.env.INBOUND_LEADS_API_KEY, originalOrg = process.env.INBOUND_LEADS_ORG_ID;
+    const intakeKey = randomUUID();
+    process.env.INBOUND_LEADS_API_KEY = intakeKey; process.env.INBOUND_LEADS_ORG_ID = org;
+    const locker = await pool.connect();
+    try {
+      await locker.query("BEGIN");
+      await locker.query("SELECT id FROM leads WHERE id=$1 FOR UPDATE",[refreshLead]);
+      const blocked = async (count: number) => {
+        for(let attempt=0;attempt<200;attempt++){
+          const result = await pool.query(`SELECT count(*) FROM pg_stat_activity
+            WHERE datname=current_database() AND wait_event_type='Lock'
+              AND query ILIKE '%"leads"%'`);
+          if(Number(result.rows[0].count)>=count) return;
+          await new Promise(resolve=>setTimeout(resolve,10));
+        }
+        throw new Error("Expected blocked lead updates");
+      };
+      const intake = fetch(`${base}/api/v1/inbound/leads`,{method:"POST",
+        headers:{"x-api-key":intakeKey,"content-type":"application/json"},
+        body:JSON.stringify({...radar,external_id:refreshLead,company_name:"Refresh race",
+          signal_summary:"Newest Radar signal",talking_points:["Newest talking point"]})});
+      await blocked(1);
+      const patch = fetch(`${base}/api/orgs/${org}/leads/${refreshLead}`,{method:"PATCH",
+        headers:{"x-aegis-window-session":tokens[3],"content-type":"application/json"},body:JSON.stringify({title:"Rep edit"})});
+      await blocked(2);
+      await locker.query("COMMIT");
+      assert.equal((await intake).status,200);
+      assert.equal((await patch).status,200);
+      const refreshed = (await pool.query("SELECT title,metadata FROM leads WHERE id=$1",[refreshLead])).rows[0];
+      assert.equal(refreshed.title,"Rep edit");
+      assert.equal(refreshed.metadata.leadRadar.signal_summary,"Newest Radar signal");
+      assert.deepEqual(refreshed.metadata.leadRadar.talking_points,["Newest talking point"]);
+      assert.equal(refreshed.metadata.leadQueue.worked,true);
+    } finally {
+      await locker.query("ROLLBACK"); locker.release();
+      if(originalKey===undefined) delete process.env.INBOUND_LEADS_API_KEY; else process.env.INBOUND_LEADS_API_KEY=originalKey;
+      if(originalOrg===undefined) delete process.env.INBOUND_LEADS_ORG_ID; else process.env.INBOUND_LEADS_ORG_ID=originalOrg;
     }
     const audit = (await pool.query("SELECT action FROM audit_events WHERE org_id=$1 AND action LIKE 'lead.queue.%'",[org])).rows;
     for (const action of ["claim","assign","return","dismiss"]) assert.ok(audit.some(a=>a.action===`lead.queue.${action}`));

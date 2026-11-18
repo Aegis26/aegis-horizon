@@ -103,13 +103,33 @@ async function linkEntities(tx: Tx, lead: Lead, assigneeId: string) {
   // Never change ownership of a matched client account.
   let account = (domain ? candidates.find(a => websiteDomain(a.website) === domain) : undefined)
     ?? candidates.find(a => a.name === radar.company_name);
+  let queueOwnedAccount = false;
   if (!account) {
     [account] = await tx.insert(accounts).values({
       orgId: lead.orgId, name: radar.company_name, website: radar.website,
       city: radar.city, state: radar.state, industry: radar.industry,
       employeeCount: radar.employee_estimate, ownerUserId: assigneeId, createdByUserId: assigneeId,
-      metadata: {leadRadar: radar},
+      metadata: {leadRadar: radar, leadQueueProvisionedFor: lead.id},
     }).returning();
+    queueOwnedAccount = true;
+  } else {
+    const marker = (account.metadata as {leadQueueProvisionedFor?: string} | null)?.leadQueueProvisionedFor;
+    // Before the queue existed, intake created unassigned entities in the same
+    // transaction as its lead (identical database now() timestamps). Only this
+    // provenance + exact stored link is eligible; never infer it from a domain.
+    const legacyProvisioned = radar.account_id === account.id &&
+      !account.ownerUserId && !account.createdByUserId &&
+      !!(await tx.select({id:accounts.id}).from(accounts).where(and(
+        eq(accounts.id,account.id),eq(accounts.orgId,lead.orgId),
+        sql`${accounts.createdAt} = (SELECT created_at FROM leads WHERE id = ${lead.id} AND org_id = ${lead.orgId})`,
+      )).limit(1)).length;
+    queueOwnedAccount = marker === lead.id || legacyProvisioned;
+    if (queueOwnedAccount) {
+      [account] = await tx.update(accounts).set({
+        ownerUserId: assigneeId,
+        metadata: sql`COALESCE(${accounts.metadata}, '{}'::jsonb) || ${JSON.stringify({leadQueueProvisionedFor:lead.id})}::jsonb`,
+      }).where(and(eq(accounts.orgId, lead.orgId), eq(accounts.id, account.id))).returning();
+    }
   }
   let contactId: string | null = null;
   if (radar.contact_name || radar.contact_email || radar.contact_phone) {
@@ -120,11 +140,27 @@ async function linkEntities(tx: Tx, lead: Lead, assigneeId: string) {
     ));
     const matched = contactRows.find(c => radar.contact_email ? c.email?.toLowerCase() === radar.contact_email.toLowerCase()
       : radar.contact_phone ? c.phone === radar.contact_phone : c.firstName === firstName && c.lastName === lastName);
-    if (matched) contactId = matched.id;
+    if (matched) {
+      contactId = matched.id;
+      const marker = (matched.metadata as {leadQueueProvisionedFor?: string} | null)?.leadQueueProvisionedFor;
+      const legacyProvisioned = queueOwnedAccount && radar.contact_id === matched.id &&
+        !matched.ownerUserId && !matched.createdByUserId &&
+        !!(await tx.select({id:contacts.id}).from(contacts).where(and(
+          eq(contacts.id,matched.id),eq(contacts.orgId,lead.orgId),
+          sql`${contacts.createdAt} = (SELECT created_at FROM leads WHERE id = ${lead.id} AND org_id = ${lead.orgId})`,
+        )).limit(1)).length;
+      if (marker === lead.id || legacyProvisioned) {
+        await tx.update(contacts).set({
+          ownerUserId: assigneeId,
+          metadata: sql`COALESCE(${contacts.metadata}, '{}'::jsonb) || ${JSON.stringify({leadQueueProvisionedFor:lead.id})}::jsonb`,
+        }).where(and(eq(contacts.orgId,lead.orgId),eq(contacts.id,matched.id)));
+      }
+    }
     else {
       const [contact] = await tx.insert(contacts).values({
         orgId: lead.orgId, accountId: account.id, firstName, lastName, email: radar.contact_email,
-        phone: radar.contact_phone, ownerUserId: assigneeId, createdByUserId: assigneeId, metadata: {leadRadar: radar},
+        phone: radar.contact_phone, ownerUserId: assigneeId, createdByUserId: assigneeId,
+        metadata: {leadRadar: radar, leadQueueProvisionedFor:lead.id},
       }).returning();
       contactId = contact.id;
     }

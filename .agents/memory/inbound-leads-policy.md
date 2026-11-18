@@ -22,3 +22,12 @@ Retain inbound request logs for 90 days, with automatic cleanup.
 
 **How to apply:** Expire only request logs, never CRM records or idempotency data;
 keep the production migration and retention instructions consistent.
+
+Queue-provisioned Accounts and Contacts must follow the receiving assignee after
+return/reclaim, while unrelated matched client entities keep their ownership.
+
+**Why:** A rep who receives a returned lead must be able to work and qualify it
+without widening the ordinary CRM row-access policy or duplicating a client.
+
+**How to apply:** Require explicit provisioning provenance; a domain match alone
+does not authorize ownership transfer. Preserve original creator attribution.

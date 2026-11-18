@@ -1089,9 +1089,10 @@ router.patch("/orgs/:orgId/leads/:leadId", ...gate, async (req, res): Promise<vo
 });
 
 function queueWorkedUpdate(lead: Lead) {
-  const metadata = lead.metadata as Record<string, unknown> | null;
-  return metadata?.leadQueue ? {
-    metadata: {...metadata, leadQueue: {...(metadata.leadQueue as Record<string, unknown>), worked: true}},
+  return (lead.metadata as Record<string, unknown> | null)?.leadQueue ? {
+    // Use the row's current value, not the earlier findLead snapshot: inbound
+    // Radar may have refreshed the signal/talking points in the meantime.
+    metadata: sql`jsonb_set(${leads.metadata}, '{leadQueue,worked}', 'true'::jsonb)`,
   } : {};
 }
 

@@ -113,8 +113,12 @@ URLs are stored, never fetched by this endpoint.
 - On claim or manager assignment, match an active Account by domain first, then
   exact company name. Create it only if absent. Reuse a Contact by email, phone
   or name on that Account; create one only when contact details exist.
-  Existing Account/Contact fields and owners are never overwritten. New entities
-  belong to the assignee. Links and original Radar context stay on the lead.
+  Unrelated existing Account/Contact fields and owners are never overwritten.
+  Entities provisioned specifically for a queue lead follow its new assignee
+  after return/reclaim, without rewriting original creator attribution. Legacy
+  unassigned entities qualify only with exact stored links and matching original
+  database transaction timestamps. New entities belong to the assignee.
+  Links and original Radar context stay on the lead.
 - Managers can assign other organization members, or return unworked assigned
   leads. A lead is worked if edited/progressed since assignment, converted, or
   its linked Account received activities/tasks since assignment. Moving a stage

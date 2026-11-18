@@ -18,10 +18,11 @@ import {
   Settings,
   LogOut,
   ChevronDown,
-   Menu,
-   CloudOff
+  Menu,
+  CloudOff,
+  Inbox
 } from "lucide-react";
-import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useGetMe, getGetMeQueryKey, useListLeadQueue, getListLeadQueueQueryKey } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ import {
 } from "@/lib/auth-scope";
 import { useWindowAuth } from "@/components/auth/WindowAuthProvider";
 import { getInitials } from "@/lib/format";
+import { LEAD_QUEUE_POLL_MS } from "@/lib/lead-queue";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -42,6 +44,7 @@ const NAV_ITEMS = [
   { href: "/accounts", label: "Accounts", icon: Users, feature: "crm" },
   { href: "/segments", label: "Segments", icon: Filter, feature: "crm" },
   { href: "/leads", label: "Leads", icon: UserPlus, feature: "sales" },
+  { href: "/lead-queue", label: "Lead Queue", icon: Inbox, feature: "sales", badge: "queue" },
   { href: "/opportunities", label: "Pipeline", icon: Target, feature: "sales" },
   { href: "/quotes", label: "Quotes", icon: FileText, feature: "sales" },
   { href: "/territories", label: "Territories", icon: Map, feature: "sales" },
@@ -91,6 +94,18 @@ export function Shell({ children }: { children: ReactNode }) {
   const currentMemberName =
     selectedMembership?.displayName || me?.user.fullName || me?.user.email || "User";
   const { online, pendingLeads } = useOfflineLeads(currentOrg?.id);
+
+  const queueOrgId = currentOrg?.id ?? "";
+  const salesEnabled = (currentOrg?.enabledFeatures || ["crm", "sales", "automation"]).includes("sales");
+  const queueParams = { status: "queued" as const };
+  const { data: queueData } = useListLeadQueue(queueOrgId, queueParams, {
+    query: {
+      enabled: !!queueOrgId && salesEnabled,
+      queryKey: getListLeadQueueQueryKey(queueOrgId, queueParams),
+      refetchInterval: LEAD_QUEUE_POLL_MS,
+    },
+  });
+  const queueCount = queueOrgId && salesEnabled ? queueData?.totalQueued : undefined;
 
   // The API response is the source of truth for membership. In particular,
   // never render a persisted org selection while it belongs to another
@@ -183,7 +198,10 @@ export function Shell({ children }: { children: ReactNode }) {
                   active ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-primary/10 hover:text-foreground"
                 }`}>
                   <item.icon className="h-5 w-5" />
-                  <span>{item.label}</span>
+                  <span className="flex-1">{item.label}</span>
+                  {item.badge && queueCount !== undefined && queueCount > 0 && (
+                    <span data-testid="badge-lead-queue-count" className="rounded-full bg-primary/20 px-2 py-0.5 font-mono text-xs text-primary">{queueCount}</span>
+                  )}
                 </div>
               </Link>
             );
@@ -247,7 +265,10 @@ export function Shell({ children }: { children: ReactNode }) {
                       active ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-primary/10 hover:text-foreground"
                     }`}>
                       <item.icon className="h-5 w-5 shrink-0" />
-                      <span>{item.label}</span>
+                      <span className="flex-1">{item.label}</span>
+                      {item.badge && queueCount !== undefined && queueCount > 0 && (
+                        <span data-testid="badge-lead-queue-count-mobile" className="rounded-full bg-primary/20 px-2 py-0.5 font-mono text-xs text-primary">{queueCount}</span>
+                      )}
                     </div>
                   </Link>
                 );

@@ -97,6 +97,7 @@ async function runLeadQualifier(agent: typeof aiAgents.$inferSelect, executionId
   if (entityType !== "lead") throw new Error("Lead qualifier requires a lead");
   const [lead] = await db.select().from(leads).where(and(eq(leads.orgId, agent.orgId), eq(leads.id, entityId)));
   if (!lead) throw new Error("Lead not found");
+  if (["queued", "dismissed"].includes(lead.status)) throw new Error("Claim a queued lead before running an agent");
   const effectiveOwnerUserId = await resolveEffectiveOwner(agent.orgId, lead.assignedToUserId ?? actorUserId);
   const config = agent.config as Record<string, unknown>;
   const fit = leadFitScore(lead);

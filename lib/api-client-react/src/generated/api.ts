@@ -98,10 +98,15 @@ import type {
   LeadBatchInput,
   LeadBatchResult,
   LeadCreate,
+  LeadQueueAction,
+  LeadQueueActionResult,
+  LeadQueueConflict,
+  LeadQueueResult,
   LeadScoringRule,
   LeadScoringRuleCreate,
   LeadUpdate,
   ListAccountsParams,
+  ListLeadQueueParams,
   ListLeadsParams,
   ListOpportunitiesParams,
   ListQuotesParams,
@@ -5951,6 +5956,157 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getIngestInboundLeadMutationOptions(options));
+    }
+
+export const getListLeadQueueUrl = (orgId: string,
+    params?: ListLeadQueueParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/orgs/${orgId}/lead-queue?${stringifiedParams}` : `/api/orgs/${orgId}/lead-queue`
+}
+
+export const listLeadQueue = async (orgId: string,
+    params?: ListLeadQueueParams, options?: Parameters<typeof customFetch>[1]): Promise<LeadQueueResult> => {
+
+  return customFetch<LeadQueueResult>(getListLeadQueueUrl(orgId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLeadQueueQueryKey = (orgId: string,
+    params?: ListLeadQueueParams,) => {
+    return [
+    `/api/orgs/${orgId}/lead-queue`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListLeadQueueQueryOptions = <TData = Awaited<ReturnType<typeof listLeadQueue>>, TError = ErrorType<unknown>>(orgId: string,
+    params?: ListLeadQueueParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLeadQueue>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLeadQueueQueryKey(orgId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLeadQueue>>> = ({ signal }) => listLeadQueue(orgId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orgId !== null && orgId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLeadQueue>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListLeadQueueQueryResult = NonNullable<Awaited<ReturnType<typeof listLeadQueue>>>
+export type ListLeadQueueQueryError = ErrorType<unknown>
+
+
+
+export function useListLeadQueue<TData = Awaited<ReturnType<typeof listLeadQueue>>, TError = ErrorType<unknown>>(
+ orgId: string,
+    params?: ListLeadQueueParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLeadQueue>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListLeadQueueQueryOptions(orgId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getActOnLeadQueueUrl = (orgId: string,
+    leadId: string,) => {
+
+
+
+
+  return `/api/orgs/${orgId}/lead-queue/${leadId}/actions`
+}
+
+export const actOnLeadQueue = async (orgId: string,
+    leadId: string,
+    leadQueueAction: LeadQueueAction, options?: Parameters<typeof customFetch>[1]): Promise<LeadQueueActionResult> => {
+
+  return customFetch<LeadQueueActionResult>(getActOnLeadQueueUrl(orgId,leadId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(leadQueueAction)
+  }
+);}
+
+
+
+
+
+export const getActOnLeadQueueMutationOptions = <TError = ErrorType<LeadQueueConflict>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof actOnLeadQueue>>, TError,{orgId: string;leadId: string;data: BodyType<LeadQueueAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof actOnLeadQueue>>, TError,{orgId: string;leadId: string;data: BodyType<LeadQueueAction>}, TContext> => {
+
+const mutationKey = ['actOnLeadQueue'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof actOnLeadQueue>>, {orgId: string;leadId: string;data: BodyType<LeadQueueAction>}> = (props) => {
+          const {orgId,leadId,data} = props ?? {};
+
+          return  actOnLeadQueue(orgId,leadId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActOnLeadQueueMutationResult = NonNullable<Awaited<ReturnType<typeof actOnLeadQueue>>>
+    export type ActOnLeadQueueMutationBody = BodyType<LeadQueueAction>
+    export type ActOnLeadQueueMutationError = ErrorType<LeadQueueConflict>
+
+    export const useActOnLeadQueue = <TError = ErrorType<LeadQueueConflict>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof actOnLeadQueue>>, TError,{orgId: string;leadId: string;data: BodyType<LeadQueueAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof actOnLeadQueue>>,
+        TError,
+        {orgId: string;leadId: string;data: BodyType<LeadQueueAction>},
+        TContext
+      > => {
+      return useMutation(getActOnLeadQueueMutationOptions(options));
     }
 
 export const getListLeadsUrl = (orgId: string,

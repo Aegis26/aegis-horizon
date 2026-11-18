@@ -899,6 +899,7 @@ async function leadOut(req: Request, l: Lead) {
   ]);
   return {
     id: l.id,
+    leadRadar: (l.metadata as { leadRadar?: Record<string, unknown> } | null)?.leadRadar,
     firstName: l.firstName,
     lastName: l.lastName,
     email: l.email,
@@ -931,7 +932,8 @@ async function leadOut(req: Request, l: Lead) {
 
 router.get("/orgs/:orgId/leads", ...gate, async (req, res): Promise<void> => {
   const { status, q } = req.query as { status?: string; q?: string };
-  const where = [eq(leads.orgId, req.currentOrg!.id), eq(leads.isActive, true)];
+  const where = [eq(leads.orgId, req.currentOrg!.id), eq(leads.isActive, true),
+    sql`${leads.status} NOT IN ('queued', 'dismissed')`];
   where.push(...withCrmVisibility(req, leads.assignedToUserId, leads.createdByUserId));
   if (status) where.push(eq(leads.status, status));
   if (q) {
@@ -1019,6 +1021,7 @@ async function findLead(req: Request): Promise<Lead | undefined> {
       and(
         eq(leads.id, req.params.leadId as string),
         eq(leads.orgId, req.currentOrg!.id),
+        sql`${leads.status} NOT IN ('queued', 'dismissed')`,
         ...withCrmVisibility(req, leads.assignedToUserId, leads.createdByUserId),
       ),
     );
@@ -1053,9 +1056,10 @@ router.patch("/orgs/:orgId/leads/:leadId", ...gate, async (req, res): Promise<vo
   const [updated] = await db
     .update(leads)
     .set(explicitScore !== undefined && explicitScore !== null
-      ? { ...rest, score: explicitScore }
-      : rest)
+      ? { ...rest, score: explicitScore, ...queueWorkedUpdate(lead) }
+      : { ...rest, ...queueWorkedUpdate(lead) })
     .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId),
+      sql`${leads.status} NOT IN ('queued', 'dismissed')`,
       ...withCrmVisibility(req, leads.assignedToUserId, leads.createdByUserId)))
     .returning();
   if (!updated) { res.status(404).json({ error: "Lead not found" }); return; }
@@ -1084,6 +1088,13 @@ router.patch("/orgs/:orgId/leads/:leadId", ...gate, async (req, res): Promise<vo
   res.json(UpdateLeadResponse.parse(await leadOut(req, row)));
 });
 
+function queueWorkedUpdate(lead: Lead) {
+  const metadata = lead.metadata as Record<string, unknown> | null;
+  return metadata?.leadQueue ? {
+    metadata: {...metadata, leadQueue: {...(metadata.leadQueue as Record<string, unknown>), worked: true}},
+  } : {};
+}
+
 router.delete("/orgs/:orgId/leads/:leadId", ...gate, async (req, res): Promise<void> => {
   const lead = await findLead(req);
   if (!lead) {
@@ -1092,6 +1103,7 @@ router.delete("/orgs/:orgId/leads/:leadId", ...gate, async (req, res): Promise<v
   }
   const [deleted] = await db.update(leads).set({ isActive: false })
     .where(and(eq(leads.id, lead.id), eq(leads.orgId, req.currentOrg!.id),
+      sql`${leads.status} NOT IN ('queued', 'dismissed')`,
       ...withCrmVisibility(req, leads.assignedToUserId, leads.createdByUserId)))
     .returning();
   if (!deleted) { res.status(404).json({ error: "Lead not found" }); return; }
@@ -1141,11 +1153,18 @@ router.post(
     const conversion = await db.transaction(async (tx) => {
       const [lockedLead] = await tx.select().from(leads).where(and(
         eq(leads.id, lead.id), eq(leads.orgId, orgId),
+        sql`${leads.status} NOT IN ('queued', 'dismissed')`,
         ...withCrmVisibility(req, leads.assignedToUserId, leads.createdByUserId),
       )).for("update");
       if (!lockedLead || (lockedLead.status === "qualified" && lockedLead.convertedOpportunityId)) return undefined;
 
-      let accountId = parsed.data.accountId ?? null;
+      // Queue claims already resolved company identity (possibly under another
+      // spelling). Do not create a second Account during later qualification.
+      const radarAccountId = (lockedLead.metadata as {
+        leadQueue?: unknown; leadRadar?: {account_id?: string};
+      } | null);
+      let accountId = parsed.data.accountId ??
+        (radarAccountId?.leadQueue ? radarAccountId.leadRadar?.account_id : null) ?? null;
       let createdAccount: typeof accounts.$inferSelect | undefined;
       if (accountId) {
         const [account] = await tx.select({ id: accounts.id }).from(accounts).where(and(

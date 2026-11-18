@@ -1,9 +1,9 @@
 import { lazy, Suspense } from "react";
 import { useGetOrgDashboard, getGetOrgDashboardQueryKey } from "@workspace/api-client-react";
 import { useOrgStore } from "@/store/org-store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Users, Target, Activity } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Building2, Users, Target } from "lucide-react";
+import LeadQueueCard from "@/components/lead-queue/LeadQueueCard";
 import CommissionDashboardWidget from "@/components/commission/CommissionDashboardWidget";
 
 const DashboardInsights = lazy(() => import("@/components/dashboard/DashboardInsights"));
@@ -41,6 +41,8 @@ export default function Dashboard() {
       </header>
 
       <div className="p-8 space-y-8">
+        {dashboard.enabledFeatures.includes("sales") && <LeadQueueCard orgId={selectedOrgId!} />}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="transition-all duration-200 hover:border-primary/20 hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,180,216,0.08)]">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 border-b-0">
@@ -100,36 +102,6 @@ export default function Dashboard() {
           <DashboardInsights orgId={selectedOrgId!} />
         </Suspense>
 
-        <Card className="col-span-full">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 font-display text-xl">
-              <Activity className="h-5 w-5" />
-              Recent Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {dashboard.recentActivity && dashboard.recentActivity.length > 0 ? (
-              <div className="space-y-6">
-                {dashboard.recentActivity.map((log) => (
-                  <div key={log.id} className="flex items-start gap-4 text-sm">
-                    <div className="w-2 h-2 mt-1.5 rounded-full bg-primary" />
-                    <div className="flex-1 space-y-1">
-                      <p className="font-medium text-foreground">{log.action}</p>
-                      <p className="text-muted-foreground">
-                        {log.userEmail ? `${log.userEmail} · ` : ""}
-                        {formatDistanceToNow(new Date(log.createdAt), { addSuffix: true })}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="py-8 text-center text-muted-foreground text-sm border border-primary/10 rounded-lg">
-                No recent activity recorded.
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

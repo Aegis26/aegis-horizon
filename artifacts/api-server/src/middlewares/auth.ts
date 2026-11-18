@@ -430,7 +430,10 @@ export async function attachOrg(
     res.status(403).json({ error: "Not a member of this organization" });
     return;
   }
-  if (isViewerMutation(membership.role, req.method)) {
+  // Explicit, narrow exception for the queue router. Never supplied by a
+  // request header/body; the router opts in before this middleware runs.
+  const queueAction = res.locals.allowLeadQueueViewerAction === true;
+  if (isViewerMutation(membership.role, req.method) && !queueAction) {
     res.status(403).json({ error: "Viewers have read-only access" });
     return;
   }

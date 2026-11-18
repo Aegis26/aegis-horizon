@@ -18,6 +18,7 @@ import invitationsRouter from "./invitations";
 import usersRouter from "./users";
 import commissionsRouter from "./commissions";
 import productTypesRouter from "./productTypes";
+import leadQueueRouter from "./leadQueue";
 
 const router: IRouter = Router();
 
@@ -38,6 +39,7 @@ router.use(webhooksRouter);
 router.use(crmRouter);
 router.use(communicationsRouter);
 router.use(salesRouter);
+router.use(leadQueueRouter);
 router.use(storageRouter);
 router.use(dashboardRouter);
 router.use(automationRouter);

@@ -22,7 +22,9 @@ The API startup runs the additive, idempotent migration in
 `artifacts/api-server/src/lib/inboundLeadSchema.ts`. It creates
 `inbound_lead_log`, `inbound_lead_rate`, and a tenant-scoped unique index over
 the Radar external identifier in lead metadata. It does not replace existing
-tables, change existing records, or require a broad schema push.
+tables or require a broad schema push. The queue rollout also backfills eligible
+active, unassigned, unworked Radar leads into `queued` and installs a trigger
+that remembers work/stage changes after assignment. It never deletes Accounts.
 
 Railway's `railway.json` starts `pnpm run start:railway`, which starts the
 compiled API entry point. That entry point awaits this migration before
@@ -99,25 +101,37 @@ URLs are stored, never fetched by this endpoint.
 
 ## CRM behavior
 
-- Uses existing **accounts** as companies and existing contacts/leads.
-- Matches active companies within this organization by normalized website
-  hostname first (ignores `www`, case, paths), then exact company name.
-- Reuses an active contact on the matched account by email, or phone, or name;
-  existing account/contact fields are not overwritten.
-- Stores Radar data and account/contact references in `leads.metadata.leadRadar`.
-- Uses source `Lead Radar` and lead status **new**, the existing initial lead
-  stage. Opportunity pipelines are separate; no opportunity is created.
-- New leads, accounts and contacts are unassigned. Existing matched accounts
-  keep their ownership. Existing CRM access rules remain unchanged:
-  unassigned records are visible to owners/admins/managers, not ordinary users.
+- Intake creates only a **queued**, unassigned lead with all submitted company
+  and contact information in `leads.metadata.leadRadar`. It creates no Account,
+  Contact, or Opportunity.
+- The Lead Queue is visible to every role in the organization, including viewers.
+  This is a narrow exception, not a change to ordinary CRM access permissions.
+- A normalized website-domain match (ignoring `www`, case and paths) against an
+  active Account in the same organization is flagged as an existing client.
+- Claim assigns the current user and changes the lead to **working** atomically.
+  A competing claim gets 409 with `Already claimed by <name>`.
+- On claim or manager assignment, match an active Account by domain first, then
+  exact company name. Create it only if absent. Reuse a Contact by email, phone
+  or name on that Account; create one only when contact details exist.
+  Existing Account/Contact fields and owners are never overwritten. New entities
+  belong to the assignee. Links and original Radar context stay on the lead.
+- Managers can assign other organization members, or return unworked assigned
+  leads. A lead is worked if edited/progressed since assignment, converted, or
+  its linked Account received activities/tasks since assignment. Moving a stage
+  back does not erase work history. Return does not delete entities.
+- Every member can dismiss queued prospects with `not a fit`, `duplicate`, or
+  `existing client`; dismissed records remain available under the queue filter.
+- Queue actions are immutable lead audit events, displayed as activity history
+  in queue details. Existing activity/audit logging remains intact.
 - Creates a retained creation note on the lead metadata, visible in lead details.
 - Repeated IDs update **only** the lead score, Radar score, signal summary and
   talking points, preserving assignment, stage, links, source details and the
   original creation note. A soft-deleted lead is updated but not resurrected.
 - No auto-routing, rule scoring, email, automation or enrichment side effects
   are triggered during intake.
-- The Leads page refreshes every 30 seconds. It has source/type/minimum Radar
-  score filters, Radar badges, and Radar details in the existing lead modal.
+- Queue page, dashboard card and sidebar count refresh every 15 seconds, and all
+  related views refresh on actions/conflicts. The ordinary Leads page excludes
+  queued/dismissed prospects; assigned leads appear there under normal permissions.
   Radar scores are on a 1–10 scale, separate from existing 0–100 rule scoring.
 
 ## Security and concurrency
@@ -164,3 +178,9 @@ validation and opt-in development-only route integration tests. Set
 `RUN_INBOUND_INTEGRATION=1` to run the synthetic database tests; never point
 them at a production database. They verify create/update, tenant-scoped
 matching, concurrency, auth, validation, request logs and rate limits.
+
+`artifacts/api-server/src/routes/leadQueue.integration.test.ts` exercises the
+real app with synthetic organization members and window sessions, restricted
+to the local development database. It covers all five roles, simultaneous
+claims, tenant isolation, assignment validation, dismissal/history, existing
+Account reuse, safe return, legacy backfill and generic-write bypass protection.

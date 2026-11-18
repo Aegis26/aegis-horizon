@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { db, accounts, contacts, leads, inboundLeadLog } from "@workspace/db";
+import { db, accounts, leads, inboundLeadLog } from "@workspace/db";
 import { IngestInboundLeadBody } from "@workspace/api-zod";
 import { z } from "zod";
 
@@ -76,48 +76,21 @@ export async function ingestLead(
       eq(accounts.orgId, orgId), eq(accounts.isActive, true),
     )).orderBy(accounts.createdAt, accounts.id);
     const domain = websiteDomain(input.website);
-    let account = (domain ? orgAccounts.find((a) => websiteDomain(a.website) === domain) : undefined)
-      ?? orgAccounts.find((a) => a.name === input.company_name);
-    if (!account) {
-      [account] = await tx.insert(accounts).values({
-        orgId, name: input.company_name, website: input.website,
-        city: input.city, state: input.state, industry: input.industry,
-        employeeCount: input.employee_estimate,
-        ownerUserId: null, createdByUserId: null,
-      }).returning();
-    }
+    const account = domain ? orgAccounts.find((a) => websiteDomain(a.website) === domain) : undefined;
     const [firstName, ...rest] = (input.contact_name?.trim() || input.company_name).split(/\s+/);
     const lastName = rest.join(" ");
-    let contactId: string | null = null;
-    if (input.contact_name || input.contact_email || input.contact_phone) {
-      const candidates = await tx.select().from(contacts).where(and(
-        eq(contacts.orgId, orgId), eq(contacts.accountId, account.id), eq(contacts.isActive, true),
-      ));
-      const match = candidates.find((c) =>
-        input.contact_email ? c.email?.toLowerCase() === input.contact_email.toLowerCase()
-          : input.contact_phone ? c.phone === input.contact_phone
-            : c.firstName === firstName && c.lastName === lastName);
-      if (match) contactId = match.id;
-      else {
-        const [contact] = await tx.insert(contacts).values({
-          orgId, accountId: account.id, firstName, lastName,
-          email: input.contact_email, phone: input.contact_phone,
-          ownerUserId: null, createdByUserId: null,
-        }).returning();
-        contactId = contact.id;
-      }
-    }
     const note = `Created by Lead Radar from ${input.source}\n${input.signal_summary}`;
     const [lead] = await tx.insert(leads).values({
-      orgId, firstName, lastName, company: account.name,
+      orgId, firstName, lastName, company: input.company_name,
       email: input.contact_email, phone: input.contact_phone,
       industry: input.industry, companySize: input.employee_estimate, state: input.state,
       source: "Lead Radar", score: input.score,
       // Leads use new/working/qualified, not the opportunity pipeline stages.
-      status: "new", assignedToUserId: null, createdByUserId: null,
-      metadata: { leadRadar: {
-        ...input, account_id: account.id, contact_id: contactId, note,
-      } },
+      status: "queued", assignedToUserId: null, createdByUserId: null,
+      metadata: {
+        leadQueue: { queuedAt: new Date().toISOString(), existingAccountName: account?.name ?? null },
+        leadRadar: { ...input, note },
+      },
     }).returning();
     await tx.update(inboundLeadLog).set({ result: "created" }).where(eq(inboundLeadLog.id, logId));
     return { status: "created" as const, lead_id: lead.id };

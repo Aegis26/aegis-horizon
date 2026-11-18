@@ -105,32 +105,38 @@ test("Radar intake creates, matches, updates and protects tenant boundaries", {
     let response = await post();
     assert.equal(response.status, 201);
     const created = await response.json() as { lead_id: string; status: string };
+    assert.deepEqual(Object.keys(created).sort(), ["lead_id", "status"]);
+    assert.equal(created.status, "created");
     let row = (await pool.query("SELECT * FROM leads WHERE id=$1", [created.lead_id])).rows[0];
     assert.equal(row.org_id, orgId);
     assert.equal(row.assigned_to_user_id, null);
     assert.equal(row.created_by_user_id, null);
-    assert.equal(row.status, "new");
+    assert.equal(row.status, "queued");
     assert.equal(row.source, "Lead Radar");
-    assert.notEqual(row.metadata.leadRadar.account_id, otherAccount);
+    assert.equal(row.metadata.leadRadar.account_id, undefined);
+    assert.equal(row.metadata.leadQueue.existingAccountName, null);
     assert.ok(row.metadata.leadRadar.note.includes("Created by Lead Radar from synthetic_test"));
-    const accountId = row.metadata.leadRadar.account_id;
-    const contactId = row.metadata.leadRadar.contact_id;
-    assert.ok(contactId);
+    assert.equal(Number((await pool.query("SELECT count(*) FROM accounts WHERE org_id=$1", [orgId])).rows[0].count), 0);
+    assert.equal(Number((await pool.query("SELECT count(*) FROM contacts WHERE org_id=$1", [orgId])).rows[0].count), 0);
     response = await post({ ...body, company_name: "Do not rename", score: 10, signal_summary: "Updated signal.", talking_points: ["Updated point"] });
     assert.equal(response.status, 200);
-    assert.equal((await response.json() as { lead_id: string }).lead_id, created.lead_id);
+    assert.deepEqual(await response.json(), {status: "updated", lead_id: created.lead_id});
     row = (await pool.query("SELECT * FROM leads WHERE id=$1", [created.lead_id])).rows[0];
     assert.equal(row.company, body.company_name);
     assert.equal(row.score, 10);
     assert.equal(row.metadata.leadRadar.signal_summary, "Updated signal.");
     assert.deepEqual(row.metadata.leadRadar.talking_points, ["Updated point"]);
-    // Domain match wins even when the company name changes.
+    // Only same-org domain matches are flagged, without entity creation.
+    const accountId = randomUUID();
+    await pool.query("INSERT INTO accounts (id,org_id,name,website) VALUES ($1,$2,$3,$4)",
+      [accountId, orgId, "Current Client", body.website]);
     response = await post({ ...body, external_id: randomUUID(), company_name: "Another spelling", website: "https://synthetic-radar.invalid" });
     assert.equal(response.status, 201);
     const secondId = (await response.json() as { lead_id: string }).lead_id;
     row = (await pool.query("SELECT metadata FROM leads WHERE id=$1", [secondId])).rows[0];
-    assert.equal(row.metadata.leadRadar.account_id, accountId);
-    assert.equal(row.metadata.leadRadar.contact_id, contactId);
+    assert.equal(row.metadata.leadRadar.account_id, undefined);
+    assert.equal(row.metadata.leadRadar.contact_id, undefined);
+    assert.equal(row.metadata.leadQueue.existingAccountName, "Current Client");
     // Exact-name fallback when no website/contact is provided.
     assert.equal((await post({ ...body, external_id: randomUUID(), website: undefined, contact_name: undefined, contact_email: undefined })).status, 201);
     assert.equal(Number((await pool.query("SELECT count(*) FROM accounts WHERE org_id=$1", [orgId])).rows[0].count), 1);

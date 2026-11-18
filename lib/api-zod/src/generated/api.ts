@@ -2143,6 +2143,118 @@ export const IngestInboundLeadResponse = zod.object({
 })
 
 
+export const ListLeadQueueParams = zod.object({
+  "orgId": zod.coerce.string()
+})
+
+export const listLeadQueueQueryStatusDefault = `queued`;
+
+export const ListLeadQueueQueryParams = zod.object({
+  "status": zod.enum(['queued', 'dismissed', 'assigned']).default(listLeadQueueQueryStatusDefault)
+})
+
+export const listLeadQueueResponseItemsItemRadarExternalIdMax = 200;
+
+export const listLeadQueueResponseItemsItemRadarCompanyNameMax = 300;
+
+export const listLeadQueueResponseItemsItemRadarWebsiteMax = 2000;
+
+export const listLeadQueueResponseItemsItemRadarCityMax = 200;
+
+export const listLeadQueueResponseItemsItemRadarStateMax = 200;
+
+export const listLeadQueueResponseItemsItemRadarIndustryMax = 200;
+
+export const listLeadQueueResponseItemsItemRadarEmployeeEstimateMin = 0;
+export const listLeadQueueResponseItemsItemRadarEmployeeEstimateMax = 2147483647;
+
+export const listLeadQueueResponseItemsItemRadarContactNameMax = 300;
+
+export const listLeadQueueResponseItemsItemRadarContactEmailMax = 320;
+
+export const listLeadQueueResponseItemsItemRadarContactPhoneMax = 80;
+
+export const listLeadQueueResponseItemsItemRadarSourceMax = 200;
+
+export const listLeadQueueResponseItemsItemRadarSourceUrlMax = 2000;
+
+export const listLeadQueueResponseItemsItemRadarSignalSummaryMax = 4000;
+
+export const listLeadQueueResponseItemsItemRadarScoreMax = 10;
+
+export const listLeadQueueResponseItemsItemRadarSuggestedOfferMax = 2000;
+
+export const listLeadQueueResponseItemsItemRadarTalkingPointsItemMax = 1000;
+
+export const listLeadQueueResponseItemsItemRadarTalkingPointsMax = 30;
+
+
+
+export const ListLeadQueueResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "company": zod.string(),
+  "score": zod.number().int(),
+  "status": zod.string(),
+  "queuedAt": zod.string(),
+  "assignedToName": zod.string().nullish(),
+  "existingAccountName": zod.string().nullish(),
+  "dismissReason": zod.string().nullish(),
+  "canReturn": zod.boolean(),
+  "radar": zod.object({
+  "external_id": zod.string().min(1).max(listLeadQueueResponseItemsItemRadarExternalIdMax),
+  "lead_type": zod.enum(['web_dev', 'cyber', 'both']),
+  "company_name": zod.string().min(1).max(listLeadQueueResponseItemsItemRadarCompanyNameMax),
+  "website": zod.string().url().max(listLeadQueueResponseItemsItemRadarWebsiteMax).optional(),
+  "city": zod.string().max(listLeadQueueResponseItemsItemRadarCityMax).optional(),
+  "state": zod.string().max(listLeadQueueResponseItemsItemRadarStateMax).optional(),
+  "industry": zod.string().max(listLeadQueueResponseItemsItemRadarIndustryMax).optional(),
+  "employee_estimate": zod.number().int().min(listLeadQueueResponseItemsItemRadarEmployeeEstimateMin).max(listLeadQueueResponseItemsItemRadarEmployeeEstimateMax).optional(),
+  "contact_name": zod.string().max(listLeadQueueResponseItemsItemRadarContactNameMax).optional(),
+  "contact_email": zod.string().email().max(listLeadQueueResponseItemsItemRadarContactEmailMax).optional(),
+  "contact_phone": zod.string().max(listLeadQueueResponseItemsItemRadarContactPhoneMax).optional(),
+  "source": zod.string().min(1).max(listLeadQueueResponseItemsItemRadarSourceMax),
+  "source_url": zod.string().url().max(listLeadQueueResponseItemsItemRadarSourceUrlMax).optional(),
+  "signal_summary": zod.string().min(1).max(listLeadQueueResponseItemsItemRadarSignalSummaryMax),
+  "score": zod.number().int().min(1).max(listLeadQueueResponseItemsItemRadarScoreMax),
+  "suggested_offer": zod.string().max(listLeadQueueResponseItemsItemRadarSuggestedOfferMax).optional(),
+  "talking_points": zod.array(zod.string().min(1).max(listLeadQueueResponseItemsItemRadarTalkingPointsItemMax)).max(listLeadQueueResponseItemsItemRadarTalkingPointsMax).optional(),
+  "detected_at": zod.coerce.date()
+}),
+  "activities": zod.array(zod.object({
+  "id": zod.string(),
+  "action": zod.string(),
+  "at": zod.string(),
+  "actor": zod.string(),
+  "reason": zod.string().nullish()
+}))
+})),
+  "totalQueued": zod.number().int(),
+  "canManage": zod.boolean(),
+  "members": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string()
+}))
+})
+
+
+export const ActOnLeadQueueParams = zod.object({
+  "orgId": zod.coerce.string(),
+  "leadId": zod.coerce.string().uuid()
+})
+
+export const ActOnLeadQueueBody = zod.object({
+  "action": zod.enum(['claim', 'assign', 'return', 'dismiss']),
+  "assigneeId": zod.string().uuid().optional(),
+  "reason": zod.enum(['not a fit', 'duplicate', 'existing client']).optional()
+})
+
+export const ActOnLeadQueueResponse = zod.object({
+  "leadId": zod.string(),
+  "status": zod.string()
+})
+
+
 /**
  * @summary List leads with scores
  */

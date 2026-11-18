@@ -1517,6 +1517,51 @@ paths:
         "401": { description: Missing or incorrect API key }
         "429": { description: Rate limit exceeded }
         "503": { description: Intake unavailable }
+  /orgs/{orgId}/lead-queue:
+    get:
+      operationId: listLeadQueue
+      tags: [sales]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - name: status
+          in: query
+          schema: { type: string, enum: [queued, dismissed, assigned], default: queued }
+      responses:
+        "200":
+          description: Organization lead queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadQueueResult"
+  /orgs/{orgId}/lead-queue/{leadId}/actions:
+    post:
+      operationId: actOnLeadQueue
+      tags: [sales]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadQueueAction"
+      responses:
+        "200":
+          description: Action completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadQueueActionResult"
+        "409":
+          description: Lead was already claimed or is no longer eligible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadQueueConflict"
   /orgs/{orgId}/leads:
     get:
       operationId: listLeads
@@ -3645,6 +3690,73 @@ components:
       properties:
         status: { type: string, enum: [created, updated] }
         lead_id: { type: string, format: uuid }
+    LeadQueueAction:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, enum: [claim, assign, return, dismiss] }
+        assigneeId: { type: string, format: uuid }
+        reason: { type: string, enum: [not a fit, duplicate, existing client] }
+    LeadQueueActionResult:
+      type: object
+      required: [leadId, status]
+      properties:
+        leadId: { type: string }
+        status: { type: string }
+    LeadQueueConflict:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    LeadQueueMember:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+    LeadQueueActivity:
+      type: object
+      required: [id, action, at, actor]
+      properties:
+        id: { type: string }
+        action: { type: string }
+        at: { type: string }
+        actor: { type: string }
+        reason: { type: ["string", "null"] }
+    LeadQueueItem:
+      type: object
+      required: [id, company, score, status, queuedAt, radar, canReturn, activities]
+      properties:
+        id: { type: string }
+        company: { type: string }
+        score: { type: integer }
+        status: { type: string }
+        queuedAt: { type: string }
+        assignedToName: { type: ["string", "null"] }
+        existingAccountName: { type: ["string", "null"] }
+        dismissReason: { type: ["string", "null"] }
+        canReturn: { type: boolean }
+        radar:
+          $ref: "#/components/schemas/InboundLeadInput"
+        activities:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeadQueueActivity"
+    LeadQueueResult:
+      type: object
+      required: [items, totalQueued, canManage, members]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeadQueueItem"
+        totalQueued: { type: integer }
+        canManage: { type: boolean }
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeadQueueMember"
     LeadRadarDetails:
       type: object
       required: [lead_type, score, signal_summary, talking_points, source, detected_at, note]

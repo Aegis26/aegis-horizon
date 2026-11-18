@@ -16,6 +16,7 @@ import AccountDetail from "@/pages/AccountDetail";
 import Segments from "@/pages/Segments";
 import Opportunities from "@/pages/Opportunities";
 import Leads from "@/pages/Leads";
+import LeadQueue from "@/pages/LeadQueue";
 import Quotes from "@/pages/Quotes";
 import Territories from "@/pages/Territories";
 import Forecast from "@/pages/Forecast";
@@ -581,6 +582,7 @@ function ClerkProviderWithRoutes() {
           <Route path="/segments" component={() => <ProtectedRoute component={Segments} />} />
           <Route path="/opportunities" component={() => <ProtectedRoute component={Opportunities} />} />
           <Route path="/leads" component={() => <ProtectedRoute component={Leads} />} />
+          <Route path="/lead-queue" component={() => <ProtectedRoute component={LeadQueue} />} />
           <Route path="/quotes" component={() => <ProtectedRoute component={Quotes} />} />
           <Route path="/territories" component={() => <ProtectedRoute component={Territories} />} />
           <Route path="/forecast" component={() => <ProtectedRoute component={Forecast} />} />

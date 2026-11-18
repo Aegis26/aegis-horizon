@@ -98,6 +98,9 @@ async function executeAction(
   executionId: string,
   actorUserId?: string,
 ) {
+  if (entityType === "lead" && ["queued", "dismissed"].includes(String(entity.status))) {
+    throw new Error("Claim a queued lead before running workflow actions");
+  }
   const config = action.config;
   const candidateOwner = (entity.ownerUserId ?? entity.assignedToUserId ?? actorUserId) as string | undefined;
   const ownerUserId = candidateOwner && (await db.select({ id: orgUsers.id }).from(orgUsers)

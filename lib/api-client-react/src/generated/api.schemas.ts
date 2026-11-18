@@ -1829,6 +1829,78 @@ export interface InboundLeadResult {
   lead_id: string;
 }
 
+export type LeadQueueActionAction = typeof LeadQueueActionAction[keyof typeof LeadQueueActionAction];
+
+
+export const LeadQueueActionAction = {
+  claim: 'claim',
+  assign: 'assign',
+  return: 'return',
+  dismiss: 'dismiss',
+} as const;
+
+export type LeadQueueActionReason = typeof LeadQueueActionReason[keyof typeof LeadQueueActionReason];
+
+
+export const LeadQueueActionReason = {
+  not_a_fit: 'not a fit',
+  duplicate: 'duplicate',
+  existing_client: 'existing client',
+} as const;
+
+export interface LeadQueueAction {
+  action: LeadQueueActionAction;
+  assigneeId?: string;
+  reason?: LeadQueueActionReason;
+}
+
+export interface LeadQueueActionResult {
+  leadId: string;
+  status: string;
+}
+
+export interface LeadQueueConflict {
+  error: string;
+}
+
+export interface LeadQueueMember {
+  id: string;
+  name: string;
+}
+
+export interface LeadQueueActivity {
+  id: string;
+  action: string;
+  at: string;
+  actor: string;
+  /** @nullable */
+  reason?: string | null;
+}
+
+export interface LeadQueueItem {
+  id: string;
+  company: string;
+  score: number;
+  status: string;
+  queuedAt: string;
+  /** @nullable */
+  assignedToName?: string | null;
+  /** @nullable */
+  existingAccountName?: string | null;
+  /** @nullable */
+  dismissReason?: string | null;
+  canReturn: boolean;
+  radar: InboundLeadInput;
+  activities: LeadQueueActivity[];
+}
+
+export interface LeadQueueResult {
+  items: LeadQueueItem[];
+  totalQueued: number;
+  canManage: boolean;
+  members: LeadQueueMember[];
+}
+
 export type LeadRadarDetailsLeadType = typeof LeadRadarDetailsLeadType[keyof typeof LeadRadarDetailsLeadType];
 
 
@@ -3137,6 +3209,19 @@ export const GetEarnedCommissionsPeriod = {
 export type InboundLeadHealth200 = {
   ok: boolean;
 };
+
+export type ListLeadQueueParams = {
+status?: ListLeadQueueStatus;
+};
+
+export type ListLeadQueueStatus = typeof ListLeadQueueStatus[keyof typeof ListLeadQueueStatus];
+
+
+export const ListLeadQueueStatus = {
+  queued: 'queued',
+  dismissed: 'dismissed',
+  assigned: 'assigned',
+} as const;
 
 export type ListLeadsParams = {
 status?: string;

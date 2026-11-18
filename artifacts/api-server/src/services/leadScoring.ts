@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   db,
   leads,
@@ -178,6 +178,7 @@ export async function scoreAndRouteLead(
   lead: Lead,
   opts: { reassign?: boolean; keepScore?: boolean } = {},
 ): Promise<Lead> {
+  if (["queued", "dismissed"].includes(lead.status)) return lead;
   const [rules, orgTerritories] = await Promise.all([
     db.select().from(leadScoringRules).where(eq(leadScoringRules.orgId, orgId)),
     db
@@ -205,7 +206,7 @@ export async function scoreAndRouteLead(
   const [row] = await db
     .update(leads)
     .set(updates)
-    .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId)))
+    .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId), sql`${leads.status} NOT IN ('queued', 'dismissed')`))
     .returning();
-  return row;
+  return row ?? lead;
 }

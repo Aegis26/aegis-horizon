@@ -5,9 +5,12 @@ description: User-approved organization binding, visibility and future multi-key
 
 Bind the single Lead Radar key only to Aegis Cyber Defense, Inc via server-side
 `INBOUND_LEADS_ORG_ID`; never accept tenant identity from request data.
-New leads remain unassigned and management-only.
+New inbound leads must remain unassigned in a queue visible to every organization
+role, including viewers. Do not create Accounts or Contacts until claim or manager
+assignment. Flag existing-account domain matches and preserve existing Accounts.
 
-**Why:** The user explicitly chose this isolation and visibility policy.
+**Why:** The user retained server-side organization isolation but replaced the
+management-only intake policy with an all-role lead queue.
 
 **How to apply:** Keep the single-org release scoped to environment configuration.
 Structure authentication for a future table of hashed API keys, each tied to
